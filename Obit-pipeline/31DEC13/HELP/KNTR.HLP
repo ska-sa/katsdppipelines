@@ -1,0 +1,527 @@
+; KNTR
+;---------------------------------------------------------------
+;! make a contour/grey plot file from an image w multiple panels
+;# Task Plot
+;-----------------------------------------------------------------------
+;;  Copyright (C) 1995, 1997, 1999, 2002-2004, 2006-2007, 2011
+;;  Associated Universities, Inc. Washington DC, USA.
+;;
+;;  This program is free software; you can redistribute it and/or
+;;  modify it under the terms of the GNU General Public License as
+;;  published by the Free Software Foundation; either version 2 of
+;;  the License, or (at your option) any later version.
+;;
+;;  This program is distributed in the hope that it will be useful,
+;;  but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;  GNU General Public License for more details.
+;;
+;;  You should have received a copy of the GNU General Public
+;;  License along with this program; if not, write to the Free
+;;  Software Foundation, Inc., 675 Massachusetts Ave, Cambridge,
+;;  MA 02139, USA.
+;;
+;;  Correspondence concerning AIPS should be addressed as follows:
+;;         Internet email: aipsmail@nrao.edu.
+;;         Postal address: AIPS Project Office
+;;                         National Radio Astronomy Observatory
+;;                         520 Edgemont Road
+;;                         Charlottesville, VA 22903-2475 USA
+;-----------------------------------------------------------------------
+KNTR      LLLLLLLLLLLLUUUUUUUUUUUU CCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+KNTR:  Task to generate a plot file for a contour & grey plot
+DOCONT         -1.0         2.0    > 0 => do contours
+                                   (1 or 2 => which name)
+DOGREY         -1.0         2.0    > 0 => do grey scale
+                                   (1 pr 2 => which name)
+DOVECT         -1.0         2.0    > => do polarization vectors
+                                   (1 or 2 => which is IPOL)
+                                   Contour or grey or IPOL
+INNAME                             First image name (cube?)
+INCLASS                            First image class
+INSEQ           0.0      9999.0    First image seq. #
+INDISK                             First image disk drive #
+                                   Contour or grey or IPOL
+IN2NAME                            Second image name
+IN2CLASS                           Second image class
+IN2SEQ          0.0      9999.0    Second image seq. #
+IN2DISK                            Second disk drive #
+                                   Polarization intensity image:
+IN3NAME                              (name) blank => INNAME
+IN3CLASS                             (class) blank => 'PPOL'
+IN3SEQ          0.0      9999.0      (seq. #) 0 => high
+IN3DISK         0.0         9.0      Disk drive #,  0 => any
+                                   Polarization angle image:
+IN4NAME                              (name) blank => INNAME
+IN4CLASS                             (class) blank => 'PANG'
+IN4SEQ          0.0      9999.0      (seq. #) 0 => high
+IN4DISK         0.0         9.0      Disk drive #,  0 => any
+BLC             0.0      4096.0    Bottom left corner of first
+                                   image.  0 => 1
+TRC             0.0      4096.0    Top right corner of first
+                                   image;   0=>entire image
+                                   Multiple planes of a cube
+                                   will be plotted in panels.
+ZINC        -1024.0      1024.0    Increment on 3rd axis of
+                                   1st and possibly 2nd image
+NY              0.0        32.0    Number of planes along
+                                   vertical side of plot
+XYRATIO         0.0        10.0    X to Y axis plot ratio. 0=>
+                                   header inc or window ratio
+PIXRANGE                           Min,Max of image intensity
+                                     0 => entire range.
+FUNCTYPE                           Image intensity transfer func
+                                     'LN' Linear.  unknown=>'LN'
+                                     'LG' Logarithmic
+                                     'L2' More logarithmic
+                                     'SQ' Square root
+                                     'NE' Negative linear
+                                     'NG' Negative logarithmic
+                                     'N2' Negative more log.
+                                     'NQ' Negative square root
+OFMFILE
+                                   ' ' => do black & white
+                                   'TV' => use TV OFM
+                                   else read file for OFM
+DOCOLOR        -1.0         1.0    Do RGB images as 3-color?
+LTYPE         -30.0        30.0    Type of labeling: 1 border,
+                                   2 no ticks, 3 standard, 4 rel
+                                   to center, 5 rel to subim cen
+                                   6 pixels, 7-10 as 3-6 with
+                                   only tick labels
+                                   <0 -> no date/time
+                                   special values for RGBLEVS
+DOALIGN        -2.0         1.0    > 0 => images must line up
+                                      (see HELP DOALIGN)
+PLEV          -99.0       100.0    Percent of peak for levs.
+CLEV                               Absolute value for levs
+                                      (used only if PLEV = 0).
+LEVS        -9999.0     99999.0    Contour levels (up to 30).
+CON3COL        -1.0         1.0    Color the contours by plane
+FACTOR          0.0    999999.9    Mult. factor for Pol vector
+                                      (see HELP)
+ROTATE                             Angle to rotate Pol vector
+                                      (in degrees)
+XINC            0.0        99.0    X-inc. of Pol vectors. 0=>1
+YINC            0.0        99.0    Y-inc. of Pol vectors. 0=>1
+PCUT                               Pol. vector cutoff. P units.
+ICUT                               Int. vector cutoff. I units.
+POL3COL        -1.0       180.0    Color polarization vectors
+                                   value in degrees = red
+DOBLANK        -1.0         1.0    Draw boundary between blanked
+                                   areas and good areas?
+DOWEDGE        -1.0         4.0    > 0 => plot a wedge also.
+                                   = 2 => put on the right edge.
+                                   = 3 => put on top using full
+                                          range of image values
+                                   = 4 => put on right w full
+                                          range of image values
+DOCIRCLE       -1.0         1.0    > 0 => extend ticks to form
+                                   coordinate grid
+STVERS         -1.0     46655.0    STar file version number.
+STFACTOR    -9999.0      9999.0    Scale star sizes: 0 => none.
+                                   > 0 crosses with no labels
+                                   < 0 crosses with labels
+CBPLOT        -20.0        20.0    Position for beam plot:
+                                     0: don't plot beam
+                                     1: lower left (default)
+                                     2: lower right
+                                     3: upper right
+                                     4: upper left
+                                     5: plot in separate pane
+                                     6-10 as 1-5 but filled in
+                                    11-15 as 1-5 more filled
+                                    16-20 as 1-5 scribbled on
+                                    -n < 0 => n, but no other
+                                       drawing in beam-plot area
+LABEL          -1.0         2.0    0->label each pane with the
+                                      pane number
+                                   1->label each with coordinate
+                                   2->label each with coordinate
+                                      relative to reference
+                                   -1->do not label each pane
+DOTV           -1.0         1.0    > 0 Do plot on the TV, else
+                                   make a plot file
+TVCHAN          0.0        15.0    TV channel for grey plots
+GRCHAN          0.0         8.0    Graphics channel 0 => 1.
+DODARK         -1.0         1.0    Plot dark vectors as black?
+DARKLINE        0.0         1.0    Switch to dark lines when
+                                   grey-scale > DARKLINE 0-1
+RGBLEVS         0.0         1.0    Color each value of LEVS
+TVCORN          0.0      2048.0    TV pixel location of bottom
+                                   left corner of image 0=> self
+                                   scale, non 0 => pixel scale.
+----------------------------------------------------------------
+KNTR
+Type: Task
+Use:  KNTR will write commands to a plot file for the execution of a
+      contour and/or grey-scale plot for one or 2 images.  The contour
+      and/or grey-scale images can either be a single plane which is
+      repeated in each pane or a data cube that matches the other image
+      cube on the third axis.  If one image is a cube and the other a
+      plane, then the cube must be the first image if multiple planes
+      are to be plotted.
+      Truecolor images and pseudo-coloring are available as are
+      polarization vectors.
+      Suggestion: when running LWPLA on the output, consider LPEN=2 or 1
+      rather than the default (3).  If multiple planes are plotted,
+      fatter pens cause dashed contours to merge into solid ones.
+      Note that KNTR writes comments into the plot file (and hence the
+      PostScript file written by LWPLA) whenever beginning a new
+      contour level.  You can use these comments to guide you if you
+      wish to change the intensity/color of a particular contour
+      level.  Note that KNTR follows the levels in 129x129 pixel
+      blocks and so visits a particular level once for each block.
+Adverbs:
+  DOCONT......If > 0 requests that contour overlays be done using INNAME
+              image.  If > 1.5, use IN2NAME as the contour image.
+  DOGREY......If > 0 requests that grey-scale images be included in each
+              panel as well.  If > 1.5, use IN2NAME as the grey-scale
+              image.  Both DOCONT and DOGREY > 1.5 causes INNAME et al.
+              to be replaced with IN2NAME et al.
+  DOVECT......If > 0, requests that the polarization images in the
+              third and fourth images be used to plot polarization
+              vectors.  DOVECT has value 1 or 2 in this case to select
+              which of the first two images will be used as the IPOL
+              image for doing the cutoff represented by ICUT.  If the
+              polarization images are cubes matching the cube in the
+              first image, then the polarization vectors plotted will
+              come from the matching planes through the cubes.
+
+  **** First image is used as the image for (1) cataloging the PLot
+  file, (2) providing the STars file, (3) setting the basic BLC/TRC
+  including allowing multiple planes to be plotted, (4) plotting the
+  contours and/or grey scales, (5) providing the I values for ICUT use
+  in polarization vector plotting.  If the first image is not
+  referenced it will be replaced by the second image which may not be
+  a good idea.
+  INNAME......First image name.      Standard defaults.
+              First image must be a cube if multiple planes are desired.
+  INCLASS.....First image class.     Standard defaults.
+  INSEQ.......First image seq. #.    0 => highest.
+  INDISK......First disk unit #.     0 => any.
+  **** Used optionally for contours, grey-scales, or the ICUT image.
+  IN2NAME.....Second image name.    Standard defaults. May be a plane or
+              a cube.
+  IN2CLASS....Second image class.   Standard defaults.
+  IN2SEQ......Second image seq. #.  0 => highest.
+  IN2DISK.....Second image disk #.   0 => any.
+  **** Used optionally as the total polarization or Q image when
+              DOVECT > 0.
+  IN3NAME.....Image name (name).  Standard behavior except all
+              blank => use actual name of IPOL image
+  IN3CLASS....Image name (class).  Standard behavior except all
+              blank => use 'PPOL'
+  IN3SEQ......Image name (seq. #) associated with pol. ang.
+              0 => highest.
+  IN3DISK.....Disk unit #.   0 => any.
+  **** Used optionally as the polarization angle or Q image when
+              DOVECT > 0.
+  IN4NAME.....Image name (name).  Standard behavior except all
+              blank => use actual name of IPOL image
+  IN4CLASS....Image name (class).  Standard behavior except all
+              blank => use 'PANG'
+  IN4SEQ......Image name (seq. #) associated with pol. ang.
+              0 => highest.
+  IN4DISK.....Disk unit #.   0 => any.
+
+  BLC.........Bottom Left Corner of first image.  0 => 1.
+              Taken to apply to whichever image is plotted if only one
+              image is plotted
+  TRC.........Top Right Corner of first image.  0 => max.
+  ZINC........Increment on 3rd axis of first, and possibly second,
+              image;  0 -> 1.  ZINC < 0 => use abs (ZINC) but from
+              TRC(3) to BLC(3).
+  NY..........Number of panes on vertical side of plot.  The number on
+              the horizontal will then be chosen so that all planes are
+              plotted.  0 -> SQRT (# planes) rounded up.
+  XYRATIO.....The ratio of the X-axis to Y-axis pixel separations. 0  =>
+              X to Y inc. in map header if related, else Y to X window.
+              Setting XYRATIO > 1 stretches the X-axis.
+  PIXRANGE....Min,Max of Image intensity.  0 => entire range when
+              plotting grey scales.
+  FUNCTYPE....Image intensity transfer function
+              'LN' => linear;        'NE' => negative lin.
+              'LG' => log;           'NG' => negative log;
+              'L2' => extreme log;   'N2' => negative extra log;
+              'SQ' => square root,;  'NQ' => negative square root;
+              others => linear.
+  OFMFILE.....' ' => plot in black and white
+              'TV' => read the TV OFM (before initializing it)
+              other => read a text file giving the OFM to use (as in
+              OFMDIR, OFMGET, OFMLIST, OFMSAVE).
+              OFMFILE may be of the form 'Logical:File' where Logical
+              is an logical (environment) name for a directory and
+              File is a file name.  It may also be of the form
+              'Stdfile' which is either a file $OFMFIL/Stdfile.uuu
+              where uuu is the login user number or a file
+              $AIPSOFM/Stdfile.001 in the OFM area distributed with
+              AIPS.  Use verb OFMDIR to show what is available in
+              the OFMFIL and AIPSOFM directories.  There is a web site
+                 http://www.nro.nao.ac.jp/~sawada/aipscb/
+              with color images of all standard AIPS OFMFILEs.
+  DOCOLOR.....If the grey-scale image has its 3rd axis type = 'RGB',
+              then it can be displayed as true color if DOCOLOR > 0.
+              RGB cubes are made by RGBMP, TVHUI, MCUBE (with
+              PUTHEAD), and, LAYER.
+  LTYPE.......Labelling type: 1 = border, 2 = no ticks, 3 or 7 =
+              standard, 4 or 8 = relative to ref. pixel, 5 or 9 =
+              relative to subimage (BLC, TRC) center, 6 or 10 = pixels.
+              7-10 all labels other than tick numbers and axis type are
+              omitted.  Less than 0 is the same except that the plot
+              file version number and create time are omitted.
+              When using RGBLEVS, LTYPE also controls whether a line
+              in color appears in the plot at the bottom, the top, or
+              not at all.  Values of LTYPE=-10 to 10 give a line
+              inside the contour plot at the bottom; values from -20
+              to -11 and 11 to 20 give the line inside the plot at the
+              top, and values -30 to -21 and 21 to 30 omit the color
+              listing of the LEVS. The units digit retains the same
+              meaning for this extended range of LTYPE.
+  DOALIGN.....Controls how the grey and contour images are to be aligned
+              (see HELP DOALIGN).  True (>.1) means that the images must
+              agree in their coordinates, though not necessarily in the
+              reference pixel position.  Alignment is by coordinate
+              values (if DOALIGN > -0.1) or by offsets from the
+              reference pixel positions (if DOALIGN <= -0.1).  If
+              DOALIGN < -1.5, alignment is at pixels (1,1,...) ignoring
+              the headers.  Note that alignment of cubes must be one all
+              three significant axes.  If the second image has only one
+              plane then the alignment is checked only on the first two
+              axes.
+  PLEV........Percent of peak for the contour increment.  If PLEV and
+              CLEV are zero, 10 is used.
+  CLEV........Image intensity value for the contour increment.  Used
+              only if PLEV = 0.
+  LEVS........Contour levels in units of the increment.  The levels must
+              be in ascending order and a maximum of 30 levels are
+              permitted.  0 => -10,-9, -8, -7, -6, -5, -4, -3, -2, -1,
+              1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0
+  CON3COL.....> 0 => use a range of colors to draw the contours when a
+              range of image planes are drawn.  <= 0 => use usual
+              uncolored vectors.
+  FACTOR......Multiplication factor for polarization vectors.  A
+              vector of 0.5 in the units of the P image (i.e. Jy/beam)
+              will be this many pixel separations long.  Note that
+              this may require rather large FACTORs to plot lines of a
+              significant length for values of P around, say, a
+              mJy/beam.              0 => 1.0
+  ROTATE......Angle to rotate position angle vector in degrees.  This
+              rotation is applied to all polarization vectors drawn.
+  XINC........Separate pol. vectors in X by XINC pixels. 0 => 1
+  YINC........Separate pol. vectors in Y by YINC pixels. 0 => 1
+  PCUT........Do not plot polarization vectors if less than PCUT in
+              the units of the P image.  No default.
+  ICUT........Do not plot polarization vectors if less than ICUT in
+              the units of the I image.  No default.
+  POL3COL.....<= 0.0 => draw polarization vectors with usual uncolored
+                     bright vectors.
+              > 0 => use subtle colors to represent polarization
+                     angle.  The value selects the polarization angle
+                     that is pure red (eps to 180 degrees).
+  DOBLANK.....A contour is drawn between areas of good pixels and areas
+              of magic-valued (blanked) pixels when DOBLANK is true (>
+              0).
+  DOWEDGE.....If false (<= 0.0), do not plot a step wedge.  If 1.5 >=
+              DOWEDGE > 0.0, then plot a wedge along the top of the
+              image using PIXRANGE range of values.  If between 1.5 and
+              2.5, plot a wedge along the right-hand edge of the image
+              using PIXRANGE range of image values.  If between 2.5 and
+              3.5, plot a wedge along the top with the full range of
+              image values.  If between 3.5 and 4.5, plot a wedge along
+              the right hand edge with the full range of image values.
+              If LTYPE >= 3, ticks and tick labels are drawn for the
+              wedge.
+  DOCIRCLE....False (<= 0) means that tick marks are short lines
+              extending inward from the plot borders.  True (>0)
+              requests that a full coordinate grid be drawn.
+  STVERS......Version number of ST (star position) file to be used to
+              plot star positions as plus signs. 0 => highest.
+              < 0 => no star positions plotted
+  STFACTOR....Scale factor used to multiply star sizes in file for
+              plotting.  > 0 => scale star size
+                         = 0 => don't plot stars.
+                         < 0 => scale by abs(STFACTOR) and show any star
+                                label
+  CBPLOT......Selects the corner in which the half-power beam plot is
+              placed
+                  0: no beam plot
+                  1: lower left
+                  2: lower right
+                  3: upper right
+                  4: upper left
+                  5: plots the beam in a separate pane
+                  6 - 10: as 1-5 but slightly filled in
+                 11 - 15: as 1-5 more filled in
+                 16 - 20: as 1-5 scribbled over
+              CBPLOT = -n  < 0 => use CBPLOT=n but do not plot any
+              contours, grey scale, or vectors in the Clean Beam area.
+  LABEL.......Determines the label in the upper right hand corner of
+              each pane
+              0->label each pane with the pane number
+              1->label each with appropriate coordinate
+              2->label each pane with coordinate wrt reference pixel
+             -1->do not label each pane
+  DOTV........> 0 => plot directly on the TV device, otherwise make a
+              plot file for later display on one or more devices
+              (including the TV if desired).
+  TVCHAN......TV channel for grey plots (0 -> 1).
+  GRCHAN......Graphics channel (1 - 7) to use for line drawing.  0 => 1.
+  DODARK......DODARK controls whether contours, polarization lines,
+              and stars are drawn as black overlay lines when the
+              grey-scale image is bright (>0) or in the same color as
+              used for the lines when the image is not bright (<= 0).
+              If contours are colored (e.g.CON3COL or RGBLEVS), DODARK
+              does not apply to the contours.
+  DARKLINE....When the grey-scale image after FUNCTYPE and other
+              scaling (values 0 to 1) is > DARKLINE, dark lines are
+              used to draw polarization lines, stars, and contours.
+              <= 0, > 1 => 0.33.
+  RGBLEVS.....Colors to be assigned to each of the LEVS:
+              RGBLEVS(1,i) red color (0-1) assigned to LEVS(i)
+              RGBLEVS(2,i) green color (0-1) assigned to LEVS(i)
+              RGBLEVS(3,i) blue color (0-1) assigned to LEVS(i)
+              If all are 0, do not do this  RUN SETRGBL will compile
+              procedures CIRCLEVS, RAINLEVS, FLAMLEVS, and STEPLEVS to
+              help you set these values.
+  TVCORN......TV pixel location (X,Y) where the bottom left-corner of
+              the plot is to be placed. If either is zero, use the
+              largest possible self scaling, else use pixel scaling with
+              specified origin on the TV.
+----------------------------------------------------------------
+KNTR is a variant of task CNTR written by Mark Calabretta of the
+Australia Telescope.  It uses a contour tracing algorithm rather
+than CNTR's hybrid raster-vector algorithm which is unsuitable
+for pen plotters.  KNTR can now plot grey-scales as well as, or
+instead, of contours.
+
+KNTR (unlike CNTR), can handle multiple planes of an image cube.
+The sequence of planes to be plotted may be specified via BLC(3)
+and TRC(3).  KNTR will arrange them on the page as efficiently
+as possible.
+
+KNTR also plots the boundary between blanked and unblanked
+regions by delineating the pixel edges when DOBLANK > 0).  This
+produces a characteristic angular type of contour.
+
+The explanatory notes for KNTR follow.
+
+
+KNTR: Task to create a contour-plot extension file for an image
+RELATED PROGRAMS: PCNTR, PRTPL, TKPL, TVPL, TVWIN
+
+                           PURPOSE
+
+     KNTR generates a plot extension file containing an
+intensity contour and/or grey-scale plot, its border, and
+labels.  The window limits and contour levels are recorded in
+the header of the plot file, and may be listed on your terminal
+with EXTLIST.  KNTR indicates positive and negative contour
+values by continuous and broken lines, respectively.
+     The plot itself may be displayed on a printer, TEK screen,
+or TV graphics channel by the tasks PRTPL, TKPL, or TVPL
+respectively.  The plot can also be sent to the printer or
+to a postscript file using LWPLA.
+
+                          COMMENTS
+
+     Contour plots are often more useful for quantitative image
+analysis than gray-scale or profile plots, and most maps are
+published in the form of contour plots.  By suitable choice of
+contour levels, a contour plot can give a quantitative display
+of all features in an image with very large dynamic range.  The
+contour plot of a map will be messy if contours are plotted at
+levels below about 3 times the rms noise.
+     Contour plots tend to emphasize gradients in intensity. The
+contour plot of a complex image, especially one with local
+minima, can therefore be confusing.  Note that a local (but
+non-negative) minimum will be indicated by a closed continuous
+contour, so that it is indistinguishable from a maximum.  Also,
+the simple interpolation routine used by KNTR may produce jagged
+"staircase" contours.  This problem can be minimized by
+interpolating the image with the task GEOM.
+
+BLC, TRC:
+     A convenient way to select the plot corners is to display
+the image on the TV and set the rectangular boundary of the
+subimage to be plotted with the verb TVWIN.
+
+LEVS:
+     Nonzero elements LEVS(I) in this 30-element vector
+specify the contour levels LEVS(I)*PLEV or LEVS(I)*CLEV to be
+plotted.  They must be specified in increasing order and lie
+within the range -9999.0 to +99999.0.  It is easy to specify a
+large number of LEVS values with a FOR loop.  For example,
+the statement:
+     FOR I=1 TO 20;LEVS(I)=2**((I-1)/2.);END ; LEVS(21)=0.
+yields successive contours separated by factors of 2**.5
+     If you request more than one negative level via a statement
+of the form
+        LEVS = a , b , c , d , e , f , g
+you must use commas between the negative levels.  Otherwise, the
+minus sign(s) will be treated as subtraction symbols by POPS and
+the desired levels will be combined into a single negative
+level.
+
+LTYPE:
+     1=> unlabeled rectangular border
+     2=> rectangular border plus labels (image name, center
+         position, etc.). Beware that the PEAK FLUX label
+         gives the peak flux in the whole image, not that in
+         the subimage plotted.
+     3=> rectangular border, labels, and border tick marks
+         indicating absolute coordinates (r.a., decl., etc.)
+     4=> rectangular border, labels, and border tick marks
+         indicating coordinates relative to the coordinates
+         of the image reference pixel
+     5=> rectangular border, labels, and border tick marks
+         indicating coordinates relative to the center of
+         the subimage plotted
+     6=> rectangular border, labels, and border tick marks
+         indicating image pixel numbers
+     7-10 => like 3-6 but the extra labels are omitted.
+     An LTYPE which is < 0 is used, in absolute value, to
+     control the labeling as listed above and specifies that
+     the "PLOT FILE VERSION n CREATED date time" string is
+     not placed on the plot.
+
+XYRATIO:
+     XYRATIO can be used to change the plot aspect ratio.
+Values >1 stretch the X-axis, values <1 compress it.
+
+DISPLAYING THE PLOT:
+     On termination of KNTR, the messiness of the plot can be
+judged by looking at the message on your monitor:
+
+     GFINIS:  NUMBER OF RECORDS USED MMM
+
+If MMM is much greater than 200, the plot will be complicated.
+If this happens when you thought you were contouring a simple
+small field, you have probably set the levels too low (or have
+specified the contouring window incorrectly).  You may wish to
+check your inputs before trying to display the plot.  It is
+always worth using TKPL or TVPL to preview a new plot before
+routing it to the slower PRTPL or LWPLA, unless you are very sure
+that your input parameters were well chosen.
+
+STFACTOR:
+     You can use STarFACTOR to add crosses or other symbols to
+your plot to denote the positions of stars or other objects.
+First you must read the positions into a ST table using STARS.
+Then set INVER to the table version number.  You can scale the
+sizes of the crosses be setting STFACTOR > 0.  Set STFACTOR to
+1.0 for no scaling (use the star sizes in the ST table).  You
+can label the crosses with a character string to help identify
+them by setting STFACTOR < 0.  The label is the text string
+entered when creating the ST table.  The star sizes in this case
+will be scaled by ABS(STFACTOR).  Note that you can also rotate
+the crosses through an angle by specifying a positing angle when
+you create the ST table in STARS (see STARS for more
+information).
+
+EXECUTION TIMES:
+Plotting 10 or so contours in a 100 by 100 window with a
+straightforward source will take a few seconds.  Large, messy,
+or noise-limited plots may take many minutes.  If KNTR seems
+to be taking longer than expected, you may be plotting more
+contours than you wanted.

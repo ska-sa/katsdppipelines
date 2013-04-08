@@ -1,0 +1,422 @@
+; UVPLT
+;---------------------------------------------------------------
+;! plots data from a UV data base
+;# Task UV Plot
+;-----------------------------------------------------------------------
+;;  Copyright (C) 1995-1998, 2000-2010
+;;  Associated Universities, Inc. Washington DC, USA.
+;;
+;;  This program is free software; you can redistribute it and/or
+;;  modify it under the terms of the GNU General Public License as
+;;  published by the Free Software Foundation; either version 2 of
+;;  the License, or (at your option) any later version.
+;;
+;;  This program is distributed in the hope that it will be useful,
+;;  but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;  GNU General Public License for more details.
+;;
+;;  You should have received a copy of the GNU General Public
+;;  License along with this program; if not, write to the Free
+;;  Software Foundation, Inc., 675 Massachusetts Ave, Cambridge,
+;;  MA 02139, USA.
+;;
+;;  Correspondence concerning AIPS should be addressed as follows:
+;;         Internet email: aipsmail@nrao.edu.
+;;         Postal address: AIPS Project Office
+;;                         National Radio Astronomy Observatory
+;;                         520 Edgemont Road
+;;                         Charlottesville, VA 22903-2475 USA
+;-----------------------------------------------------------------------
+UVPLT     LLLLLLLLLLLLUUUUUUUUUUUU CCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+UVPLT     Plots data from a u,v data base: multi-channel version
+USERID       -32000.0    32000.0   File owner number - ignored
+INNAME                             Input UV file name (name)
+INCLASS                            Input UV file name (class)
+INSEQ             0.0     9999.0   Input UV file name (seq. #)
+INDISK                             Input UV file disk unit #
+SOURCES                            Sources to plot, ' '=>all.
+QUAL            -10.0              Qualifier -1=>all
+CALCODE                            Calibrator code '    '=>all
+STOKES                             Stokes type to select.
+SELBAND                            Bandwidth to select (kHz)
+SELFREQ                            Frequency to select (MHz)
+FREQID                             Freq. ID to select.
+TIMERANG                           Time range to select
+ANTENNAS                           Antennas to plot
+BASELINE                           Baselines with ANTENNAS
+UVRANGE                            UV range in kilolambda.
+SUBARRAY          0.0     1000.0   Subarray, 0 => all
+BCHAN             0.0     4096.0   1st spectral channel #
+ECHAN             0.0     4096.0   Last spectral channel #
+NCHAV             0.0     4096.0   # of channels to average
+CHINC             0.0     4096.0   Increment in channel #
+BIF                                Low IF number to plot
+EIF                                Highest IF number to plot
+DOCALIB          -1.0      101.0   > 0 calibrate data & weights
+                                   > 99 do NOT calibrate weights
+GAINUSE                            CAL (CL or SN) table to apply
+DOPOL            -1.0       10.0   If >0 correct polarization.
+PDVER                              PD table to apply (DOPOL>0)
+BLVER                              BL table to apply.
+FLAGVER                            Flag table version
+DOBAND           -1.0       10.0   If >0 apply bandpass cal.
+                                   Method used depends on value
+                                   of DOBAND (see HELP file).
+BPVER                              Bandpass table version
+SMOOTH                             Smoothing function. See
+                                   HELP SMOOTH for details.
+XINC              0.0     9999.0   Plot every XINC'th visibility
+                                   0 => 1.
+APARM                              Control parameters for UV
+                                   1:  min of W range, klambda
+                                   2:  max of W range, klambda
+                                   3:  plot both halfs of UV(W)?
+                                       0 =>  plot both halfs
+                                       -1 => plot one UV half
+                                       +1 => plot another U,V
+                                             half
+BPARM                              Control parameters
+                                   1 : X-axis type 0=>UV dist
+                                   2 : Y-axis type 0=>Ampl
+                                       1=> amplitude (Jy)
+                                       2=> phase (degrees)
+                                       3=> uv dist. (klambda)
+                                       4=> uv p.a. (deg N->E)
+                                       5=> time (IAT days)
+                                       6=> u (klambda)
+                                       7=> v (klambda)
+                                       8=> w (klambda)
+                                       9=> Re(Vis) (Jy)
+                                       10=> Im(Vis) (Jy)
+                                       11=> time (IAT hours)
+                                       12=> log10 (ampl)
+                                       13=> weight
+                                       14=> HA (hours)
+                                       15=> elevation (deg)
+                                       16=> parallactic angle
+                                       17=> uv dist. (klambda)
+                                            along p.a.
+                                       18=> azimuth (deg)
+                                   3 : > 0.0 => fixed scale
+                                       < 0.0 => fixed range
+                                   4 : Xmin (fixed scale)
+                                   5 : Xmax (fixed scale)
+                                   6 : Ymin (fixed scale)
+                                   7 : Ymax (fixed scale)
+                                   8 : Number of bins in plot.
+                                       <0 points and binned
+                                   9 : > 0 => list bin values.
+                                   10: > 0 => plot auto-corr too
+                                   BPARM=6,7,2,0 generates
+                                    square UV coverage plots
+DOWEIGHT       -1.0         1.0    > 0 use weights in binning
+REFANT          0.0        90.0    > 0 => use REFANT for plot
+                                   types 14, 15, 16, 18
+ROTATE       -360.0       360.0    uv p.a. for projection
+                                   (deg N->E); type 17 only
+FACTOR      -1000.0      1000.0    Scale dots by FACTOR
+                                   < 0 => connect dots too
+DO3COL         -1.0         1.0    > 0 use 3-color to separate
+                                   channels and IFs.
+LTYPE         -10.0        10.0    Type of labeling: 1 border,
+                                   2 no ticks, 3 - 6 standard,
+                                   7 - 10 only tick labels
+                                   <0 -> no date/time
+BADDISK                            Disk to avoid for scratch.
+DOTV          -10.0        10.0    > 0 Do plot on the TV, else
+                                   make a plot file
+GRCHAN          0.0         8.0    Graphics channel 0 => 1.
+XYRATIO         0.0                X/Y ratio 0 -> fit TV or 1 PL
+----------------------------------------------------------------
+UVPLT
+Type: Task
+Use:  Plots data from a u,v data base making a plot file.  Calibration
+      information can be applied before plotting.  If calibration
+      information is to be applied, the data must be in TB sort order.
+Adverbs:
+  USERID.....Input file user number.  Ignored
+  INNAME.....Input UV file name (name)    Standard defaults.
+  INCLASS....Input UV file name (class)   Standard defaults.
+  INSEQ......Input UV file name (seq. #)  0 => highest.
+  INDISK.....Disk drive # of input UV file.  0 => any.
+  SOURCES....List of sources to be plotted. '  '=> all; if any starts
+             with a '-' then all except ANY source named.
+  QUAL.......Qualifier of source to be plotted. -1 => all.
+  CALCODE....Calibrator code of sources to plot. ' '=> all.
+  STOKES.....The desired Stokes type of the plotted data:
+               'I','Q','U','V', 'IV', 'IQU', 'IQUV'
+               'RR','LL', 'RL', 'LR', 'RRLL', 'RLLR', 'RLRL'
+               'XX','YY', 'XY', 'YX', 'XXYY', 'XYYX', 'XYXY'
+             'HALF', 'CROS', and 'FULL' have sensible interpretations
+             depending on the Stokes present in the data.  The last in
+             each of the 3 rows above == 'FULL'.  '  ' => 'FULL'
+             All selected Stokes will be plotted
+  SELBAND....Bandwidth of data to be selected. If more than one IF is
+             present SELBAND is the width of the first IF required.
+             Units = kHz.  For data which contain multiple bandwidths or
+             frequencies the task will insist that some form of
+             selection be made by frequency or bandwidth.
+  SELFREQ....Frequency of data to be selected. If more than one IF is
+             present SELFREQ is the frequency of the first IF required.
+             Units = MHz.
+  FREQID.....Frequency identifier to select (you may determine which is
+             applicable from the OPTYPE='SCAN' listing produced by
+             LISTR). If either SELBAND or SELFREQ are set, their values
+             overide that of FREQID.  However, setting SELBAND and
+             SELFREQ may result in an ambiguity.  In that case, the task
+             will request that you use FREQID.  If all SELBAND, SELFREQ
+             and FREQID are not specified (<= 0) then the task will loop
+             over the frequency ID plotting all of them!
+  TIMERANG...Time range of the data to be plotted. In order:
+             Start day, hour, min. sec, end day, hour, min. sec.
+             Days relative to reference date.
+  ANTENNAS...A list of the antennas to plot.  If any number is negative
+             then all antennas listed  are NOT desired and all others
+             are.   All 0 => list all.
+  BASELINE...Baselines are specified using BASELINE.
+             Eg. for baselines 1-6,1-8, 2-6 and 2-8
+             use ANTENNAS=1,2; BASELINE=6,8.
+  UVRANGE....Range of projected spacings to be plotted in 1000's of
+             wavelengths.  0  =>  1, 1.E10
+  SUBARRAY...Subarray number to plot.        0 => all - the task will
+             loop over subarray number.
+  BCHAN......Beginning spectral line channel number.   0 => 1.
+  ECHAN......Ending spectral line channel number.   0 => max.
+  NCHAV......Number of spectral channels to average before plotting.
+             0 => 1.  ECHAN will be adjusted downwards so that all
+             averages will include the same number of spectral
+             channels.
+  CHINC......Increment in spectral line channel number.   0 => NCHAV
+             Channels i through i+CHINC-1 are flagged if channel i is
+             flagged.  All channels may be flagged by setting DOALL.
+             CHINC is ignored if NCHAV >= ECHAN-BCHAN+1.
+  BIF........First IF number to plot.              0 => 1
+  EIF........Last IF number to plot.               0 => highest
+  DOCALIB....If true (>0), calibrate the data using information in the
+             specified Cal (CL) table for multi-source or SN table for
+             single-source data.  Also calibrate the weights unless
+             DOCALIB > 99 (use this for old non-physical weights).
+  GAINUSE....Version number of the Cal. table to apply to the data if
+             DOCALIB=1.  Refers to a CL table for multi-source data or
+             an SN table for single-source.  0 => highest.
+  DOPOL......If > 0 then correct data for instrumental polarization as
+             represented in the AN or PD table.  This correction is
+             only useful if PCAL has been run or feed polarization
+             parameters have been otherwise obtained.  See HELP DOPOL
+             for available correction modes: 1 is normal, 2 and 3 are
+             for VLBI.  1-3 use a PD table if available; 6, 7, 8 are
+             the same but use the AN (continuum solution) even if a PD
+             table is present.
+  PDVER......PD table to apply if PCAL was run with SPECTRAL true and
+             0 < DOPOL < 6.  <= 0 => highest.
+  BLVER......Version number of the baseline based calibration (BL) table
+             to apply. <0 => apply no BL table, 0 => highest, if any.
+  FLAGVER....Specifies the version of the flagging table to be applied.
+             0 => highest numbered table.  <0 => no flagging to be
+             applied.
+  DOBAND.....(multi-source) If true (>0), then correct the data for the
+             shape of the antenna bandpasses using the BP table
+             specified by BPVER.  The correction has five modes:
+             (a) if DOBAND=1 all entries for an antenna in the table
+             are averaged together before correcting the data.
+             (b) if DOBAND=2 the entry nearest in time (including
+             solution weights) is used to correct the data.
+             (c) if DOBAND=3 the table entries are interpolated in
+             time (using solution weights) and the data are then
+             corrected.
+             (d) if DOBAND=4 the entry nearest in time (ignoring
+             solution weights) is used to correct the data.
+             (e) if DOBAND=5 the table entries are interpolated in
+             time (ignoring solution weights) and the data are then
+             corrected.
+  BPVER......(multi-source) specifies the version of the BP table to be
+             applied. 0 => highest numbered table.
+  SMOOTH.....Specifies the type of spectral smoothing to be applied to
+             a uv database . The default is not to apply any smoothing.
+             The elements of SMOOTH are as follows:
+             SMOOTH(1) = type of smoothing to apply: 0 => no smoothing
+               To smooth before applying bandpass calibration
+                 1 => Hanning, 2 => Gaussian, 3 => Boxcar, 4 => Sinc
+               To smooth after applying bandpass calibration
+                 5 => Hanning, 6 => Gaussian, 7 => Boxcar, 8 => Sinc
+             SMOOTH(2) = the "diameter" of the function, i.e. width
+               between first nulls of Hanning triangle and sinc
+               function, FWHM of Gaussian, width of Boxcar. Defaults
+               (if < 0.1) are 4, 2, 2 and 3 channels for SMOOTH(1) =
+               1 - 4 and 5 - 8, resp.
+             SMOOTH(3) = the diameter over which the convolving
+               function has value - in channels.  Defaults: 1,3,1,4
+               times SMOOTH(2) used when input SMOOTH(3) < net
+               SMOOTH(2).
+  XINC.......Plot every XINC'th visibility which might be plotted.
+             0 => 1.
+  APARM......Control parameters specifically for UV depending on W range
+        This option can be usefull when investigating effect of the W term
+        on the imaging.
+        All baselines are converted to W>0
+     	1:  min W of W range to plot, in klambda
+     	2:  max W of W range to plot, in klambda
+     	3:  plot the mirrors UV(W)?
+               0 => plot both halfs of UV
+              -1 => plot one half of U,V (for W>0)
+              +1 => plot another half (mirror) of U,V (for W<0)
+  BPARM......Control parameters:
+     1,2 = type of X-axis and type of Y-axis- where,
+       1 = amplitude (Jy),         2 = phase (degrees),
+       3 = u,v distance (klambda), 4 = u,v p.a.(deg, N thru E)
+       5 = time (IAT days),        6 = u (+max at left, bottom)
+       7 = v,                      8 = w (all in klambda),
+       9 = real part (Jy)         10 = imaginary part (Jy)
+      11 = time (IAT hours)       12 = log10 (amplitude)
+      13 = vis weight             14 = hour angle (hours)
+      15 = elevation (degrees)    16 = parallactic angle (deg)
+      17 = uv dist. in p.a. ROTATE  18 = azimuth (deg)
+      **********************************************
+      Use -n to plot the parameter from max at left or bottom to min
+      at right or top rather than the usual order (opposite for u).
+      **********************************************
+     BPARM(1)=0  => 3 -- X-axis type is u,v, distance
+     BPARM(2)=0  => 1 -- Y-axis type is Amplitude (Jy)
+         For single-dish data: 1 and 9 are flux, 2 and 10 are offset, 3,
+         6, and 8 are longitude, 4 and 7 are latitude.
+     3 = if greater than zero, use BPARM(4) - BPARM(8) as the ranges of
+         the axes.  If less than zero, use the BPARMs to limit the range
+         of the axes, but self-scale the axes within that range.  If
+          0.0, fully self-scaling.  Each axis treated separately.
+     4 = Minimum of X-axis - used if BPARM(5) > BPARM(4).
+     5 = Maximum of X-axis - used if BPARM(5) > BPARM(4).
+     6 = Minimum of Y-axis - used if BPARM(7) > BPARM(6).
+     7 = Maximum of Y-axis - used if BPARM(7) > BPARM(6).
+         Note that phase is initially computed in the range -180 to
+         180 degrees, but will be plotted in the range 0 to 360 if
+         specified as such.  In self-scaled phase plots, the plot with
+         the smaller total range of those two possibilities is used.
+         Values > 360 or < -180 are not available.
+     8 = If = 0, plot each selected sample individually.
+         If > 0, plot bin averages in X of the specified quantity.
+         There will be BPARM(8) number of bins in the plot.  For bins
+         with more than 2 entries the vertical height of the symbol
+         represents the standard deviation of the mean of the
+         distribution in the bin except that the minimum height
+         plotted = width of the + symbol.  Self-scaling will be on
+         binned values.
+         If < 0, bin the data in abs(BPARM(8)) bins, but plot the
+         individual samples (as line type 4) as well as the bin
+         averages (as line type 3).  Self-scaling will be on the
+         individual samples.
+         The binned values include individual samples outside the plot
+         range (BPARM(6) - BPARM(7)) but are then plotted only if they
+         fit in the plot range.
+     9 = If > 0, then the values and standard deviations in each bin
+         will be put in the message file (prio=5).  Has no effect if the
+         plot is not binned.
+     10  If > 0, then the auto-corelations, if there are any, will also
+         be plotted.
+     BPARM=6,7,2,0 will generate a UV coverage plot with identical U and
+         V limits.
+  DOWEIGHT...> 0 => use data weights in averaging the binned data
+             (BPARM(8) not zero).
+  REFANT.....Hour angle, elevation, parallactic angle, and azimuth
+             are actually antenna parameters not baseline parameters.
+             If REFANT > 0, these plot parameters will be those
+             evaluated at antenna REFANT.
+             If REFANT = 0, these parameters are
+             evaluated at each antenna of an antenna pair and averaged
+             for plotting purposes.
+  ROTATE.....Position angle, in degrees N thru E, for the projected uv
+             distance.  This parameter is only used if BPARM(1)=17
+             or BPARM(2)=17.
+  FACTOR.....Multiplier to make plotted points larger or smaller.
+             abs (FACTOR)< 0.1 => 1.  FACTOR < 0 => connect the dots
+             and draw the symbol.
+  DO3COL.....> 0 => use 3-color vectors in the plot symbols to allow
+             the channels and IFs to be distinguished.  BIF, BCHAN is
+             full red, EIF,ECHAN is full blue.
+  LTYPE......Labelling type: 1 = border, 2 = no ticks, 3 - 10 =
+             standard, with  7-10 all labels other than tick numbers
+             and axis type are omitted.  Less than 0 is the same except
+             that the plot file version number and create time are
+             omitted.
+  BADDISK....Disk numbers to avoid for scratch files.  Scratch files may
+             be created by the sorting routines if calibration or
+             flagging is applied.
+  DOTV.......> 0 => plot directly on the TV device, otherwise make a
+             plot file for later display on one or more devices
+             (including the TV if desired).
+  GRCHAN.....Graphics channel (1 - 7) to use for line drawing. 0 => 1.
+  XYRATIO....Scale the X axis longer than the Y by XYRATIO.
+                If DOTV >  0, 0 -> fit to the TV window
+                If DOTV <= 0, 0 -> 1.
+----------------------------------------------------------------
+UVPLT:  Plots data from a u,v data base making a plot file.
+RELATED PROGRAMS: TKPL,PRTPL,TVPL
+
+                      PURPOSE
+
+     UVPLT can be used to plot any pair of variables from a u,v data
+base i.e. any of u, v, w, uv distance, uv position angle, visibility
+amplitude, phase, real, imaginary.  It is very useful as a diagnostic
+tool. Some possible uses :
+     1. Plotting visibility amplitude or phase as a function of uv
+distance to find a useful uv range for selfcalibration.  Use the
+averaging option.
+     2. Plotting visibility amplitude or phase of the residuals of a set
+of clean components from a data base as a function of uv distance to
+find bad points which can be clipped using task CLIP.  The task UVSUB
+can be used to subtract or add the visiblity corresponding to a set of
+clean components.  For the purpose of spotting bad visibility points it
+is recommended that all clean components up to the first negative be
+subtracted before running UVPLT.
+     3. Plotting u against v will give the uv plane coverage of the data
+set.
+     4. Plotting visibility amplitude or phase as a function of uv
+distance to guesstimate a reasonable value for the zero spacing flux to
+be used in IMAGR.  Values > 110-120% of the maximum correlated flux will
+lead to spurious results in cleaning.
+
+                     COMMENTS
+
+BCHAN, ECHAN, BIF, EIF:
+     More than one frequency may be plotted from multi-channel, multi-IF
+data sets.  The data will be plotted at u,v,w values corrected to the
+frequency of the individual channel and IF.  This is useful in seeing
+the effect of bandwidth synthesis.
+
+UVRANGE :
+     Allows selection of points to be plotted on the basis of distance
+from the centre of the uv plane.
+
+AVERAGING :
+     A very nice option allows the averaging of the data into bins.  The
+average and rms in a bin is plotted in place of the individual values.
+This is mainly useful for seeing the overall shape of the visibility
+curve.  Default scaling is by the extrema of the axes.  BPARM(8)
+switches on the averaging and sets the number of bins.  The sign of
+BPARM(8) controls whether the data averaging uses the data weight (< 0)
+or is a simple average (> 0).
+
+SCALING :
+     The default scaling is from the maximum to the minimum of an axis.
+The entire data base must be read to determine the scaling so you can
+halve the execution time of UVPLT by specifying the maximum and minimum
+values.  If BPARM(3) > 0.0, then BPARM(4) - BPARM(7) control the scaling
+of the 2 axes. If, however, any of the BPARM4) - BPARM(7) is zero, then
+that parameter will be self-scaled.  If you actually want 0.0 for a
+limit, set some small negative (for lower limits) or positive (for upper
+limits) amount..
+     The option of setting BPARM(3) < 0.0 is useful to restrict the data
+to some range, but still have a self-scaled plot.  For example, BPARM =
+3, 1, -1, 0, 0, 1.0, 10000 will plot amplitudes >= 1.0 against uv
+distance, but the amplitude scale will only go up to the peak amplitude
+in the data not to 10000 Jy.  The X axis (uv distance) will self-scale
+to cover the full range.
+
+XINC :
+     Allows plotting of only every XINC'th point. The plotting of the
+plot file can be extremely tiresome unless the number of points is
+limited. A few thousand is usually reasonable.
+
+                      REFERENCES
+
+None.
