@@ -14,8 +14,12 @@ def AIPSSetup():
     cwd          = os.getcwd()
     home         = os.path.expanduser("~")
     # Assume obit is installed and set up correctly.
-    OBIT_EXEC    = os.environ['OBIT']
-    OBIT_DATA    = OBIT_EXEC+'/share/data'
+    try:
+    	OBIT_EXEC    = os.environ['OBIT']
+	OBIT_DATA    = OBIT_EXEC+'/share/data'
+    except:
+	OBIT_EXEC    = cwd
+	OBIT_DATA    = OBIT_EXEC+'/FITS'
 
     #AIPS user number (arbitrary)
     user = 10

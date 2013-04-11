@@ -29,7 +29,7 @@ def arch():
 		return 'LINUX'
 	if uname[0] == 'Linux' and (uname[4] == 'x86_64'):
 		return 'LNX64'
-	elif uname[0] == 'Darwin' and uname[4] == 'i386':
+	elif uname[0] == 'Darwin':
 		return 'MACINT'
 	else:
 		raise NotImplementedError, 'Unknown Architecture'
