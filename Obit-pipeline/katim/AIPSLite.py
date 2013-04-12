@@ -142,7 +142,10 @@ def get_aips(basedir=None, version=default_version, force=False):
 	if not basedir:
 		basedir = os.getcwd()
 	init_environ(basedir, version=version)
-	urls = lib_urls() + popsdat_urls() + binary_urls()
+	urls = []
+	for url in lib_urls() + popsdat_urls() + binary_urls():
+		if not os.path.exists(os.environ['AIPS_ROOT'] +'/'+ url):
+			urls = urls + [url]
 	rsync(aips_server, urls, force=force)
 	filaip(force=force)
 
@@ -198,7 +201,7 @@ def get_task(*args, **kwargs):
 	for taskname in args:
 		exename = exe_path +'/'+ taskname.upper() + '.EXE'
 		hlpname = help_path +'/'+ taskname.upper() + '.HLP'
-		if not (os.path.exists(os.environ['AIPS_ROOT'] + exename) or os.path.exists(os.environ['AIPS_ROOT'] + hlpname)):
+		if not (os.path.exists(os.environ['AIPS_ROOT'] + '/' + exename) or os.path.exists(os.environ['AIPS_ROOT'] + '/' + hlpname)):
 			urls += create_path_list(exe_path, [taskname.upper() + '.EXE'])
 			urls += create_path_list(help_path, [taskname.upper() + '.HLP'])
 	rsync(aips_server, urls, force=force)
