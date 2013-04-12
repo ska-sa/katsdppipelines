@@ -46,7 +46,7 @@ def init_environ(path=None, version=default_version):
 	os.environ['VERSION'] = 'NEW'
 	os.environ['PLOTTER'] = '/tmp'
 	# Add the intel libs to [DY]LD_LIBRARY_PATH
-	if os.environ['ARCH'] == 'LINUX' or 'LNX64':
+	if (os.environ['ARCH'] == 'LINUX') or (os.environ['ARCH'] == 'LNX64'):
 		lib_env = 'LD_LIBRARY_PATH'
 	elif os.environ['ARCH'] == 'MACINT':
 		lib_env = 'DYLD_LIBRARY_PATH'
@@ -65,7 +65,7 @@ def create_path_list(path, file_list):
 
 def lib_urls():
 	base = version() + '/' + os.environ['ARCH'] + '/LIBR/INTELCMP'
-	if os.environ['ARCH'] == 'LINUX' or 'LNX64':
+	if (os.environ['ARCH'] == 'LINUX') or (os.environ['ARCH'] == 'LNX64'):
 		lib_files = intel_libs
 	elif os.environ['ARCH'] == 'MACINT':
 		lib_files = mac_libs
@@ -190,15 +190,15 @@ def get_task(*args, **kwargs):
 		force = kwargs['force']
 	except KeyError:
 		force = False
-	exe_path = os.environ['AIPS_VERSION'] + '/' + os.environ['ARCH'] + '/LOAD'
-	help_path = os.environ['AIPS_VERSION'] + '/HELP'
+	exe_path = version() + '/' + os.environ['ARCH'] + '/LOAD'
+	help_path = version() + '/HELP'
 	urls = []
 	# TM 27/3/13
 	# Modified to not go to rsync if the file already exists to speed things up.
 	for taskname in args:
 		exename = exe_path +'/'+ taskname.upper() + '.EXE'
 		hlpname = help_path +'/'+ taskname.upper() + '.HLP'
-		if not (os.path.exists(exename) or os.path.exists(hlpname)):
+		if not (os.path.exists(os.environ['AIPS_ROOT'] + exename) or os.path.exists(os.environ['AIPS_ROOT'] + hlpname)):
 			urls += create_path_list(exe_path, [taskname.upper() + '.EXE'])
 			urls += create_path_list(help_path, [taskname.upper() + '.HLP'])
 	rsync(aips_server, urls, force=force)
