@@ -10,10 +10,10 @@ import OErr, OSystem, AIPS, ObitTalkUtil
 # default AIPS_VERSION to cwd. Default AIPS_DISK is set to cwd and default FITS to 
 # $OBIT_EXEC/share/data.
 
-def AIPSSetup():
+def AIPSSetup(scratchdir=None):
     cwd          = os.getcwd()
     home         = os.path.expanduser("~")
-    # Assume obit is installed and set up correctly.
+    # Is Obit installed and set up correctly? If not make data cwd/FITS.
     try:
     	OBIT_EXEC    = os.environ['OBIT']
 	OBIT_DATA    = OBIT_EXEC+'/share/data'
@@ -32,20 +32,23 @@ def AIPSSetup():
         aips_dir = cwd
         aips_version = '31DEC13'    # Should sort out where to change this if necessary!!
         
-    configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
+    configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd+'/aipsdisk', 'metadata_dir': OBIT_DATA}
     config = ConfigParser.ConfigParser(configdefaults)
     config.add_section('KATPIPE')
     # Get the config file in the users home directory if it exists and overwrite the defaults
     config.read(home + '/.katimrc')
-    
+
+    if scratchdir:
+	config.set('KATPIPE' ,'scratch_area', scratchdir)
+
     ############################# Initialize AIPS ##########################################
     
     # Sort out the AIPS environment variables for the defined configuration.
-    AIPSLite.get_aips(config.get('KATPIPE','aips_dir'),version=config.get('KATPIPE','aips_version'))
+    AIPSLite.get_aips(basedir=config.get('KATPIPE','aips_dir'),version=config.get('KATPIPE','aips_version'))
 
     # Make the aips scratch disk
     DA00         = config.get('KATPIPE','scratch_area')+'/da00'
-    AIPS_DISK    = config.get('KATPIPE','scratch_area')+'/aipsdisk'
+    AIPS_DISK    = config.get('KATPIPE','scratch_area')
     
     #Overwrite any previous AIPS disks.
     if os.path.exists(DA00): shutil.rmtree(DA00)

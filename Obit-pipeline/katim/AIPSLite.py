@@ -27,7 +27,7 @@ def arch():
 	uname = os.uname()
 	if uname[0] == 'Linux' and ((uname[4][0] == 'i' and uname[4][-2:] == '86')):
 		return 'LINUX'
-	if uname[0] == 'Linux' and (uname[4] == 'x86_64'):
+	elif uname[0] == 'Linux' and (uname[4] == 'x86_64'):
 		return 'LNX64'
 	elif uname[0] == 'Darwin':
 		return 'MACINT'

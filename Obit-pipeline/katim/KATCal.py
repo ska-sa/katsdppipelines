@@ -20,6 +20,8 @@ from ObitTalkUtil import FITSDir
 manifest = { 'project' : [],  # list of project output files
              'source'  : {} } # dict of source output files
 
+
+
 def KATInitContParms(nam,cls,obsdata):
     """
     Initialize KAT-7 continuum pipeline parameters
@@ -344,7 +346,7 @@ def KATInitContParms(nam,cls,obsdata):
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
     for cal in calist:
         fluxcal,offset=fluxcals.closest_to(cal)
-        if offset*3600. < 1.5:        # Arbritray 1.5" position offset 
+        if offset*3600. < 1.5:        # Arbitray 1.5" position offset 
             cal.flux_model = fluxcal.flux_model
             if not cal in tcals:
                 calflux=float(cal.flux_density(freq/1e6))
@@ -352,7 +354,7 @@ def KATInitContParms(nam,cls,obsdata):
                 tcals.append(cal.name)
 
     parms["ACals"]           = ACals    # Amplitude calibrators
- 
+    
     calist = bpcal+gaincal
     DCals = []
     tcals = []
@@ -397,7 +399,7 @@ def KATInitContParms(nam,cls,obsdata):
     imtargets = bpcal + gaincal + source
     parms["targets"]=[]
     for targ in imtargets:
-        parms["targets"].append(targ.name)
+        parms["targets"].append(targ.name.replace(' ','_'))
     parms["Stokes"]  = "I"          # Stokes to image
     parms["FOV"]     = 2.00         # FOV calculated for 25 m antenna not 12
     parms["MBmaxFBW"]= 0.02         # max. MB fractional bandwidth

@@ -185,6 +185,7 @@ def GetKATMeta(katdata, err):
     out["source"] = tt
     # Antennas
     al = []
+    alook = {}
     i = 0
     for a in  katdata.ants:
         name  = a.name
@@ -192,13 +193,15 @@ def GetKATMeta(katdata, err):
         diam  = a.diameter
         i += 1
         al.append((i, name, x, y, z, diam))
+        alook[name] = i
     out["ants"] = al
+    out["antLookup"] = alook
     # Data products
     dl = []
     nstokes = 1
     for d in  katdata.corr_products:
-        a1 = int(d[0][3:4])
-        a2 = int(d[1][3:4])
+        a1 = out["antLookup"][d[0][:4]]
+        a2 = out["antLookup"][d[1][:4]]
         if d[0][4:]=='h' and d[1][4:]=='h':
             dp = 0
         elif d[0][4:]=='v' and d[1][4:]=='v':
@@ -446,7 +449,6 @@ def ConvertKATData(outUV, katdata, meta, err):
     naxes   = d['inaxes']
     count = 0.0
     visno = 0
-  
     # Get IO buffers as numpy arrays
     shape = len(outUV.VisBuf) / 4
     buffer =  numarray.array(sequence=outUV.VisBuf,
@@ -474,7 +476,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         uu = katdata.u
         vv = katdata.v
         ww = katdata.w
-        suid = meta["targLookup"][name]
+        suid = meta["targLookup"][name[0:16]]
         # Number of integrations
         msg = "Scan %4d Int %16s Start %s"%(nint,name,day2dhms((tm[0]-time0)/86400.0)[0:12])
         OErr.PLog(err, OErr.Info, msg);
