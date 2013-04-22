@@ -16,21 +16,24 @@ import katim.AIPSSetup as AIPSSetup
 
 def pipeline(args, options):
     """
-    KAT-7 Continuum pipeline.
-    
+    KAT-7 Continuum pipeline.    
     * *parmfile* = pipeline input parameters file
     * *outputdir* = location to write output data
     * *scratchdir* = location to use aips disk (will overwrite any other settings)
-    * *h5file* = args[0] = h5 filename
-    	
-
+    * *h5file* = args[0] = h5 filename       
     """
 
     h5file = args[0]
     parmFile = options.parms
     scratchdir = options.scratchdir
     outputdir  = options.outputdir
-    
+    manifestfile = options.outputdir + '/manifest.pickle'
+
+    # Die gracefully if we cannot write to the output area...
+    if not os.path.exists(outputdir):
+        print 'Specified output directory: '+ outputdir + 'does not exist.'
+        exit(-1)
+
     ############################# Initialize OBIT and AIPS ##########################################
     noScrat     = []
     err = OErr.OErr()
@@ -47,10 +50,13 @@ def pipeline(args, options):
     fitsdisk = 0
 
     ############################# Default parameters ##########################################
+
+    #######  Supported KAT-7 Correlator modes #######
+    supported_modes=['c16n400M1k']
     
     #######  Load KAT Image ######
     nam = os.path.basename(h5file).rstrip('.h5')
-    cls = "LRaw"
+    cls = "Raw"
     seq = 1
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+"/KAT7Template.uvtab",0,nam,cls,disk,seq,err)
     obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0)
@@ -60,11 +66,28 @@ def pipeline(args, options):
     parms = KATInitContParms(nam,cls,obsdata)
     debug = parms["debug"]
     check = parms["check"]
-    ############################# Set Project Processing parameters ##################
+
+    ########################## Make sure observation is imageable ####################
     if parmFile:
         print "parmFile",parmFile
         exec(open(parmFile).read())
-        EVLAAddOutFile( parmFile, 'project', 'Pipeline input parameters' )
+        EVLAAddOutFile(os.path.basename(parmFile), 'project', 'Pipeline input parameters' )
+
+    # Don't do anything if there is more than 1 spectral window in the data.
+    if len(obsdata['katdata'].spectral_windows)>1:
+        print "The pipeline only supports imaging with one spectral window."
+        exit(-1)
+
+    # Get the KAT-7 correlator mode.
+    corrmode  = obsdata['corrmode']
+
+    # Die gracefully if we are not using a supported mode.
+    if not corrmode in supported_modes:
+        print "The correlator mode " + corrmode + " is not supported by the imaging pipeline."
+        exit(-1)
+
+
+    ############################# Set Project Processing parameters ##################
 
     # frequency/configuration dependent default parameters
     EVLAInitContFQParms(parms)
@@ -76,11 +99,11 @@ def pipeline(args, options):
     session   = parms["session"]        # Project session code
 
     ################################## Process #####################################
-    fileRoot      = outputdir+'/'+parms["project"]+"_" # root of file name
+    fileRoot      = outputdir+'/'+parms["project"] # root of file name
     logFile       = fileRoot[:-1]+".log"   # Processing log file
     uvc           = None
     avgClass      = ("UVAv"+band)[0:6]  # Averaged data AIPS class
-    outIClass     =  parms["outIClass"] # image AIPS class
+    outIClass     = parms["outIClass"] # image AIPS class
 
     # Load the outputs pickle jar
     EVLAFetchOutFiles()
@@ -89,11 +112,11 @@ def pipeline(args, options):
     OErr.PInit(err, parms["prtLv"], logFile)
     OSystem.PAllowThreads(nThreads)   # Allow threads in Obit/oython
     retCode = 0
-    EVLAAddOutFile( logFile, 'project', 'Pipeline log file' )
+    EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
    
-    mess = "Start project "+parms["project"]+" session "+parms["session"]+\
+    mess = "Start project "+parms["project"]+\
            " "+parms["band"]+" Band"+" AIPS user no. "+str(AIPS.userno)+\
-           ", EVLA configuration "+parms["VLACfg"]
+           ", KAT7 configuration "+parms["VLACfg"]
     printMess(mess, logFile)
     if debug:
         pydoc.ttypager = pydoc.plainpager # don't page task input displays
@@ -110,9 +133,9 @@ def pipeline(args, options):
         printMess(mess, logFile)
 
     # Save parameters to pickle jar, manifest
-    ParmsPicklefile = fileRoot+"_"+session+"_"+band+".Parms.pickle"   # Where results saved
+    ParmsPicklefile = fileRoot+".Parms.pickle"   # Where results saved
     SaveObject(parms, ParmsPicklefile, True)
-    EVLAAddOutFile( ParmsPicklefile, 'project', 'Processing parameters used' )
+    EVLAAddOutFile(os.path.basename(ParmsPicklefile), 'project', 'Processing parameters used' )
 
     # Are we going to be doing Hanning?
     if parms["doHann"]:
@@ -265,7 +288,7 @@ def pipeline(args, options):
     
     # Need to find a reference antenna?  See if we have saved it?
     if (parms["refAnt"]<=0):
-        refAnt = FetchObject(fileRoot+"_"+session+"_"+band+".refAnt.pickle")
+        refAnt = FetchObject(fileRoot+".refAnt.pickle")
         if refAnt:
             parms["refAnt"] = refAnt
     # Use bandpass calibrator and center half of each spectrum
@@ -282,9 +305,9 @@ def pipeline(args, options):
         mess = "Picked reference antenna "+str(parms["refAnt"])
         printMess(mess, logFile)
         # Save it
-        ParmsPicklefile = fileRoot+"_"+session+"_"+band+".Parms.pickle"   # Where results saved
+        ParmsPicklefile = fileRoot+".Parms.pickle"   # Where results saved
         SaveObject(parms, ParmsPicklefile, True)
-        refAntPicklefile = fileRoot+"_"+session+"_"+band+".refAnt.pickle"   # Where results saved
+        refAntPicklefile = fileRoot+".refAnt.pickle"   # Where results saved
         SaveObject(parms["refAnt"], refAntPicklefile, True)
 
 
@@ -292,17 +315,17 @@ def pipeline(args, options):
     if parms["doRawSpecPlot"] and parms["plotSource"]:
         mess =  "Raw Spectral plot for: "+parms["plotSource"]
         printMess(mess, logFile)
-        plotFile = fileRoot+"RawSpec.ps"
+        plotFile = fileRoot+"_RawSpec.ps"
         retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, parms["refAnt"], err, \
                                Stokes=["RR","LL"], doband=-1,          \
                                check=check, debug=debug, logfile=logFile )
         if retCode!=0:
             raise  RuntimeError,"Error in Plotting spectrum"
-        EVLAAddOutFile( plotFile, 'project', 'Pipeline log file' )
+        EVLAAddOutFile(plotFile, 'project', 'Pipeline log file' )
 
     # delay calibration
     if parms["doDelayCal"] and parms["DCals"] and not check:
-        plotFile = fileRoot+"DelayCal.ps"
+        plotFile = fileRoot+"_DelayCal.ps"
         retCode = EVLADelayCal(uv, parms["DCals"], err,  \
                                BChan=parms["delayBChan"], EChan=parms["delayEChan"], \
                                doCalib=2, flagVer=2, doBand=-1, \
@@ -317,7 +340,7 @@ def pipeline(args, options):
         
         # Plot corrected data?
         if parms["doSpecPlot"] and parms["plotSource"]:
-            plotFile = fileRoot+"DelaySpec.ps"
+            plotFile = fileRoot+"_DelaySpec.ps"
             retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], \
                                    plotFile, parms["refAnt"], err, \
                                    Stokes=["RR","LL"], doband=-1,          \
@@ -339,7 +362,7 @@ def pipeline(args, options):
         
         # Plot corrected data?
         if parms["doSpecPlot"] and  parms["plotSource"]:
-            plotFile = fileRoot+"BPSpec.ps"
+            plotFile = fileRoot+"_BPSpec.ps"
             retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, \
                                    parms["refAnt"], err, Stokes=["RR","LL"], doband=1,          \
                                    check=check, debug=debug, logfile=logFile )
@@ -348,7 +371,7 @@ def pipeline(args, options):
 
     # Amp & phase Calibrate
     if parms["doAmpPhaseCal"]:
-        plotFile = fileRoot+"APCal.ps"
+        plotFile = fileRoot+"_APCal.ps"
         retCode = EVLACalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], 
                              doCalib=2, doBand=1, BPVer=1, flagVer=2, \
                              BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
@@ -415,7 +438,7 @@ def pipeline(args, options):
     
         # Delay recalibration
         if parms["doDelayCal2"] and parms["DCals"] and not check:
-            plotFile = fileRoot+"DelayCal2.ps"
+            plotFile = fileRoot+"_DelayCal2.ps"
             retCode = EVLADelayCal(uv, parms["DCals"], err, \
                                    BChan=parms["delayBChan"], EChan=parms["delayEChan"], \
                                    doCalib=2, flagVer=2, doBand=-1, \
@@ -430,7 +453,7 @@ def pipeline(args, options):
                 
             # Plot corrected data?
             if parms["doSpecPlot"] and parms["plotSource"]:
-                plotFile = fileRoot+"DelaySpec2.ps"
+                plotFile = fileRoot+"_DelaySpec2.ps"
                 retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, parms["refAnt"], err, \
                                        Stokes=["RR","LL"], doband=-1,          \
                                        check=check, debug=debug, logfile=logFile )
@@ -451,7 +474,7 @@ def pipeline(args, options):
         
         # Plot corrected data?
         if parms["doSpecPlot"] and parms["plotSource"]:
-            plotFile = fileRoot+"BPSpec2.ps"
+            plotFile = fileRoot+"_BPSpec2.ps"
             retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, parms["refAnt"], err, \
                                    Stokes=["RR","LL"], doband=1,          \
                                    check=check, debug=debug, logfile=logFile )
@@ -460,7 +483,7 @@ def pipeline(args, options):
     
         # Amp & phase Recalibrate
         if parms["doAmpPhaseCal2"]:
-            plotFile = fileRoot+"APCal2.ps"
+            plotFile = fileRoot+"_APCal2.ps"
             retCode = EVLACalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], \
                                  doCalib=2, doBand=1, BPVer=1, flagVer=2, \
                                  BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
@@ -555,7 +578,7 @@ def pipeline(args, options):
     
     # R-L phase calibration cal., creates new BP table
     if parms["doRLCal"] and parms["RLDCal"][0][0]!=None:
-        plotFile = fileRoot+"RLSpec2.ps"
+        plotFile = fileRoot+"_RLSpec2.ps"
         if parms["rlrefAnt"]<=0:
             parms["rlrefAnt"] =  parms["refAnt"]
         retCode = EVLARLCal(uv, err,\
@@ -587,7 +610,7 @@ def pipeline(args, options):
     
     # Plot corrected data?
     if parms["doSpecPlot"] and parms["plotSource"]:
-        plotFile = fileRoot+"Spec.ps"
+        plotFile = fileRoot+"_Spec.ps"
         retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], \
                                plotFile, parms["refAnt"], err, \
                                Stokes=["RR","LL"], doband=-1,          \
@@ -629,7 +652,7 @@ def pipeline(args, options):
         Report = EVLAReportTargets(uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, \
                                        Stokes=parms["Stokes"], logfile=logFile, check=check, debug=debug)
         # Save to pickle jar
-        ReportPicklefile = fileRoot+"Report.pickle"   # Where results saved
+        ReportPicklefile = fileRoot+"_Report.pickle"   # Where results saved
         SaveObject(Report, ReportPicklefile, True) 
        
     # Write results, cleanup    
@@ -639,11 +662,11 @@ def pipeline(args, options):
         cno = AIPSDir.PTestCNO(disk, user, Aname, avgClass[0:6], "UV", parms["seq"], err)
         if cno>0:
             uvt = UV.newPAUV("AIPS CAL UV DATA", Aname, avgClass, disk, parms["seq"], True, err)
-            filename = fileRoot+parms["session"]+parms["band"]+"Cal.uvtab"
+            filename = fileRoot+"_Cal.uvtab"
             fuv = EVLAUVFITS (uvt, filename, 0, err, compress=parms["Compress"], logfile=logFile)
-            EVLAAddOutFile( filename, 'project', "Calibrated Averaged UV data" )
+            EVLAAddOutFile(os.path.basename(filename), 'project', "Calibrated Averaged UV data" )
             # Save list of output files
-            EVLASaveOutFiles()
+            EVLASaveOutFiles(manifestfile)
             del uvt
     # Save raw UV data tables?
     if parms["doSaveTab"] and (not check):
@@ -651,16 +674,16 @@ def pipeline(args, options):
         cno = AIPSDir.PTestCNO(disk, user, Aname, dataClass[0:6], "UV", parms["seq"], err)
         if cno>0:
             uvt = UV.newPAUV("AIPS RAW UV DATA", Aname, dataClass[0:6], disk, parms["seq"], True, err)
-            filename = fileRoot+parms["session"]+parms["band"]+"CalTab.uvtab"
+            filename = fileRoot+"_CalTab.uvtab"
             fuv = EVLAUVFITSTab (uvt, filename, 0, err, logfile=logFile)
-            EVLAAddOutFile( filename, 'project', "Calibrated AIPS tables" )
+            EVLAAddOutFile(os.path.basename(filename), 'project', "Calibrated AIPS tables" )
             del uvt
             # Write History
-            filename = fileRoot+'_'+session+'_'+band+".History.text"
+            filename = fileRoot+"_History.text"
             OTObit.PrintHistory(uv, file=filename)
-            EVLAAddOutFile( filename, 'project', "Processing history of calibrated data" )
+            EVLAAddOutFile(filename, 'project', "Processing history of calibrated data" )
             # Save list of output files
-            EVLASaveOutFiles()
+            EVLASaveOutFiles(manifestfile)
     # Imaging results
     # If targets not specified, save all
     if len(parms["targets"])<=0:
@@ -678,15 +701,15 @@ def pipeline(args, options):
                 if cno <= 0 :
                     continue
                 x = Image.newPAImage("out", outname, oclass, disk, parms["seq"], True, err)
-                outfile = fileRoot+target+"."+oclass+".fits"
+                outfile = fileRoot+'_'+target+"."+oclass+".fits"
                 xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
-                EVLAAddOutFile( outfile, target, 'Image of '+ target)
+                EVLAAddOutFile(outfile, target, 'Image of '+ target)
                 # Statistics
                 zz=imstat(x, err, logfile=logFile)
     # end writing loop
     
     # Save list of output files
-    EVLASaveOutFiles()
+    EVLASaveOutFiles(manifestfile)
     OErr.printErrMsg(err, "Writing output")
     
     # Contour plots
@@ -696,7 +719,7 @@ def pipeline(args, options):
         EVLAKntrPlots( err, imName=parms["targets"], project=fileRoot,
             session=session, band=band, disk=disk, debug=debug )
         # Save list of output files
-        EVLASaveOutFiles()
+        EVLASaveOutFiles(manifestfile)
     elif debug:
         mess = "Not creating contour plots ( doKntrPlots = "+str(parms["doKntrPlots"])+ " )"
         printMess(mess, logFile)
@@ -715,7 +738,7 @@ def pipeline(args, options):
                            project=fileRoot, session=session, band=band, \
                            logfile=logFile, check=check, debug=debug )
         # Save list of output files
-        EVLASaveOutFiles()
+        EVLASaveOutFiles(manifestfile)
     elif debug:
         mess = "Not creating diagnostic plots ( doDiagPlots = "+str(parms["doDiagPlots"])+ " )"
         printMess(mess, logFile)
@@ -741,7 +764,7 @@ def pipeline(args, options):
                                        logfile=logFile, check=check, debug=debug )
         picklefile = fileRoot+".SrcReport.pickle" 
         SaveObject( srcMetadata, picklefile, True ) 
-        EVLAAddOutFile( picklefile, 'project', 'All source metadata' )
+        EVLAAddOutFile(os.path.basename(picklefile), 'project', 'All source metadata' )
     
         # Get project metadata; save to pickle file
         projMetadata = EVLAProjMetadata( uvc, AIPS_VERSION, err, \
@@ -751,7 +774,7 @@ def pipeline(args, options):
             dataInUVF = parms["archRoot"], archFileID = 66666 )
         picklefile = fileRoot+".ProjReport.pickle"
         SaveObject(projMetadata, picklefile, True) 
-        EVLAAddOutFile( picklefile, 'project', 'Project metadata' )
+        EVLAAddOutFile(os.path.basename(picklefile), 'project', 'Project metadata' )
     else:
         # Fetch from pickle jar
          picklefile = fileRoot+".SrcReport.pickle"
@@ -764,7 +787,7 @@ def pipeline(args, options):
         mess = "INFO --> Write HTML report (doHTML)"
         printMess(mess, logFile)
         EVLAHTMLReport( projMetadata, srcMetadata, \
-                            outfile=fileRoot+".report.html", \
+                            outfile=fileRoot+"_report.html", \
                             logFile=logFile )
     
     # Write VOTable
@@ -772,10 +795,10 @@ def pipeline(args, options):
         mess = "INFO --> Write VOTable (doVOTable)"
         printMess(mess, logFile)
         EVLAAddOutFile( 'VOTable.xml', 'project', 'VOTable report' ) 
-        EVLAWriteVOTable( projMetadata, srcMetadata, filename=fileRoot+'VOTable.xml' )
+        EVLAWriteVOTable( projMetadata, srcMetadata, filename=fileRoot+'_VOTable.xml' )
     
     # Save list of output files
-    # EVLASaveOutFiles()
+    EVLASaveOutFiles(manifestfile)
     
     # Cleanup - delete AIPS files
     if parms["doCleanup"] and (not check):
@@ -821,9 +844,9 @@ def pipeline(args, options):
 
 
     # Delete AIPS scratch DA00 and disk
+    if os.path.exists(os.environ['DA00']): shutil.rmtree(os.environ['DA00'])
     for disk in ObitTalkUtil.AIPSDir.AIPSdisks:
         if os.path.exists(disk): shutil.rmtree(disk)
-    if os.path.exists(os.environ['DA00']): shutil.rmtree(os.environ['DA00'])
 
 
     # Shutdown

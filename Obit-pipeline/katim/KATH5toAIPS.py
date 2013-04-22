@@ -160,7 +160,9 @@ def GetKATMeta(katdata, err):
     td = {}
     i = 0
     for t in  katdata.catalogue.targets:
-        name = (t.name.replace(' ','_')+"                ")[0:16]
+        #Aips doesn't like spaces in names!!
+        t.name = t.name.replace(' ','_')
+        name = (t.name+"                ")[0:16]
         ras, decs = t.radec()
         dec = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
         ra  = UVDesc.PHMS2RA(str(ras).replace(':',' '))

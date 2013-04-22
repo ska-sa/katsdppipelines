@@ -279,6 +279,10 @@ def KATInitContParms(nam,cls,obsdata):
 
     # Calibration sources/models
     bpcal=obsdata['bpcal']
+    if len(bpcal)==0:
+        print "No bandpass calibrator source in observation!"
+        exit(-1)
+
     gaincal=obsdata['gaincal']
     source=obsdata['source']
 
@@ -5995,7 +5999,7 @@ def EVLASaveOutFiles( pickleFile='manifest.pickle' ):
 
     * pickleFile = name of pickle file
     """
-    EVLAAddOutFile( pickleFile, 'project', 'Python object pickle file' )
+    EVLAAddOutFile( os.path.basename(pickleFile), 'project', 'Python object pickle file' )
     SaveObject( manifest, pickleFile, True)
 # end EVLASaveOutFiles
     
@@ -6785,10 +6789,11 @@ def EVLAAddOutFile( filename, target, description, logFile=""):
     * target = name of target source; or 'project' if this is a multi-source file
     * description = description of file
     """
-    mess = "INFO Adding " + filename + \
+    filen = os.path.basename(filename)
+    mess = "INFO Adding " + filen + \
            " (for " + target + ") to list of output files." 
     printMess(mess, logFile)
-    d = { 'name' : filename, 'description' : description }
+    d = { 'name' : filen, 'description' : description }
     projFiles = manifest['project']
     srcFiles = manifest['source']
     
@@ -6947,7 +6952,7 @@ def EVLAKntrPlots( err, catNos=[], imClass='?Clean', imName=[], project='tProj',
         kntr.trc[1]=3*nx/4.0; kntr.trc[2]=3*ny/4.0; 
         kntr.blc[1]=nx/4.0;   kntr.blc[2]=ny/4.0;
         name = image.Aname.rstrip() # Image name w/o whitespace
-        outfile = project+'_'+session+'_'+band+'_'+name+'.cntr.ps'
+        outfile = project+'_'+name+'.cntr.ps'
         # Trap failure - KNTR too stupid to live
         try:
             if not check:
@@ -7099,7 +7104,7 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
             uvplt.msgkill = 5   # Omit babble
 
             # Create output file name
-            outfile = project+'_'+session+'_'+band+'_'+s+'.'+plot['file']+'.ps'
+            outfile = project+'_'+s+'.'+plot['file']+'.ps'
             lwpla.outfile = './'+outfile # output to current directory
 
             # Remove preexisting file

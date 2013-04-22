@@ -32,7 +32,7 @@ def AIPSSetup(scratchdir=None):
         aips_dir = cwd
         aips_version = '31DEC13'    # Should sort out where to change this if necessary!!
         
-    configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd+'/aipsdisk', 'metadata_dir': OBIT_DATA}
+    configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
     config = ConfigParser.ConfigParser(configdefaults)
     config.add_section('KATPIPE')
     # Get the config file in the users home directory if it exists and overwrite the defaults
@@ -48,7 +48,7 @@ def AIPSSetup(scratchdir=None):
 
     # Make the aips scratch disk
     DA00         = config.get('KATPIPE','scratch_area')+'/da00'
-    AIPS_DISK    = config.get('KATPIPE','scratch_area')
+    AIPS_DISK    = config.get('KATPIPE','scratch_area')+'/aipsdisk'
     
     #Overwrite any previous AIPS disks.
     if os.path.exists(DA00): shutil.rmtree(DA00)

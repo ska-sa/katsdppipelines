@@ -144,9 +144,10 @@ def get_aips(basedir=None, version=default_version, force=False):
 	init_environ(basedir, version=version)
 	urls = []
 	for url in lib_urls() + popsdat_urls() + binary_urls():
-		if not os.path.exists(os.environ['AIPS_ROOT'] +'/'+ url):
+		if not os.path.exists(os.environ['AIPS_ROOT'] +'/' + url):
 			urls = urls + [url]
-	rsync(aips_server, urls, force=force)
+	if len(urls)>0:
+		rsync(aips_server, urls, force=force)
 	filaip(force=force)
 
 def filaip(force=False,data_dir=None):
@@ -204,6 +205,7 @@ def get_task(*args, **kwargs):
 		if not (os.path.exists(os.environ['AIPS_ROOT'] + '/' + exename) or os.path.exists(os.environ['AIPS_ROOT'] + '/' + hlpname)):
 			urls += create_path_list(exe_path, [taskname.upper() + '.EXE'])
 			urls += create_path_list(help_path, [taskname.upper() + '.HLP'])
-	rsync(aips_server, urls, force=force)
+	if len(urls)>0:
+		rsync(aips_server, urls, force=force)
 
 quick_start = setup_all
