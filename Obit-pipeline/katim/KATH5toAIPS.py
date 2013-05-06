@@ -86,7 +86,7 @@ def KAT2AIPS (h5datafile, outUV, err, \
     # Write SU table
     WriteSUTable (outUV, meta, err)
     # Write FG table
-#    WriteFGTable (outUV, katdata, meta, err)
+    #WriteFGTable (outUV, katdata, meta, err)
 
     # Convert data
     ConvertKATData(outUV, katdata, meta, err)
@@ -178,13 +178,12 @@ def GetKATMeta(katdata, err):
         raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
         i += 1
         tl.append((i, name, ra, dec, raa, deca))
-        if len(t.tags)>1:
-            if t.tags[1]=='bpcal':
-                tb.append(t)
-            if t.tags[1]=='gaincal':
-                tg.append(t)
-            if t.tags[1]=='target':
-                tt.append(t)
+        if 'bpcal' in t.tags:
+            tb.append(t)
+        elif 'gaincal' in t.tags:
+            tg.append(t)
+        else:                   # Assume all other targets are for imaging
+            tt.append(t)
         td[name.rstrip()] = i
     out["targets"] = tl
     out["targLookup"] = td

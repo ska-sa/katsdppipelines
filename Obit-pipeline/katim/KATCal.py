@@ -4425,7 +4425,9 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
         exposuresec=suinfo["Exposure"]*3600.*24.
         mindr=iflux/1500.0                       # Cutoff based on dynamic range of 1500:1
         SEFD=1220.18789703
-	# Cutoff cleaning at theoretical noise or minimum dynamic range.
+        if exposuresec==0.0:                     #Source is totally flagged (Imager should fail gracefully)
+            exposuresec=1.0
+        # Cutoff cleaning at theoretical noise or minimum dynamic range.
         imager.minFlux=max(SEFD/math.sqrt(exposuresec*bandwidth),mindr)
  	# Half the number of CC's for calibrators
 	if iflux>0.0: imager.Niter=Niter/2
