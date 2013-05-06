@@ -9,6 +9,7 @@ from FITS import FITSDisk
 from PipeUtil import *
 from katim.KATCal import *
 import katpoint
+import katfile
 import subprocess
 import katim.KATH5toAIPS as KATH5toAIPS
 import os
@@ -43,66 +44,62 @@ def pipeline(args, options):
     AIPS_ROOT    = os.environ['AIPS_ROOT']
     AIPS_VERSION = os.environ['AIPS_VERSION']
 
-    nThreads = 2
+    nThreads = 4
     user = OSystem.PGetAIPSuser()
     AIPS.userno = user
     disk = 1
     fitsdisk = 0
-
-    ############################# Default parameters ##########################################
-
-    #######  Supported KAT-7 Correlator modes #######
-    supported_modes=['c16n400M1k']
-    
-    #######  Load KAT Image ######
     nam = os.path.basename(h5file).rstrip('.h5')
     cls = "Raw"
     seq = 1
-    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+"/KAT7Template.uvtab",0,nam,cls,disk,seq,err)
+
+    ############################# Default parameters ##########################################
+
+    #######  Load KAT Image ######
+    # Need the correlator mode to get the right uvfits template
+    rawfile=katfile.open(h5file)
+    if rawfile.spectral_windows[0].mode == "wbc":   #Trap old data
+        corrmode = "1"
+    else:
+        corrmode=rawfile.spectral_windows[0].mode[-2]
+    templatefile='KAT7'+corrmode+'KTemplate.uvtab'
+    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
     obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0)
     uv.Header(err)
 
-    # Initialize parameters
-    parms = KATInitContParms(nam,cls,obsdata)
+    ####### Initialize parameters #####
+    parms = KATInitContParms(obsdata)
     debug = parms["debug"]
     check = parms["check"]
 
-    ########################## Make sure observation is imageable ####################
+    ####### User defined parameters ######
     if parmFile:
         print "parmFile",parmFile
         exec(open(parmFile).read())
         EVLAAddOutFile(os.path.basename(parmFile), 'project', 'Pipeline input parameters' )
 
+    ########################## Make sure observation is imageable ####################
     # Don't do anything if there is more than 1 spectral window in the data.
     if len(obsdata['katdata'].spectral_windows)>1:
         print "The pipeline only supports imaging with one spectral window."
         exit(-1)
 
-    # Get the KAT-7 correlator mode.
-    corrmode  = obsdata['corrmode']
-
-    # Die gracefully if we are not using a supported mode.
-    if not corrmode in supported_modes:
-        print "The correlator mode " + corrmode + " is not supported by the imaging pipeline."
-        exit(-1)
-
-
     ############################# Set Project Processing parameters ##################
+    ###### Initialise target parameters #####
+    KATInitTargParms(parms,obsdata)
 
     # frequency/configuration dependent default parameters
-    EVLAInitContFQParms(parms)
+    KATInitContFQParms(parms,obsdata)
 
     # General data parameters
-    band      = parms["band"]           # Observing band
-    dataClass = ("UVDa"+band)[0:6]      # AIPS class of raw uv data
+    dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
-    session   = parms["session"]        # Project session code
-
+    
     ################################## Process #####################################
     fileRoot      = outputdir+'/'+parms["project"] # root of file name
     logFile       = fileRoot[:-1]+".log"   # Processing log file
     uvc           = None
-    avgClass      = ("UVAv"+band)[0:6]  # Averaged data AIPS class
+    avgClass      = ("UVAv")[0:6]  # Averaged data AIPS class
     outIClass     = parms["outIClass"] # image AIPS class
 
     # Load the outputs pickle jar
@@ -114,9 +111,8 @@ def pipeline(args, options):
     retCode = 0
     EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
    
-    mess = "Start project "+parms["project"]+\
-           " "+parms["band"]+" Band"+" AIPS user no. "+str(AIPS.userno)+\
-           ", KAT7 configuration "+parms["VLACfg"]
+    mess = "Start project "+parms["project"]+" AIPS user no. "+str(AIPS.userno)+\
+           ", KAT7 configuration "+parms["KAT7Cfg"]
     printMess(mess, logFile)
     if debug:
         pydoc.ttypager = pydoc.plainpager # don't page task input displays
@@ -138,37 +134,37 @@ def pipeline(args, options):
     EVLAAddOutFile(os.path.basename(ParmsPicklefile), 'project', 'Processing parameters used' )
 
     # Are we going to be doing Hanning?
-    if parms["doHann"]:
-        loadClass = parms["band"]+"Raw"
-    else:
-        loadClass = dataClass
+    #if parms["doHann"]:
+    #    loadClass = "Raw"
+    #else:
+    loadClass = dataClass
     
     # Load Data from Archive directory
-    if parms["doLoadArchive"]:
-        uv = EVLAUVLoadArch(parms["archRoot"], EVLAAIPSName(project, session), loadClass, disk, parms["seq"], err, \
-                            selConfig=parms["selConfig"], doSwPwr=parms["doSwPwr"], \
-                            selBand=parms["selBand"], selChan=parms["selChan"], \
-                            selNIF=parms["selNIF"], calInt=parms["calInt"], \
-                            logfile=logFile, Compress=parms["Compress"], check=check, debug=debug)
-        if uv==None and not check:
-            raise RuntimeError,"Cannot load "+parms["DataRoot"]
+#    if parms["doLoadArchive"]:
+#        uv = EVLAUVLoadArch(parms["archRoot"], EVLAAIPSName(project, session), loadClass, disk, parms["seq"], err, \
+#                            selConfig=parms["selConfig"], doSwPwr=parms["doSwPwr"], \
+#                            selBand=parms["selBand"], selChan=parms["selChan"], \
+#                            selNIF=parms["selNIF"], calInt=parms["calInt"], \
+#                            logfile=logFile, Compress=parms["Compress"], check=check, debug=debug)
+#        if uv==None and not check:
+#            raise RuntimeError,"Cannot load "+parms["DataRoot"]
     
     # Hanning
     if parms["doHann"]:
         # Set uv if not done
         if uv==None and not check:
-            uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project, session), loadClass[0:6], disk, parms["seq"], True, err)
+            uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), loadClass[0:6], disk, parms["seq"], True, err)
             if err.isErr:
                 OErr.printErrMsg(err, "Error creating AIPS data")
     
-        uv = EVLAHann(uv, EVLAAIPSName(project, session), dataClass, disk, parms["seq"], err, \
+        uv = EVLAHann(uv, EVLAAIPSName(project), dataClass, disk, parms["seq"], err, \
                       doDescm=parms["doDescm"], logfile=logFile, check=check, debug=debug)
         if uv==None and not check:
             raise RuntimeError,"Cannot Hann data "
     
     # Set uv is not done
     if uv==None and not check:
-        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project, session), dataClass[0:6], \
+        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), dataClass[0:6], \
                         disk, parms["seq"], True, err)
         if err.isErr:
             OErr.printErrMsg(err, "Error creating AIPS data")
@@ -192,9 +188,9 @@ def pipeline(args, options):
     if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
         # Channels based on original number, reduced if Hanning
         nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
-        fact = parms["selChan"]/nchan   # Hanning reduction factor
-        BChDrop = parms["BChDrop"]/fact
-        EChDrop = parms["EChDrop"]/fact
+        #fact = parms["selChan"]/nchan   # Hanning reduction factor
+        BChDrop = parms["BChDrop"]
+        EChDrop = parms["EChDrop"]
         mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
         printMess(mess, logFile)
         retCode = EVLADropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
@@ -227,6 +223,7 @@ def pipeline(args, options):
         if retCode!=0:
             raise RuntimeError,"Error Shadow flagging data"
 
+    # Perform elevation flagging?
     if parms["doElev"]:
         retcode = KAT7Elev (uv, err, minelev=parms["minElev"], \
                                 logfile=logFile, check=check, debug=debug)
@@ -234,12 +231,12 @@ def pipeline(args, options):
             raise RuntimeError,"Error Elevation flagging data"
     
     # Median window time editing, for RFI impulsive in time
-    if parms["doMedn"]:
+    if parms["doMednTD1"]:
         mess =  "Median window time editing, for RFI impulsive in time:"
         printMess(mess, logFile)
         retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
-                                  avgTime=parms["avgTime"], avgFreq=parms["avgFreq"],  chAvg= parms["chAvg"], \
-                                  timeWind=parms["timeWind"], flagVer=2,flagSig=parms["mednSigma"], \
+                                  avgTime=parms["mednAvgTime"], avgFreq=parms["mednAvgFreq"],  chAvg= parms["mednChAvg"], \
+                                  timeWind=parms["mednTimeWind"], flagVer=2,flagSig=parms["mednSigma"], \
                                   logfile=logFile, check=check, debug=False)
         if retCode!=0:
             raise RuntimeError,"Error in MednFlag"
@@ -252,7 +249,7 @@ def pipeline(args, options):
                                 timeAvg=parms["FD1TimeAvg"], \
                                 doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=parms["FD1widMW"],  \
                                 FDmaxRMS=[1.0e20,0.1], FDmaxRes=parms["FD1maxRes"],  \
-                                FDmaxResBL= parms["FD1maxRes"],  \
+                                FDmaxResBL= parms["FD1maxRes"],  FDbaseSel=parms["FD1baseSel"],\
                                 nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
            raise  RuntimeError,"Error in AutoFlag"
@@ -527,7 +524,7 @@ def pipeline(args, options):
        
     # Get calibrated/averaged data
     if not check:
-        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project, session), avgClass[0:6], \
+        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), avgClass[0:6], \
                         disk, parms["seq"], True, err)
         if err.isErr:
             OErr.printErrMsg(err, "Error creating cal/avg AIPS data")
@@ -639,7 +636,7 @@ def pipeline(args, options):
                           doMB=parms["doMB"], norder=parms["MBnorder"], maxFBW=parms["MBmaxFBW"], \
                           PBCor=parms["PBCor"],antSize=parms["antSize"], \
                           nTaper=parms["nTaper"], Tapers=parms["Tapers"], \
-                          nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=debug)
+                          nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=False)
         # End image
     
     # Get report on sources
@@ -658,7 +655,7 @@ def pipeline(args, options):
     # Write results, cleanup    
     # Save cal/average UV data? 
     if parms["doSaveUV"] and (not check):
-        Aname = EVLAAIPSName(project, session)
+        Aname = EVLAAIPSName(project)
         cno = AIPSDir.PTestCNO(disk, user, Aname, avgClass[0:6], "UV", parms["seq"], err)
         if cno>0:
             uvt = UV.newPAUV("AIPS CAL UV DATA", Aname, avgClass, disk, parms["seq"], True, err)
@@ -670,7 +667,7 @@ def pipeline(args, options):
             del uvt
     # Save raw UV data tables?
     if parms["doSaveTab"] and (not check):
-        Aname = EVLAAIPSName(project, session)
+        Aname = EVLAAIPSName(project)
         cno = AIPSDir.PTestCNO(disk, user, Aname, dataClass[0:6], "UV", parms["seq"], err)
         if cno>0:
             uvt = UV.newPAUV("AIPS RAW UV DATA", Aname, dataClass[0:6], disk, parms["seq"], True, err)
@@ -717,7 +714,7 @@ def pipeline(args, options):
         mess = "INFO --> Contour plots (doKntrPlots)"
         printMess(mess, logFile)
         EVLAKntrPlots( err, imName=parms["targets"], project=fileRoot,
-            session=session, band=band, disk=disk, debug=debug )
+                       disk=disk, debug=debug )
         # Save list of output files
         EVLASaveOutFiles(manifestfile)
     elif debug:
@@ -729,13 +726,13 @@ def pipeline(args, options):
         mess = "INFO --> Diagnostic plots (doDiagPlots)"
         printMess(mess, logFile)
         # Get the highest number avgClass catalog file
-        Aname = EVLAAIPSName( project, session )
+        Aname = EVLAAIPSName( project )
         uvc = None
         if not check:
-            uvname = project+"_"+session+"_"+band+"_Cal"
+            uvname = project+"_Cal"
             uvc = UV.newPAUV(uvname, Aname, avgClass, disk, parms["seq"], True, err)
         EVLADiagPlots( uvc, err, cleanUp=parms["doCleanup"], \
-                           project=fileRoot, session=session, band=band, \
+                           project=fileRoot, \
                            logfile=logFile, check=check, debug=debug )
         # Save list of output files
         EVLASaveOutFiles(manifestfile)
@@ -752,8 +749,8 @@ def pipeline(args, options):
         uvc = None
         if not uvc:
             # Get calibrated/averaged data
-            Aname = EVLAAIPSName(project, session)
-            uvname = project+"_"+session+"_"+band+"_Cal"
+            Aname = EVLAAIPSName(project)
+            uvname = project+"_Cal"
             uvc = UV.newPAUV(uvname, Aname, avgClass, disk, parms["seq"], True, err)
             if err.isErr:
                 OErr.printErrMsg(err, "Error creating cal/avg AIPS data")
@@ -770,7 +767,7 @@ def pipeline(args, options):
         projMetadata = EVLAProjMetadata( uvc, AIPS_VERSION, err, \
             PCals=parms["PCals"], ACals=parms["ACals"], \
             BPCals=parms["BPCals"], DCals=parms["DCals"], \
-            project = project, session = session, band = band, \
+            project = project, \
             dataInUVF = parms["archRoot"], archFileID = 66666 )
         picklefile = fileRoot+".ProjReport.pickle"
         SaveObject(projMetadata, picklefile, True) 
@@ -812,7 +809,7 @@ def pipeline(args, options):
             AllDest(err, disk=disk,Aseq=parms["seq"],Aclass=oclass)
         
         # Delete initial UV data
-        Aname = EVLAAIPSName(project, session)
+        Aname = EVLAAIPSName(project)
         # Test if data exists
         cno = AIPSDir.PTestCNO(disk, user, Aname, dataClass[0:6], "UV", parms["seq"], err)
         if cno>0:
@@ -831,7 +828,7 @@ def pipeline(args, options):
             if err.isErr:
                 OErr.printErrMsg(err, "Error deleting cal/avg AIPS data")
         # Zap UnHanned data if present
-        loadClass = parms["band"]+"Raw"
+        loadClass = "Raw"
         # Test if image exists
         cno = AIPSDir.PTestCNO(disk, user, Aname, loadClass[0:6], "UV", parms["seq"], err)
         if cno>0:
@@ -850,8 +847,8 @@ def pipeline(args, options):
 
 
     # Shutdown
-    mess = "Finished project "+parms["project"]+" session "+parms["session"]+ \
-    " "+parms["band"]+" Band"+" AIPS user no. "+str(AIPS.userno)
+    mess = "Finished project "+parms["project"]+ \
+    " AIPS user no. "+str(AIPS.userno)
     printMess(mess, logFile)
     OErr.printErr(err)
     OSystem.Shutdown(ObitSys)

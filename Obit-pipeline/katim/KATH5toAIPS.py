@@ -73,6 +73,10 @@ def KAT2AIPS (h5datafile, outUV, err, \
         OErr.printErrMsg(err, "Error with h5 file")
     # Extract metadata
     meta = GetKATMeta(katdata, err)
+    # Extract AIPS parameters of the uv data to the metadata
+    meta["Aproject"] = outUV.Aname
+    meta["Aclass"] = outUV.Aclass
+    meta["Aseq"] = outUV.Aseq
     # Update descriptor
     UpdateDescriptor (outUV, meta, err)
     # Write AN table
@@ -81,6 +85,8 @@ def KAT2AIPS (h5datafile, outUV, err, \
     WriteFQTable (outUV, meta, err)
     # Write SU table
     WriteSUTable (outUV, meta, err)
+    # Write FG table
+#    WriteFGTable (outUV, katdata, meta, err)
 
     # Convert data
     ConvertKATData(outUV, katdata, meta, err)
@@ -406,6 +412,51 @@ def WriteSUTable(outUV, meta, err):
         OErr.printErrMsg(err, "Error closing SU table")
     # end WriteSUtable
 
+def WriteFGTable(outUV, katdata, meta, err):
+    """
+    Write data to FG table
+
+     * outUV    = Obit UV object
+     * katdata  = Katfile object point to h5 data
+     * meta     = dict with data meta data
+     * err      = Python Obit Error/message stack to init
+    """
+    ################################################################
+    sutab = outUV.NewTable(Table.READWRITE, "AIPS FG",1,err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error with FG table")
+    sutab.Open(Table.READWRITE, err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error opening FG table")
+    # Update header
+    sutab.keys['RefDate'] = meta["obsdate"]
+    sutab.keys['Freq']    = meta["spw"][0][1]
+    Table.PDirty(sutab)  # Force update
+    row = sutab.ReadRow(1,err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error reading FG table")
+    OErr.printErr(err)
+    irow = 0
+    for tar in meta["targets"]:
+        irow += 1
+        row['ID. NO.']   = [tar[0]]
+        row['SOURCE']    = [tar[1]]
+        row['RAEPO']     = [tar[2]]
+        row['DECEPO']    = [tar[3]]
+        row['RAOBS']     = [tar[2]]
+        row['DECOBS']    = [tar[3]]
+        row['EPOCH']     = [2000.0]
+        row['RAAPP']     = [tar[4]]
+        row['DECAPP']    = [tar[5]]
+        row['BANDWIDTH'] = [meta["spw"][0][2]]
+        sutab.WriteRow(irow, row,err)
+        if err.isErr:
+            OErr.printErrMsg(err, "Error writing SU table")
+    sutab.Close(err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error closing SU table")
+    # end WriteSUtable
+
 def ConvertKATData(outUV, katdata, meta, err):
     """
     Read KAT HDF data and write Obit UV
@@ -455,7 +506,7 @@ def ConvertKATData(outUV, katdata, meta, err):
     shape = len(outUV.VisBuf) / 4
     buffer =  numarray.array(sequence=outUV.VisBuf,
                              type=numarray.Float32, shape=shape)
-
+    
     # Template vis
     vis = outUV.ReadVis(err, firstVis=1)
     first = True

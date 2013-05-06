@@ -12,6 +12,8 @@ from PipeUtil import *
 import os, os.path, re, shutil, pickle, math, copy, pprint, string
 import urllib, urllib2
 import sys, commands
+import numpy as np
+import itertools
 import datetime
 import xml.dom.minidom
 import katpoint
@@ -20,9 +22,7 @@ from ObitTalkUtil import FITSDir
 manifest = { 'project' : [],  # list of project output files
              'source'  : {} } # dict of source output files
 
-
-
-def KATInitContParms(nam,cls,obsdata):
+def KATInitContParms(obsdata):
     """
     Initialize KAT-7 continuum pipeline parameters
     
@@ -33,84 +33,102 @@ def KATInitContParms(nam,cls,obsdata):
     """
     ################################################################
  
-    from ObitTalkUtil import FITSDir
-
     parms = {}
     # General data parameters
     parms["check"]         = False      # Only check script, don't execute tasks
     parms["debug"]         = False      # run tasks debug
     parms["Compress"]      = False      # Use compressed UV data?
     parms["doSwPwr"]       = False      # Make EVLA Switched power corr?
-    parms["calInt"]        = None       # Calibration table interval (min)
-    parms["seq"]           = 1          # Sequence number for AIPS files
-    parms["doLoadArchive"] = True       # Sequence number for AIPS filesLoad AIPS data from archive?
+    parms["calInt"]        = 1.0        # Calibration table interval (min)
+    parms["seq"]           = obsdata["Aseq"]  # Sequence number for AIPS files
+    parms["doLoadArchive"] = False       # Load AIPS data from archive?
+
+    # User Supplied data parameters
+    parms["BPCal"] = []
+    parms["ACal"]  = []
+    parms["PCal"]  = []
+    parms["targets"] = []
+    parms["polcal"] = []
+
+    # Archive parameters
+    parms["archRoot"]      = "NOT VLA DATA" # Root of ASDM/BDF data
+    parms["selBand"]       = "L"   # Selected band, def = first  
+    parms["selConfig"]     = 1     # Selected frequency config, def = first  
+    parms["selNIF"]        = 1     # Selected number of IFs, def = first  
+
+    # Observation parameters
+    parms["selChan"]       = obsdata["numchan"]  # Selected number of channels, def = first  
+    parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
+    parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
+    parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
+    parms["KAT7Freq"]      = obsdata["centerfreq"]    # Representive frequency
+    parms["KAT7Cfg"]       = obsdata["corrmode"]      # KAT-7 correlator configuraton
+    # Get the longest baseline
+    antennas = obsdata["katdata"].ants
+    longBline = 0.0
+    for ant1,ant2 in itertools.combinations(antennas,2):
+        thisBline=np.linalg.norm(ant1.baseline_toward(ant2))
+        if thisBline>longBline:
+            longBline=thisBline
+    parms["longBline"] = longBline
 
     # Hanning
-    parms["doHann"]       = None        # Hanning needed for RFI?
+    parms["doHann"]       = True        # Hanning needed for RFI?
     parms["doDescm"]      = True        # Descimate Hanning?
 
     # Parallactic angle correction
-    parms["doPACor"] =     True         # Make parallactic angle correction
+    parms["doPACor"] =     False         # Make parallactic angle correction
     
     # Special editing list
-    parms["doEditList"] =  False        # Edit using editList?
+    parms["doEditList"] =  True        # Edit using editList?
     parms["editFG"] =      2            # Table to apply edit list to
-    editList = [ \
-        #    "timer":("0/06:09:0.0","0/06:13:0.0"),"Ant":[ 8,0],"IFs":[2,2],"Chans":[1,0],"Stokes":'1110',"Reason":"bad data"},
-        ]
-    parms["editList"] = editList
 
-    # Do median flagging
-    parms["doMedn"]       = True     # Median editing?
-    parms["mednSigma"]    = 10.0     # Median sigma clipping level
-    parms["mednTimeWind"] = 1.0      # Median window width in min for median flagging
-    parms["mednAvgTime"]  = 10.0/60. # Median Averaging time in min
-    parms["mednAvgFreq"]  = 0        # Median 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
-    parms["mednChAvg"]    = 1        # Median number of channels to average
+    # Construct a list of predefined flags defined in editlist.
+    editList = KAT7EditList(obsdata,parms["selChan"],parms["doHann"])
+    parms["editList"] = editList
 
     # Editing
     parms["doClearTab"]   = True        # Clear cal/edit tables
     parms["doClearGain"]  = True        # Clear SN and CL tables >1
     parms["doClearFlag"]  = True        # Clear FG tables > 1
     parms["doClearBP"]    = True        # Clear BP tables?
-    parms["doCopyFG"]     = True        # Copy FG 1 to FG 2quack
+    parms["doCopyFG"]     = True        # Copy FG 1 to FG 2
     parms["doQuack"]      = True        # Quack data?
     parms["quackBegDrop"] = 0.1         # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
     parms["doShad"]       = None        # Shadow flagging (config dependent)
     parms["shadBl"]       = 25.0        # Minimum shadowing baseline (m)
-    
-    parms["doFD1"]       = True         # Do initial frequency domain flagging
-    parms["FD1widMW"]    = 31           # Width of the initial FD median window
-    parms["FD1maxRes"]   = 5.0          # Clipping level in sigma
-    parms["FD1TimeAvg"]  = 1.0          # time averaging in min. for initial FD flagging
-    
-    parms["doMedn"]      = True         # Median editing?
-    parms["mednSigma"]   = 5.0          # Median sigma clipping level
-    parms["timeWind"]    = 1.0          # Median window width in min for median flagging
-    parms["avgTime"]     = 10.0/60.     # Averaging time in min
-    parms["avgFreq"]     = 0            # 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
-    parms["chAvg"]       = 1            # number of channels to average
-    
+    parms["doElev"]       = False       # Do elevation flagging
+    parms["minElev"]      = 15.0        # Minimum elevation to keep.
+    parms["doFD1"]        = True        # Do initial frequency domain flagging
+    parms["FD1widMW"]     = 40          # Width of the initial FD median window
+    parms["FD1maxRes"]    = 5.0         # Clipping level in sigma
+    parms["FD1TimeAvg"]   = 1.0         # time averaging in min. for initial FD flagging
+    parms["FD1baseSel"]   = None        # Baseline fitting region for FD1 (updates by KAT7CorrParms)
+    parms["doMednTD1"]    = True        # Median editing in time domain?
+    parms["mednSigma"]    = 5.0         # Median sigma clipping level
+    parms["mednTimeWind"] = 1.0         # Median window width in min for median flagging
+    parms["mednAvgTime"]  = 0.0         # Median Averaging time in min
+    parms["mednAvgFreq"]  = 1           # Median 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
+    parms["mednChAvg"]    = 5           # Median number of channels to average
     parms["doRMSAvg"]    = True         # Edit calibrators by RMSAvg?
     parms["RMSAvg"]      = 3.0          # AutoFlag Max RMS/Avg for time domain RMS filtering
     parms["RMSTimeAvg"]  = 1.0          # AutoFlag time averaging in min.
-
     parms["doAutoFlag"]  = True         # Autoflag editing after first pass calibration?
     parms["doAutoFlag2"] = True         # Autoflag editing after final (2nd) calibration?
     parms["IClip"]       = None         # AutoFlag Stokes I clipping
-    parms["VClip"]       = [2.0,0.05]   # AutoFlag Stokes V clipping
-    parms["XClip"]       = [5.0,0.05]   # AutoFlag cross-pol clipping
+    parms["VClip"]       = None
+    parms["XClip"]       = None         # AutoFlag cross-pol clipping
     parms["timeAvg"]     = 0.33         # AutoFlag time averaging in min.
     parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
-    parms["FDwidMW"]     = 31           # Width of the median window
-    parms["FDmaxRMS"]    = None         # Channel RMS limits (Jy)
-    parms["FDmaxRes"]    = None         # Max. residual flux in sigma
-    parms["FDmaxResBL"]  = None         # Max. baseline residual
-    parms["FDbaseSel"]   = None         # Channels for baseline fit
+    parms["FDwidMW"]     = 40           # Width of the median window
+    parms["FDmaxRMS"]    = [6.0,0.1]    # Channel RMS limits (Jy)
+    parms["FDmaxRes"]    = 5.0          # Max. residual flux in sigma
+    parms["FDmaxResBL"]  = 5.0          # Max. baseline residual
+    parms["FDbaseSel"]   = None         # Channels for baseline fit (Updated by KAT7CorrParms)
     parms["FDmaxAmp"]    = None         # Maximum average amplitude (Jy)
-    parms["FDmaxV"]      = parms["VClip"][0]     # Maximum average VPol amp (Jy)
+    parms["FDmaxV"]      = 2.0          # Maximum average VPol amp (Jy)
     parms["minAmp"]      = 1.0e-5       # Minimum allowable amplitude
     parms["BChDrop"]     = None         # number of channels to drop from start of each spectrum
                                         # NB: based on original number of channels, halved for Hanning
@@ -118,9 +136,9 @@ def KATInitContParms(nam,cls,obsdata):
                                         # NB: based on original number of channels, halved for Hanning
 
     # Delay calibration
-    parms["doDelayCal"]   =  True       # Determine/apply delays from contCals
-    parms["delaySolInt"]  =  None       # delay solution interval (min)
-    parms["delaySmoo"]    =  None       # Delay smoothing time (hr)
+    parms["doDelayCal"]   =  False      # Determine/apply delays from contCals
+    parms["delaySolInt"]  =  0.5        # delay solution interval (min)
+    parms["delaySmoo"]    =  0.25       # Delay smoothing time (hr)
     parms["doTwo"]        =  True       # Use two baseline combinations in delay cal
     parms["delayZeroPhs"] =  False      # Zero phase in Delay solutions?
     parms["delayBChan"]   =  None       # first channel to use in delay solutions
@@ -130,35 +148,36 @@ def KATInitContParms(nam,cls,obsdata):
     parms["doBPCal"] =       True       # Determine Bandpass calibration
     parms["bpBChan1"] =      1          # Low freq. channel,  initial cal
     parms["bpEChan1"] =      0          # Highest freq channel, initial cal, 0=>all
-    parms["bpDoCenter1"] =   None       # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
+    parms["bpDoCenter1"] =   0.1        # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
     parms["bpBChan2"] =      1          # Low freq. channel for BP cal
     parms["bpEChan2"] =      0          # Highest freq channel for BP cal,  0=>all 
     parms["bpChWid2"] =      1          # Number of channels in running mean BP soln
     parms["bpdoAuto"] =      False      # Use autocorrelations rather than cross?
     parms["bpsolMode"] =     'A&P'      # Band pass type 'A&P', 'P', 'P!A'
-    parms["bpsolint1"] =     None       # BPass phase correction solution in min
+    parms["bpsolint1"] =     10.0/60.0  # BPass phase correction solution in min
     parms["bpsolint2"] =     10.0       # BPass bandpass solution in min
     parms["bpUVRange"] =    [0.0,0.0]   # uv range for bandpass cal
     parms["specIndex"] =    -0.7        # Spectral index of BP Cal
     parms["doSpecPlot"] =    True       # Plot the amp. and phase across the spectrum
     
     # Amp/phase calibration parameters
+    parms["doAmpPhaseCal"] = True
     parms["refAnt"]  =       0          # Reference antenna
     parms["refAnts"] =      [0]         # List of Reference antenna for fringe fitting
-    parms["solInt"]  =      None        # solution interval (min)
+    parms["solInt"]  =      0.5        # solution interval (min)
     parms["ampScalar"]=    False        # Ampscalar solutions?
     parms["solSmo"]   =    0.0          # Smoothing interval for Amps (min)
     
     # Apply calibration and average?
     parms["doCalAvg"] =      True       # calibrate and average cont. calibrator data
     parms["avgClass"] =      "UVAvg"    # AIPS class of calibrated/averaged uv data
-    parms["CalAvgTime"] =    None       # Time for averaging calibrated uv data (min)
+    parms["CalAvgTime"] =    10.0/60.0  # Time for averaging calibrated uv data (min)
     parms["CABIF"] =         1          # First IF to copy
     parms["CAEIF"] =         0          # Highest IF to copy
-    parms["CABChan"] =       1          # First Channel to copy
-    parms["CAEChan"] =       0          # Highest Channel to copy
-    parms["chAvg"] =         1          # No channel average
-    parms["avgFreq"] =       1          # No channel average
+    parms["CABChan"] =       None       # First Channel to copy
+    parms["CAEChan"] =       None       # Highest Channel to copy
+    parms["chAvg"] =         None       # No channel average
+    parms["avgFreq"] =       None       # No channel average
     
     # Right-Left delay calibration
     parms["doRLDelay"] =  False             # Determine/apply R-L delays
@@ -201,6 +220,13 @@ def KATInitContParms(nam,cls,obsdata):
     parms["rlCleanRad"] = None     # CLEAN radius about center or None=autoWin
     parms["rlFOV"]      = 0.05     # Field of view radius (deg) needed to image RLPCal
     
+    # Recalibration
+    parms["doRecal"]       = True        # Redo calibration after editing
+    parms["doDelayCal2"]   = False       # Group Delay calibration of averaged data?, 2nd pass
+    parms["doBPCal2"]      = True        # Determine Bandpass calibration, 2nd pass
+    parms["doAmpPhaseCal2"]= True        # Amplitude/phase calibration, 2nd pass
+    parms["doAutoFlag2"]   = True        # Autoflag editing after final calibration?
+
     # Imaging  targets
     parms["doImage"]     = True         # Image targets
     parms["targets"]     = []           # List of target sources
@@ -208,7 +234,7 @@ def KATInitContParms(nam,cls,obsdata):
     parms["Stokes"]      = "I"          # Stokes to image
     parms["Robust"]      = 0.0          # Weighting robust parameter
     parms["FOV"]         = None         # Field of view radius in deg.
-    parms["Niter"]       = 500          # Max number of clean iterations
+    parms["Niter"]       = 800          # Max number of clean iterations
     parms["minFlux"]     = 0.0          # Minimum CLEAN flux density
     parms["minSNR"]      = 4.0          # Minimum Allowed SNR
     parms["solPMode"]    = "P"          # Phase solution for phase self cal
@@ -218,25 +244,25 @@ def KATInitContParms(nam,cls,obsdata):
     parms["avgPol"]      = True         # Average poln in self cal?
     parms["avgIF"]       = False        # Average IF in self cal?
     parms["maxPSCLoop"]  = 1            # Max. number of phase self cal loops
-    parms["minFluxPSC"]  = 0.05         # Min flux density peak for phase self cal
-    parms["solPInt"]     = None         # phase self cal solution interval (min)
+    parms["minFluxPSC"]  = 0.025        # Min flux density peak for phase self cal
+    parms["solPInt"]     = 0.25         # phase self cal solution interval (min)
     parms["maxASCLoop"]  = 1            # Max. number of Amp+phase self cal loops
     parms["minFluxASC"]  = 0.5          # Min flux density peak for amp+phase self cal
-    parms["solAInt"]     = None         # amp+phase self cal solution interval (min)
+    parms["solAInt"]     = 3.0          # amp+phase self cal solution interval (min)
     parms["nTaper"]      = 0            # Number of additional imaging multiresolution tapers
     parms["Tapers"]      = [20.0,0.0]   # List of tapers in pixels
     parms["do3D"]        = False        # Make ref. pixel tangent to celest. sphere for each facet
     parms["noNeg"]       = False        # F=Allow negative components in self cal model
     parms["BLFact"]      = 1.01         # Baseline dependent time averaging
     parms["BLchAvg"]     = True         # Baseline dependent frequency averaging
-    parms["doMB"]        = True         # Use wideband imaging?
-    parms["MBnorder"]    = 1            # order on wideband imaging
-    parms["MBmaxFBW"]    = 0.05         # max. MB fractional bandwidth
-    parms["PBCor"]       = True         # Pri. beam corr on final image
-    parms["antSize"]     = 24.5         # ant. diameter (m) for PBCor
+    parms["doMB"]        = None         # Use wideband imaging?
+    parms["MBnorder"]    = None         # order on wideband imaging
+    parms["MBmaxFBW"]    = None         # max. MB fractional bandwidth (Set by KAT7InitContFQParms
+    parms["PBCor"]       = False        # Pri. beam corr on final image
+    parms["antSize"]     = 12.0         # ant. diameter (m) for PBCor
     parms["CleanRad"]    = None         # CLEAN radius (pix?) about center or None=autoWin
-    parms["xCells"]      = 0.
-    parms["yCells"]      = 0.
+    parms["xCells"]      = None
+    parms["yCells"]      = None
 
     # Final
     parms["doReport"]  =     True       # Generate source report?
@@ -247,268 +273,138 @@ def KATInitContParms(nam,cls,obsdata):
     parms["doCleanup"] =     True       # Destroy AIPS files
     
     # diagnostics
-    parms["plotSource"]    = 'None'      # Name of source for spectral plot
-    parms["plotTime"]      = [0.,1000.]  # timerange for spectral plot
-    parms["doRawSpecPlot"] = False       # Plot diagnostic raw spectra?
-    parms["doSpecPlot"]    = False       # Plot diagnostic spectra?
+    parms["plotSource"]    =  'None'      # Name of source for spectral plot
+    parms["plotTime"]      =  [0.,1000.]  # timerange for spectral plot
+    parms["doRawSpecPlot"] =  True       # Plot diagnostic raw spectra?
+    parms["doSpecPlot"]    =  True       # Plot diagnostic spectra?
     parms["doSNPlot"]      =  True       # Plot SN tables etc
     parms["doDiagPlots"]   =  True       # Plot single source diagnostics
     parms["doKntrPlots"]   =  True       # Contour plots
     parms["prtLv"]         =  2          # Amount of task print diagnostics
     parms["doMetadata"]    =  True       # Save source and project metadata
     parms["doHTML"]        =  True       # Output HTML report
+    parms["doVOTable"]     =  True       # VOTable 
 
-    # Overwrite parameters with KAT-7 parameters (will merge all the parameters at some point!!)
-    parms["seq"]           = 1                        # Sequence number for AIPS files
-    parms["project"]       = nam                      # Project name (12 char or less, used as AIPS Name)
-    parms["session"]       = ""                       # Project session code
-    parms["band"]          = "L"                      # Observing band
-    parms["dataClass"]     = cls                      # AIPS class of raw uv data
-    parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
-    parms["VLAFreq"]       = obsdata["centerfreq"]    # Representive frequency
-    parms["VLACfg"]        = "D "                     # VLA configuraton ("A", "B", "CnD"...)
+    return parms
 
+# end KAT-7 InitContParms
 
-    # Archive parameters
-    parms["doLoadArchive"] = True  # Load from archive?
-    parms["archRoot"]      = "NOT VLA DATA" # Root of ASDM/BDF data
-    parms["selBand"]       = "L"   # Selected band, def = first  
-    parms["selConfig"]     = 1     # Selected frequency config, def = first  
-    parms["selNIF"]        = 1     # Selected number of IFs, def = first  
-    parms["selChan"]       = obsdata["numchan"]  # Selected number of channels, def = first  
+def KATInitTargParms(parms,obsdata):
+    """
+    Update the target paramaters for the pipeline using the metadata 
+    extracted from the h5 file.
+    """    
+    # Sources
+    # Check if user has supplied them
+    if len(parms["BPCal"])>0:
+        bpcal = [obsdata["katdata"].catalogue[cal] for cal in parms["BPCal"] if cal is not None]
+    else:
+        bpcal = obsdata['bpcal']
+    
+    if len(parms["ACal"])>0:
+        ampcal = [obsdata["katdata"].catalogue[cal] for cal in parms["ACal"] if cal is not None]
+    else:
+        ampcal = bpcal        # Later provide support for this properly
 
-    # Calibration sources/models
-    bpcal=obsdata['bpcal']
+    if len(parms["PCal"])>0:
+        gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
+    else:
+        gaincal = obsdata['gaincal']
+
+    polcal  = []                # Place-holder for polarisation calibrator
+    
+    if len(parms["targets"])>0:
+        source = []             # Desired targets are already in the parameter list.
+    else:
+        source  = obsdata['source']
+    for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name)   #Target sources + all calibrators
+    parms["targets"] = list(set(parms["targets"])) # Remove duplicates
+
+    # Fail gracefully if we can't calibrate
     if len(bpcal)==0:
-        print "No bandpass calibrator source in observation!"
-        exit(-1)
+        raise RuntimeError("No bandpass calibrator source in observation!")
+    if len(ampcal)==0:
+        raise RuntimeError("No amplitude calibrator source in observation!")
+    
+    #Plot the first bandpass calibrator by default
+    parms["plotSource"]  = bpcal[0].name
 
-    gaincal=obsdata['gaincal']
-    source=obsdata['source']
+    # Now make calibrater model dicts.
+    # Bandpass calibrators
+    parms["BPCals"] = [EVLACalModel(cal.name) for cal in bpcal]
+    EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
 
-    parms["BPCal"]=[]
-    for cal in bpcal:
-        parms["BPCal"].append(cal.name)      # Bandpass calibrator
-
-    parms["doFD1"]       = True         # Do initial frequency domain flagging
-    parms["FD1widMW"]    = 255          # Width of the initial FD median window
-    parms["FD1maxRes"]   = 8.0          # Clipping level in sigma
-    parms["FD1TimeAvg"]  = 1.0          # time averaging in min. for initial FD flagging
-
-    parms["doMedn"]      = True         # Median editing?
-    parms["mednSigma"]   = 8.0          # Median sigma clipping level
-    parms["timeWind"]    = 1.0          # Median window width in min for median flagging
-    parms["avgTime"]     = 10.0/60.     # Averaging time in min
-    parms["avgFreq"]     = 1            # 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
-    parms["chAvg"]       = 8            # number of channels to average
-    parms["IClip"]       = [50.0,0.1]   # IPol clipping
-
-    # Elevation flagging
-    parms["minElev"]    = 15.0         # Elevation flagging minimum
-
-    # Post calibration autoflag
-    parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
-    parms["FDwidMW"]     = 255          # Width of the median window
-    parms["FDmaxRMS"]    = [50.,0.1]    # Channel RMS limits (Jy)
-    parms["FDmaxRes"]    = 6.           # Max. residual flux in sigma
-    parms["FDmaxResBL"]  = 6.           # Max. baseline residual
-    parms["FDbaseSel"]   = [100,375,1,0] # Channels for baseline fit
-    parms["FDmaxAmp"]    = 50.         # Maximum average amplitude (Jy)
-    parms["FDmaxV"]      = 1000000.0   # Maximum average VPol amp (Jy)
-
-    parms["doRMSAvg"]    = True         # Edit calibrators by RMSAvg?
-    parms["RMSAvg"]      = 3.0          # AutoFlag Max RMS/Avg for time domain RMS filtering
-    parms["RMSTimeAvg"]  = 1.0          # AutoFlag time averaging in min.
-
-    from KATCal import EVLACalModel,EVLAStdModel
-    freq = parms["VLAFreq"]
-    # Bandpass Calibration
-    calist = bpcal
-    BPCals = []
-    for cal in calist:
-        BPCals.append(EVLACalModel(cal.name))
-    # Check for standard model
-    EVLAStdModel(BPCals, freq)
-    parms["BPCals"]          = BPCals   # Bandpass calibrator(s)
-
-    # Amp/phase calibration
-    calist = gaincal
-    PCals = []
+    # Amplitude Calibrators
+    parms["ACals"] = []
+    dupcal = []
     tcals = []
-    for cal in calist:
-        if not cal in tcals:
-            PCals.append(EVLACalModel(cal.name))
-            tcals.append(cal.name)
-    # Check for standard model
-    EVLAStdModel(PCals, freq)
-    parms["PCals"]          = PCals   # Phase calibrator(s)
-
-    calist = bpcal
-    ACals = []
-    tcals = []
-    # Get flux calibrator flux from model file
+    # Read in amplitude calibrator models
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
-    for cal in calist:
+    for cal in ampcal:
+        # Get the nearest calibrator in the database to the target source
         fluxcal,offset=fluxcals.closest_to(cal)
-        if offset*3600. < 1.5:        # Arbitray 1.5" position offset 
+        if offset*3600.0 < 1.5:        # 1.5 arcseconds should be close enough...
             cal.flux_model = fluxcal.flux_model
             if not cal in tcals:
-                calflux=float(cal.flux_density(freq/1e6))
-                ACals.append(EVLACalModel(cal.name,CalFlux=calflux,CalModelFlux=calflux))
+                calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
+                parms["ACals"].append(EVLACalModel(cal.name,CalFlux=calflux,CalModelFlux=calflux))
                 tcals.append(cal.name)
 
-    parms["ACals"]           = ACals    # Amplitude calibrators
-    
-    calist = bpcal+gaincal
+    # Delay Calibrators
     DCals = []
     tcals = []
-    for cal in calist:
+    for cal in bpcal + gaincal:
         if not cal in tcals:
             DCals.append(EVLACalModel(cal.name))
             tcals.append(cal.name)
     # Check for standard model
-    EVLAStdModel(DCals, freq)
+    EVLAStdModel(DCals, parms["KAT7Freq"])
     parms["DCals"]          = DCals      # delay calibrators
-    parms["delayZeroPhs"]   = False      # Keep phases
 
-    parms["refAnt"]        = -1   # Reference antenna
-
-    # Sample spectra
-    parms["plotSource"]    = parms["BPCal"][0]   # Source name or None
-    parms["plotTime"]      = [0.0, 5.0] # timerange
-
-    # Instrumental Poln  Cal
-    PClist                 = bpcal  # List of instrumental poln calibrators
-    parms["PCInsCals"]     = []
-    # Remove redundancies 
+    # Gain Calibrators
+    # Amp/phase calibration
+    PCals = []
     tcals = []
-    for cal in PClist:
+    for cal in gaincal:
         if not cal in tcals:
-            parms["PCInsCals"].append(cal.name)
+            PCals.append(EVLACalModel(cal.name))
             tcals.append(cal.name)
-    parms["doPolCal"]      = len(parms["PCInsCals"])>0  # Do polarization calibration?
-    parms["doPol"]         = False #parms["doPolCal"]
-
-    # R-L phase/delay calibration
-    parms["RLPCal"]    = None         # Polarization angle (R-L phase) calibrator, IF based
-    parms["PCRLPhase"] = None         # R-L phase difference for RLPCal, IF based
-    parms["RM"]        = None         # rotation measure (rad/m^2) for RLPCal, IF based
-    parms["RLDCal"]    = [('3C286', 66.0, 0.0)]    #  R-L delay calibrator list, R-L phase, RM
-    parms["rlrefAnt"]  = -1     # Reference antenna for R-L cal, defaults to refAnt
-    parms["doRLDelay"] = parms["RLDCal"][0][0]!=None  # Determine R-L delay? If calibrator given
-    parms["doRLCal"]   = parms["RLDCal"][0][0]!=None  # Determine  R-L bandpass? If calibrator given
-
-    # Imaging
-
-    imtargets = bpcal + gaincal + source
-    parms["targets"]=[]
-    for targ in imtargets:
-        parms["targets"].append(targ.name.replace(' ','_'))
-    parms["Stokes"]  = "I"          # Stokes to image
-    parms["FOV"]     = 2.00         # FOV calculated for 25 m antenna not 12
-    parms["MBmaxFBW"]= 0.02         # max. MB fractional bandwidth
-    parms["PBCor"]   = False        # no PB correction
-    parms["antSize"] = 12.          # Antenna size for PB correction
-    parms["Niter"]   = 1000         # Number of iterations
-    parms["minFluxPSC"]  = 0.025    # Min flux density peak for phase self cal
-    parms["xCells"] = 15.0          # Cell size to use in y-axis
-    parms["yCells"] = 15.0          # Cell size to use in x-axis
-# Multi frequency or narrow band?
-#SpanBW = 1214000000.0
-#if SpanBW<=1498000000.0*parms["MBmaxFBW"]*1.5:
-#    parms["doMB"] = False
-    parms["doMB"]        = True
-    parms["BLFact"]      = 1.01          # Baseline dependent time averaging
-    parms["BLchAvg"]     = False         # Baseline dependent frequency averaging
-
-    # Customization
-    parms["IClip"]         = [30.,0.1]
-    parms["XClip"]         = None
-    parms["VClip"]         = None
-# Special editing list
-    parms["doEditList"]  = True         # Edit using editList?
-    parms["editFG"]      = 2            # Table to apply edit list to
-# Channel numbers after Hanning if any
-    parms["editList"] = [
-    #{"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[1,100],     "Stokes":'1111',"Reason":"No Gain"},
-    #{"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[375,0],     "Stokes":'1111',"Reason":"No Gain"},
-    #{"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[159,165],   "Stokes":'1111',"Reason":"RFI"},
-        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[1,100],     "Stokes":'1111',"Reason":"No Gain"},
-        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[375,0],     "Stokes":'1111',"Reason":"No Gain"},
-        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[242,245],   "Stokes":'1111',"Reason":"Bad Ch"},
-    #{"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[157,170],   "Stokes":'1111',"Reason":"RFI"},
-    ]
-
-# Average 
-    parms["CalAvgTime"] =    10./60.    # Time for averaging calibrated uv data (min)
-    parms["CABChan"] =       100        # First Channel to copy
-    parms["CAEChan"] =       375        # Highest Channel to copy
-# No Hann
-# No Hannparms["CABChan"] =       200        # First Channel to copy
-# No Hannparms["CAEChan"] =       750        # Highest Channel to copy
-
-# Control, mark items as F to disable
-    T   = True
-    F   = False
-    parms["check"]         = F     # Only check script, don't execute tasks
-    parms["debug"]         = F #parms["debug"]     # run tasks debug
-    parms["doLoadArchive"] = False        # Load from archive?
-    parms["doHann"]        = T #parms["doHann"]     # Apply Hanning?
-    parms["doClearTab"]    = T        # Clear cal/edit tables
-    parms["doCopyFG"]      = T        # Copy FG 1 to FG 2
-    parms["doQuack"]       = T        # Quack data?
-    parms["doShad"]        = F    #parms["doShad"] # Flag shadowed data?
-    parms["doElev"]        = F
-    parms["doMedn"]        = T        # Median editing?
-    parms["doFD1"]         = T        # Do initial frequency domain flagging
-    parms["doRMSAvg"]      = T        # Do RMS/Mean editing for calibrators
-    parms["doPACor"]       = False    # Polarization angle correction?
-    parms["doDelayCal"]    = F        # Group Delay calibration?
-    parms["doBPCal"]       = T        # Determine Bandpass calibration
-#debug                 = T
-    parms["doAmpPhaseCal"] = T        # Amplitude/phase calibration
-    parms["doAutoFlag"]    = T        # Autoflag editing after final calibration?
-    parms["doRecal"]       = T        # Redo calibration after editing
-    parms["doDelayCal2"]   = F        # Group Delay calibration of averaged data?, 2nd pass
-    parms["doBPCal2"]      = T        # Determine Bandpass calibration, 2nd pass
-    parms["doAmpPhaseCal2"]= T        # Amplitude/phase calibration, 2nd pass
-    parms["doAutoFlag2"]   = T        # Autoflag editing after final calibration?
-    parms["doCalAvg"]      = T        # calibrate and average data
-    parms["doRLDelay"]     = False #parms["doRLDelay"] # Determine R-L delay?
-    parms["doPolCal"]      = False #parms["doPolCal"]  # Do polarization calibration?
-    parms["doRLCal"]       = False #parms["doRLCal"]   # Determine  R-L bandpass?
-    parms["doImage"]       = T        # Image targets
-    parms["doSaveImg"]     = T        # Save results to FITS
-    parms["doSaveUV"]      = T        # Save calibrated UV data to FITS
-    parms["doSaveTab"]     = T        # Save UV tables to FITS
-    parms["doKntrPlots"]   = T        # Contour plots
-    parms["doDiagPlots"]   = T        # Source diagnostic plots
-    parms["doMetadata"]    = T        # Generate metadata dictionaries
-    parms["doHTML"]        = T        # Generate HTML report
-    parms["doVOTable"]     = T        # VOTable report
-    parms["doCleanup"]     = T    # Destroy AIPS files
+    # Check for standard model
+    EVLAStdModel(PCals, parms["KAT7Freq"])
+    parms["PCals"]          = PCals   # Phase calibrator(s)
     
-# diagnostics
-    parms["doSNPlot"]      = T        # Plot SN tables etc
-    parms["doReport"]      = T        # Individual source report
-    parms["doRawSpecPlot"] = T #'3C286'!='None'  # Plot Raw spectrum
-    parms["doSpecPlot"]    = T #'3C286'!='None'  # Plot spectrum at various stages of processing
-    return parms
-# end KAT-7 InitContParms
+#Done KATInitCalModel
 
-def EVLAInitContFQParms(parms):
+def KAT7EditList(obsdata,numchannels,doHann):
+
+    # Halve the number of channels if we are doing hanning.
+    if doHann:
+        outchannels=numchannels/2.0
+
+    # Flag the middle channels.
+    editlist = [
+        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[int(outchannels/2)-1,int(outchannels/2)+1], "Stokes":'1111',"Reason":"Bad Ch"}
+        ]
+
+    return editlist
+
+def KATInitContFQParms(parms,obsdata):
     """
-    Initialize EVLA continuum pipeline frequency dependent parameters
+    Initialize KAT continuum pipeline frequency dependent parameters
     
-    Values set if None on input
+    Some values only set if None on input
 
     * parms      = Project parameters, modified on output
     """
     ################################################################
-    freq   = parms["VLAFreq"]
-    cfg    = parms["VLACfg"]
-    nchan  = parms["selChan"]
-    doHann = parms["doHann"]
+    refFreq   = parms["KAT7Freq"]
+    bandwidth = obsdata["katdata"].channel_freqs[0] - obsdata["katdata"].channel_freqs[-1]
+    antSize   = parms["antSize"]
+    blSize    = parms["longBline"]
+    nchan     = parms["selChan"]
+    doHann    = parms["doHann"]
+    if doHann:
+        nchan = int(nchan/2)
     # halve the number of channels if Hanning
 
     # Delay channels
@@ -518,229 +414,74 @@ def EVLAInitContFQParms(parms):
     # Amp cal channels
     if parms["doAmpPhaseCal"]==None:
         parms["doAmpPhaseCal"] = True                       # Amplitude/phase calibration
-    parms["ampBChan"]  =  max(2, 0.05*nchan)                # first channel to use in A&P solutions
-    parms["ampEChan"]  =  min(nchan-2, nchan-0.05*nchan)    # highest channel to use in A&P solutions
+    parms["ampBChan"]  =  int(max(2, 0.05*nchan))                # first channel to use in A&P solutions
+    parms["ampEChan"]  =  int(min(nchan-2, nchan-0.05*nchan))    # highest channel to use in A&P solutions
     parms["doAmpEdit"] =  True                              # Edit/flag on the basis of amplitude solutions
     parms["ampSigma"]  =  20.0                              # Multiple of median RMS about median gain to clip/flag
     # Should be fairly large
     parms["ampEditFG"] =  2                                 # FG table to add flags to, <=0 -> no FG entries
 
+    # Flag the first 20% and last 25% of channels
+    if parms["BChDrop"]== None:
+        parms["BChDrop"]=int(nchan*0.2)
+    if parms["EChDrop"]== None:
+        parms["EChDrop"]=int(nchan*0.25)
+
     # Ipol clipping levels
     if parms["IClip"]==None:
-        if freq<1.0e9:
+        if refFreq<1.0e9:
             parms["IClip"] = [20000.,0.1]  # Allow Cygnus A
         else:
             parms["IClip"] = [200.,0.1]    # Covers most real sources
         # end IPol clipping
     if (parms["FDmaxAmp"]==None):
         parms["FDmaxAmp"]    = parms["IClip"][0]     # Maximum average amplitude (Jy)
-
-    # Drop end channels, more for low frequencies
-    if freq<8.0e9:
-        if parms["BChDrop"]==None:
-            ch = int (max(2, 6.*(nchan/64.)+0.5))
-            parms["BChDrop"] = ch     # number of channels to drop from start of each spectrum
-        if parms["EChDrop"]==None:
-            ch = int (max(2, 4.*(nchan/64.)+0.5))
-            parms["EChDrop"] = ch     # number of channels to drop from start of each spectrum
-    else:
-        if parms["BChDrop"]==None:
-            parms["BChDrop"]     = 3      # drop no channels
-        if parms["EChDrop"]==None:
-            parms["EChDrop"]     = 2      # drop no channels
-
-    # Set spectral baseline for FD flagging ignoring end channels
-    if parms["FDbaseSel"]==None:
-        ch1 = int (max(2, 6.*(nchan/64.)+0.5))
-        ch2 = nchan - int (max(2, 4.*(nchan/64.)+0.5))
-        parms["FDbaseSel"] = [ch1, ch2, 1, 0]
     
-    # FD flagging
-    if parms["FDmaxRMS"]==None:
-        if cfg[0:1]=='A' or cfg[0:1]=='B' or freq>8.0e9:
-            parms["FDmaxRMS"]    = [5.0,.1]     # Channel RMS limits (Jy)
+    # Set spectral baseline for FD flagging ignoring end channels
+    ch1 = int (max(2, nchan*0.2))
+    ch2 = nchan - int (max(2, nchan*0.25))
+    if parms["FDbaseSel"]==None:
+        parms["FDbaseSel"] = [ch1, ch2, 1, 0]
+    # Set spectral baseline for FD1 flagging ignoring end channels
+    if parms["FD1baseSel"]==None:
+        parms["FD1baseSel"] = parms["FDbaseSel"]
+    # Only copy relevant part of final bandpass and average to correct number of channels
+    if parms["CABChan"] == None:
+        parms["CABChan"] =       ch1          # First Channel to copy
+    if parms["CAEChan"] == None:
+        parms["CAEChan"] =       ch2          # Highest Channel to copy
+    #Correct bandwidth for final averaged data
+    frac = 1.0 - (ch1 + (nchan - ch2))/nchan 
+    bandwidth = bandwidth*frac
+    if parms["chAvg"] == None:
+        if bandwidth>50e6:
+            parms["chAvg"] =         1
         else:
-            parms["FDmaxRMS"]    = [6.0,.1]     # Channel RMS limits (Jy)
-    if parms["FDmaxRes"]==None:
-        if cfg[0:1]=='A' or cfg[0:1]=='B' or freq>8.0e9:
-            parms["FDmaxRes"]    =  6.0         # Max. residual flux in sigma
-        else:
-            parms["FDmaxRes"]    =  5.0         # Max. residual flux in sigma
-    if parms["FDmaxResBL"]==None:
-        if cfg[0:1]=='A' or cfg[0:1]=='B' or freq>4.0e9:
-            parms["FDmaxResBL"]  =  6.0         # Max. baseline residual
-        else:
-            parms["FDmaxResBL"]  =  5.0         # Max. baseline residual
+            parms["chAvg"] =         6
+    if parms["avgFreq"] == None:
+        parms["avgFreq"] =       1     
+            
+    if parms["doMB"] == None:
+        parms["doMB"] = True
+        if bandwidth>100e6:                               # Wideband
+            parms["doMB"] = True
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.015
+	    if parms["MBnorder"]==None: parms["MBnorder"] = 1    
+        else:                                             # Narrow-band
+	    parms["doMB"] = True
+            if parms["MBnorder"]==None: parms["MBnorder"] = 1
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = float((bandwidth/(3.0*refFreq)))  #3 frequency channels.
 
-    # Averaging time by configuration
-    if cfg[0:1]=='A':
-        if parms["calInt"]==None:
-            parms["calInt"]  =  0.30            # Calibration table interval (min)
-        if parms["CalAvgTime"]==None:
-            parms["CalAvgTime"]  =  1.0/60.0    # Time for averaging calibrated uv data (min)
-        if parms["doShad"]==None:
-            parms["doShad"]      = False        # Shadow flagging (config dependent)
-        if parms["doHann"]==None:
-            parms["doHann"]      = False        # Hanning needed for RFI?
-        if parms["delaySolInt"]==None:
-            parms["delaySolInt"]  =   10.0/60.  # delay solution interval (min)
-        if parms["solInt"]==None:
-            parms["solInt"]  =   30.0/60.       # solution interval (min)
-    elif cfg[0:1]=='B':
-        if parms["calInt"]==None:
-             parms["calInt"]  =  0.45           # Calibration table interval (min)
-        if parms["CalAvgTime"]==None:
-             parms["CalAvgTime"]  =  3.0/60.0   # Time for averaging calibrated uv data (min)
-        if parms["doShad"]==None:
-            parms["doShad"]      = False        # Shadow flagging (config dependent)
-        if parms["doHann"]==None:
-            parms["doHann"]      = freq<8.0e9   # Hanning needed for RFI?
-        if parms["delaySolInt"]==None:
-            parms["delaySolInt"]  =   10.0/60   # delay solution interval (min)
-        if parms["solInt"]==None:
-            parms["solInt"]  =   30.0/60.       # solution interval (min)
-    elif cfg[0:1]=='C':
-        if parms["calInt"]==None:
-             parms["calInt"]  =  1.0           # Calibration table interval (min)
-        if parms["CalAvgTime"]==None:
-             parms["CalAvgTime"]  =  10.0/60.0 # Time for averaging calibrated uv data (min)
-        if parms["doShad"]==None:
-            parms["doShad"]      = True        # Shadow flagging (config dependent)
-        if parms["doHann"]==None:
-            parms["doHann"]      = freq<8.0e9  # Hanning needed for RFI?
-        if parms["delaySolInt"]==None:
-            parms["delaySolInt"]  =   20.0/60. # delay solution interval (min)
-        if parms["solInt"]==None:
-            parms["solInt"]  =   30.0/60.       # solution interval (min)
-    elif cfg[0:1]=='D':
-        if parms["calInt"]==None:
-             parms["calInt"]  =  2.0           # Calibration table interval (min)
-        if parms["CalAvgTime"]==None:
-             parms["CalAvgTime"]  =  20.0/60.0 # Time for averaging calibrated uv data (min)
-        if parms["doShad"]==None:
-            parms["doShad"]      = True        # Shadow flagging (config dependent)
-        if parms["doHann"]==None:
-            parms["doHann"]      = freq<8.0e9  # Hanning needed for RFI?
-        if parms["delaySolInt"]==None:
-            parms["delaySolInt"]  =   30.0/60. # delay solution interval (min)
-        if parms["solInt"]==None:
-            parms["solInt"]  =   30.0/60.      # solution interval (min)
-       
-    # Frequency dependent values
-    FWHM = (45.0 /(freq*1.0e-9) ) / 60.   # FWHM in deg
-    if parms["band"]==None:
-        parms["band"] = EVLAGetBandLetter(freq)
-    if freq<1.0e9:                        # Below L band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.5*FWHM    # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.10        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<2.0e9:                      # L band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  15.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =   0.5*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<3.0e9:                     # S band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =   0.5*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<8.0e9:                      # C band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =   0.5*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<10.0e9:                      # X band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.5*FWHM    # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<18.0e9:                      # Ku band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.5*FWHM    # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<26.0e9:                      # K band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.25*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<38.0e9:                     # Ka band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.25        # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  10.0/60.0   # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.25*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.25        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    elif freq<50.0e9:                      # Q band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.5         # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  5.0/60.0    # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.25*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.10        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    else:                                   # Above Q band
-        if parms["delaySmoo"]==None:
-            parms["delaySmoo"]   =  0.5         # Delay smoothing time (hr)
-        if parms["bpsolint1"]==None:
-            parms["bpsolint1"]   =  5.0/60.0    # BPass phase correction solution in min
-        if parms["FOV"]==None:
-            parms["FOV"]         =  0.25*FWHM   # Field of view radius in deg.
-        if parms["solPInt"]==None:
-            parms["solPInt"]     =  0.10        # phase self cal solution interval (min)
-        if parms["solAInt"]==None:
-            parms["solAInt"]     =  3.0         # amp+phase self cal solution interval (min)
-    # end EVLAInitContFqParms
+    FWHMPB= 1.22*((3e8/refFreq)/(antSize))*(180.0/math.pi) #Full-Width at Half-Maximum of the primary beam
+    FWHMRB= 1.22*((3e8/refFreq)/(blSize))*(180.0/math.pi) #Restoring beam (assuming longest baseline)
+    if parms["FOV"]==None:
+        parms["FOV"]=float(FWHMPB*1.5)
+    if parms["xCells"]==None:
+        parms["xCells"]=float(FWHMRB*3600.0/10.0)   # ~10 Pixels per beam should be enough.
+    if parms["yCells"]==None:
+        parms["yCells"]=float(FWHMRB*3600.0/10.0)   # ~10 Pixels per beam
+        
+# end KATInitContFqParms
 
 def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
                  check=False, logfile=""):
@@ -4577,6 +4318,7 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
         doBand = -1
     # get reference Freq
     refFreq = uv.Desc.Dict["crval"][uv.Desc.Dict["jlocf"]]
+    bandwidth = abs(uv.Desc.Dict["cdelt"][uv.Desc.Dict["jlocf"]]*uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]])
     # If list empty get all sources
     if type(Sources)==list:
         sl = Sources
@@ -4598,11 +4340,11 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
         imager.prtLv = 2
     else:
         imager = ObitTask.ObitTask("Imager")
+        imager.prtLv = 2
         try:
             imager.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
         except Exception, exception:
             pass
-        imager.prtLv = 2
     imager.taskLog  = logfile
     if not check:
         setname(uv,imager)
@@ -4651,8 +4393,7 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
     imager.xCells      = xCells
     imager.yCells      = yCells
     if doOutlier or ((doOutlier==None) and refFreq<6.0e9):
-        FWHM = 1.22*((3e8/refFreq)/(antSize))*(180.0/math.pi)   # ant FWHM in deg
-        imager.OutlierDist = FWHM*4.0   # Outliers from NVSS/SUMMS for lower frequencies
+        imager.OutlierDist = FOV*2.0   # Outliers from NVSS/SUMMS for lower frequencies
         if refFreq>1.0e9:
             imager.OutlierFlux = 0.01
         else:
@@ -4678,14 +4419,22 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
             # Use NVSS north of dec 30 S and SUMMS southward
             if suinfo["Dec"]<-30.0:
                 imager.Catalog = 'SUMMSVZ.FIT'
+        # Get the source parameters for this source
         numvis=suinfo["numVis"]
+        iflux=suinfo["IFlux"][0]
+        exposuresec=suinfo["Exposure"]*3600.*24.
+        mindr=iflux/1500.0                       # Cutoff based on dynamic range of 1500:1
         SEFD=1220.18789703
-        inttime=10.0
-        BW=235000000
-        imager.minFlux=3.0*SEFD/math.sqrt(numvis*inttime*BW)
+	# Cutoff cleaning at theoretical noise or minimum dynamic range.
+        imager.minFlux=max(SEFD/math.sqrt(exposuresec*bandwidth),mindr)
+ 	# Half the number of CC's for calibrators
+	if iflux>0.0: imager.Niter=Niter/2
+	else: imager.Niter=Niter
         del suinfo
         imager.Sources[0] = sou
         mess = "Image "+sou
+        printMess(mess, logfile)
+        mess = "Stop at %4.2f mJy or %5d CCs" % (imager.minFlux*1000,imager.Niter)
         printMess(mess, logfile)
         # Trap failure
         try:
@@ -6861,7 +6610,7 @@ def EVLASaveOutFiles( pickleFile='manifest.pickle' ):
     SaveObject( manifest, pickleFile, True)
 # end EVLASaveOutFiles
 
-def EVLAAIPSName( project, session):
+def EVLAAIPSName( project):
     """
     Derive AIPS Name.  AIPS file name will be project+session with project 
     truncated to fit in 12 characters.
@@ -6870,7 +6619,7 @@ def EVLAAIPSName( project, session):
     * session = session code
     """
     ################################################################
-    Aname = Aname=(project.strip()+session)[0:12]
+    Aname = Aname=(project.strip())[0:12]
     return Aname
     # end EVLAAIPSName
 
@@ -7105,7 +6854,7 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
 
             # Create output file name
             outfile = project+'_'+s+'.'+plot['file']+'.ps'
-            lwpla.outfile = './'+outfile # output to current directory
+            lwpla.outfile = outfile # output to output directory
 
             # Remove preexisting file
             if os.path.exists(outfile): os.remove(outfile) 
