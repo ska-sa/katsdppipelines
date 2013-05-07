@@ -61,6 +61,7 @@ def KATInitContParms(obsdata):
     parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
     parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
     parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
+    parms["staticflags"]   = "KAT7_SRFI"              # Filename containing a list of frequencies to be flagged (in FITS)
     parms["KAT7Freq"]      = obsdata["centerfreq"]    # Representive frequency
     parms["KAT7Cfg"]       = obsdata["corrmode"]      # KAT-7 correlator configuraton
     # Get the longest baseline
@@ -81,9 +82,9 @@ def KATInitContParms(obsdata):
     
     # Special editing list
     parms["doEditList"] =  True        # Edit using editList?
-    parms["editFG"] =      2            # Table to apply edit list to
+    parms["editFG"] =      1            # Table to apply edit list to
 
-    # Construct a list of predefined flags defined in editlist.
+    # Create the editlist array for static flags (on instantiation it contains a flag of the middle channel).
     editList = KAT7EditList(obsdata,parms["selChan"],parms["doHann"])
     parms["editList"] = editList
 
@@ -111,10 +112,10 @@ def KATInitContParms(obsdata):
     parms["mednTimeWind"] = 1.0         # Median window width in min for median flagging
     parms["mednAvgTime"]  = 0.0         # Median Averaging time in min
     parms["mednAvgFreq"]  = 1           # Median 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
-    parms["mednChAvg"]    = 5           # Median number of channels to average
+    parms["mednChAvg"]    = 5           # Median flagger number of channels to average
     parms["doRMSAvg"]    = True         # Edit calibrators by RMSAvg?
     parms["RMSAvg"]      = 3.0          # AutoFlag Max RMS/Avg for time domain RMS filtering
-    parms["RMSTimeAvg"]  = 1.0          # AutoFlag time averaging in min.
+    parms["RMSTimeAvg"]  = 0.0          # AutoFlag time averaging in min.
     parms["doAutoFlag"]  = True         # Autoflag editing after first pass calibration?
     parms["doAutoFlag2"] = True         # Autoflag editing after final (2nd) calibration?
     parms["IClip"]       = None         # AutoFlag Stokes I clipping
@@ -377,15 +378,12 @@ def KATInitTargParms(parms,obsdata):
 
 def KAT7EditList(obsdata,numchannels,doHann):
 
-    # Halve the number of channels if we are doing hanning.
-    if doHann:
-        outchannels=numchannels/2.0
-
+    # Flag the middle channel
+    outchannels=numchannels/2.0
     # Flag the middle channels.
     editlist = [
-        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[int(outchannels/2)-1,int(outchannels/2)+1], "Stokes":'1111',"Reason":"Bad Ch"}
+        {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[int(outchannels)-1,int(outchannels)+1], "Stokes":'1111',"Reason":"Bad Ch"}
         ]
-
     return editlist
 
 def KATInitContFQParms(parms,obsdata):
@@ -470,7 +468,7 @@ def KATInitContFQParms(parms,obsdata):
         else:                                             # Narrow-band
 	    parms["doMB"] = True
             if parms["MBnorder"]==None: parms["MBnorder"] = 1
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = float((bandwidth/(3.0*refFreq)))  #3 frequency channels.
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = float((bandwidth/(4.0*refFreq)))  
 
     FWHMPB= 1.22*((3e8/refFreq)/(antSize))*(180.0/math.pi) #Full-Width at Half-Maximum of the primary beam
     FWHMRB= 1.22*((3e8/refFreq)/(blSize))*(180.0/math.pi) #Restoring beam (assuming longest baseline)
@@ -482,6 +480,42 @@ def KATInitContFQParms(parms,obsdata):
         parms["yCells"]=float(FWHMRB*3600.0/10.0)   # ~10 Pixels per beam
         
 # end KATInitContFqParms
+
+def KATGetStaticFlags(staticflagfile,obsdata):
+    
+    """
+    Construct a list of static flags.
+    
+    staticflagfile   = path to file containing list of frequency ranges to reject
+    obsdata          = the KAT7 metadata
+    
+    returns: a properly formattted list of edit dictionaries for use with the kat-7 pipeline
+    """
+    # Get the channel_freqs array from the obsdata database
+    channel_freqs=obsdata["katdata"].channel_freqs
+    channel_width=obsdata["katdata"].channel_width
+    channels=obsdata["katdata"].channels
+    padding=50                                   #Pad the start and the end of a flag range
+    #Get the list of frequency ranges from staticflagfile and find flags
+    editlist=[]
+    with open(staticflagfile) as f:
+        satellites = []
+        for line in f:
+            line = line.partition('#')[0]      # Ignore comments
+            line = line.split()
+            if len(line) == 3:                 # Only use lines with data
+                name=line[0]
+                startFreq=float(line[1])*1e6
+                endFreq=float(line[2])*1e6                
+                thisflag = channels[(channel_freqs>startFreq-padding*channel_width) & (channel_freqs<endFreq+padding*channel_width)]
+                if len(thisflag)>0:                   # We have some bandwidth to flag!!
+                    flag_start = thisflag[0] + 1      # +1 for AIPS channel convention 
+                    flag_end   = thisflag[-1] + 1     # +1 for AIPS channel convention
+                    editdict={"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[0,0],"IFs":[1,1],"Chans":[int(flag_start),int(flag_end)], "Stokes":'1111',"Reason":name}
+                    editlist.append(editdict)    
+    return(editlist)
+            
+
 
 def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
                  check=False, logfile=""):
@@ -829,8 +863,8 @@ def EVLAUVLoadArch(dataroot, Aname, Aclass, Adisk, Aseq, err, \
     return outuv
     # end EVLAUVLoadArch
 
-def EVLAHann(inUV, Aname, Aclass, Adisk, Aseq, err, doDescm=True, \
-             logfile='', check=False, debug=False):
+def KATHann(inUV, Aname, Aclass, Adisk, Aseq, err, doDescm=True, \
+             flagVer=-1, logfile='', check=False, debug=False):
     """ Hanning smooth a file to AIPS
 
     Returns task error code, 0=OK, else failed
@@ -862,7 +896,7 @@ def EVLAHann(inUV, Aname, Aclass, Adisk, Aseq, err, doDescm=True, \
     hann.outClass = Aclass[0:6]
     hann.outSeq   = Aseq
     hann.outDisk  = Adisk
-    hann.flagVer  = -1
+    hann.flagVer  = flagVer
     hann.doDescm  = doDescm
     hann.taskLog  = logfile
     hann.debug    = debug
@@ -4228,7 +4262,7 @@ def EVLAGetTimes(uv, Source, err,
                  "IFlux":IFlux, "QFlux":QFlux, "UFlux":UFlux, "VFlux":VFlux}
     # end EVLAGetTimes
 
-def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", band="", \
+def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", band="", \
                      doCalib=-1, gainUse=0, doBand=-1, BPVer=0,  flagVer=-1,  \
                      doPol=False, PDVer=-1,  minFlux=0.0, \
                      xCells=0, yCells=0, \
@@ -4425,12 +4459,13 @@ def EVLAImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", b
         exposuresec=suinfo["Exposure"]*3600.*24.
         mindr=iflux/1500.0                       # Cutoff based on dynamic range of 1500:1
         SEFD=1220.18789703
-        if exposuresec==0.0:                     #Source is totally flagged (Imager should fail gracefully)
-            exposuresec=1.0
         # Cutoff cleaning at theoretical noise or minimum dynamic range.
-        imager.minFlux=max(SEFD/math.sqrt(exposuresec*bandwidth),mindr)
- 	# Half the number of CC's for calibrators
-	if iflux>0.0: imager.Niter=Niter/2
+        if exposuresec>0.0:
+            imager.minFlux=max(SEFD/math.sqrt(exposuresec*bandwidth),mindr)
+ 	else:
+            imager.minFlux=0.0
+        # Half the number of CC's for calibrators and narrow-band observations
+	if iflux>0.0 or bandwidth<50e6: imager.Niter=Niter/2
 	else: imager.Niter=Niter
         del suinfo
         imager.Sources[0] = sou

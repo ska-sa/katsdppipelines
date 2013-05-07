@@ -91,6 +91,11 @@ def pipeline(args, options):
     # frequency/configuration dependent default parameters
     KATInitContFQParms(parms,obsdata)
 
+    # Update the editlist array with the static flags defined in parms["staticflags"]
+    staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
+    if os.path.exists(staticflagfile):
+        parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
+
     # General data parameters
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
@@ -149,6 +154,16 @@ def pipeline(args, options):
 #        if uv==None and not check:
 #            raise RuntimeError,"Cannot load "+parms["DataRoot"]
     
+    # Special editing
+    if parms["doEditList"] and not check:
+        mess =  "Special editing"
+        printMess(mess, logFile)
+        for edt in parms["editList"]:
+            UV.PFlag(uv,err,timeRange=[dhms2day(edt["timer"][0]),dhms2day(edt["timer"][1])], \
+                         flagVer=parms["editFG"], Ants=edt["Ant"], Chans=edt["Chans"], IFs=edt["IFs"], \
+                         Stokes=edt["Stokes"], Reason=edt["Reason"])
+            OErr.printErrMsg(err, "Error Flagging")
+
     # Hanning
     if parms["doHann"]:
         # Set uv if not done
@@ -157,8 +172,8 @@ def pipeline(args, options):
             if err.isErr:
                 OErr.printErrMsg(err, "Error creating AIPS data")
     
-        uv = EVLAHann(uv, EVLAAIPSName(project), dataClass, disk, parms["seq"], err, \
-                      doDescm=parms["doDescm"], logfile=logFile, check=check, debug=debug)
+        uv = KATHann(uv, EVLAAIPSName(project), dataClass, disk, parms["seq"], err, \
+                      doDescm=parms["doDescm"], flagVer=1, logfile=logFile, check=check, debug=debug)
         if uv==None and not check:
             raise RuntimeError,"Cannot Hann data "
     
@@ -176,14 +191,6 @@ def pipeline(args, options):
         EVLAClearCal(uv, err, doGain=parms["doClearGain"], doFlag=parms["doClearFlag"], doBP=parms["doClearBP"], check=check)
         OErr.printErrMsg(err, "Error resetting calibration")
     
-    # Copy FG 1 to FG 2
-    if parms["doCopyFG"]:
-        mess =  "Copy FG 1 to FG 2"
-        printMess(mess, logFile)
-        retCode = EVLACopyFG (uv, err, logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Copying FG table"
-
     # Drop end channels of spectra?  Only if new FG 2
     if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
         # Channels based on original number, reduced if Hanning
@@ -198,15 +205,13 @@ def pipeline(args, options):
         if retCode!=0:
             raise RuntimeError,"Error Copying FG table"
    
-    # Special editing
-    if parms["doEditList"] and not check:
-        mess =  "Special editing"
+    # Copy FG 1 to FG 2
+    if parms["doCopyFG"]:
+        mess =  "Copy FG 1 to FG 2"
         printMess(mess, logFile)
-        for edt in parms["editList"]:
-            UV.PFlag(uv,err,timeRange=[dhms2day(edt["timer"][0]),dhms2day(edt["timer"][1])], \
-                         flagVer=parms["editFG"], Ants=edt["Ant"], Chans=edt["Chans"], IFs=edt["IFs"], \
-                         Stokes=edt["Stokes"], Reason=edt["Reason"])
-            OErr.printErrMsg(err, "Error Flagging")
+        retCode = EVLACopyFG (uv, err, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error Copying FG table"
     
     # Quack to remove data from start and end of each scan
     if parms["doQuack"]:
@@ -622,7 +627,7 @@ def pipeline(args, options):
             slist = EVLAAllSource(uv,err,logfile=logFile,check=check,debug=debug)
         else:
             slist = parms["targets"]
-        EVLAImageTargets (uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, \
+        KATImageTargets (uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, \
                           doCalib=2, doBand=1,  flagVer=1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
                           Stokes=parms["Stokes"], FOV=parms["FOV"], Robust=parms["Robust"], Niter=parms["Niter"], \
                           CleanRad=parms["CleanRad"], minFlux=parms["minFlux"], \
