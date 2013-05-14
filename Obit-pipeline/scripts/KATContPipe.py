@@ -29,6 +29,7 @@ def pipeline(args, options):
     scratchdir = options.scratchdir
     outputdir  = options.outputdir
     manifestfile = options.outputdir + '/manifest.pickle'
+    targets = options.targets
 
     # Die gracefully if we cannot write to the output area...
     if not os.path.exists(outputdir):
@@ -58,13 +59,15 @@ def pipeline(args, options):
     #######  Load KAT Image ######
     # Need the correlator mode to get the right uvfits template
     rawfile=katfile.open(h5file)
-    if rawfile.spectral_windows[0].mode == "wbc":   #Trap old data
+    if len(rawfile.channels) == 1024:   #Trap old data
         corrmode = "1"
-    else:
-        corrmode=rawfile.spectral_windows[0].mode[-2]
+    elif len(rawfile.channels) == 2048:
+        corrmode = "2"
+    elif len(rawfile.channels) == 4096:
+        corrmode = "4"
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
-    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0)
+    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
     uv.Header(err)
 
     ####### Initialize parameters #####
@@ -138,21 +141,7 @@ def pipeline(args, options):
     SaveObject(parms, ParmsPicklefile, True)
     EVLAAddOutFile(os.path.basename(ParmsPicklefile), 'project', 'Processing parameters used' )
 
-    # Are we going to be doing Hanning?
-    #if parms["doHann"]:
-    #    loadClass = "Raw"
-    #else:
     loadClass = dataClass
-    
-    # Load Data from Archive directory
-#    if parms["doLoadArchive"]:
-#        uv = EVLAUVLoadArch(parms["archRoot"], EVLAAIPSName(project, session), loadClass, disk, parms["seq"], err, \
-#                            selConfig=parms["selConfig"], doSwPwr=parms["doSwPwr"], \
-#                            selBand=parms["selBand"], selChan=parms["selChan"], \
-#                            selNIF=parms["selNIF"], calInt=parms["calInt"], \
-#                            logfile=logFile, Compress=parms["Compress"], check=check, debug=debug)
-#        if uv==None and not check:
-#            raise RuntimeError,"Cannot load "+parms["DataRoot"]
     
     # Special editing
     if parms["doEditList"] and not check:
@@ -163,6 +152,31 @@ def pipeline(args, options):
                          flagVer=parms["editFG"], Ants=edt["Ant"], Chans=edt["Chans"], IFs=edt["IFs"], \
                          Stokes=edt["Stokes"], Reason=edt["Reason"])
             OErr.printErrMsg(err, "Error Flagging")
+
+
+    # Initial wide average frequency + time domain editing
+    if parms["doInitFlag"] and not check:
+        mess = "Initial time domain editing"
+        printMess(mess, logFile)
+        #Time editing First
+        retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
+                                  avgTime=0.0, avgFreq=1,  chAvg=256, \
+                                  timeWind=5.0,flagVer=1, flagTab=1,flagSig=5.0, \
+                                  logfile=logFile, check=check, debug=False)
+        if retCode!=0:
+            raise RuntimeError,"Error in MednFlag"
+    
+        mess =  "Initial frequency domain editing"
+        printMess(mess, logFile)
+        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=1,  flagTab=1, doCalib=-1, doBand=-1,   \
+                                timeAvg=5.0, \
+                                doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=255,  \
+                                FDmaxRMS=[5.0,0.1], FDmaxRes=20.0,  \
+                                FDmaxResBL=5.0,  FDbaseSel=parms["FDbaseSel"],\
+                                nThreads=nThreads, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+           raise  RuntimeError,"Error in AutoFlag"
+    
 
     # Hanning
     if parms["doHann"]:
@@ -178,11 +192,11 @@ def pipeline(args, options):
             raise RuntimeError,"Cannot Hann data "
     
     # Set uv is not done
-    if uv==None and not check:
-        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), dataClass[0:6], \
-                        disk, parms["seq"], True, err)
-        if err.isErr:
-            OErr.printErrMsg(err, "Error creating AIPS data")
+#    if uv==None and not check:
+#        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), dataClass[0:6], \
+#                        disk, parms["seq"], True, err)
+#        if err.isErr:
+#            OErr.printErrMsg(err, "Error creating AIPS data")
     
     # Clear any old calibration/editing 
     if parms["doClearTab"]:
@@ -241,7 +255,7 @@ def pipeline(args, options):
         printMess(mess, logFile)
         retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
                                   avgTime=parms["mednAvgTime"], avgFreq=parms["mednAvgFreq"],  chAvg= parms["mednChAvg"], \
-                                  timeWind=parms["mednTimeWind"], flagVer=2,flagSig=parms["mednSigma"], \
+                                  timeWind=parms["mednTimeWind"],flagVer=2, flagTab=2,flagSig=parms["mednSigma"], \
                                   logfile=logFile, check=check, debug=False)
         if retCode!=0:
             raise RuntimeError,"Error in MednFlag"
@@ -250,7 +264,7 @@ def pipeline(args, options):
     if parms["doFD1"]:
         mess =  "Median window frequency editing, for RFI impulsive in frequency:"
         printMess(mess, logFile)
-        retCode = EVLAAutoFlag (uv, "    ", err,  flagVer=2, doCalib=-1, doBand=-1,   \
+        retCode = EVLAAutoFlag (uv, "    ", err, flagVer=2, flagTab=2, doCalib=-1, doBand=-1,   \
                                 timeAvg=parms["FD1TimeAvg"], \
                                 doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=parms["FD1widMW"],  \
                                 FDmaxRMS=[1.0e20,0.1], FDmaxRes=parms["FD1maxRes"],  \
@@ -274,7 +288,7 @@ def pipeline(args, options):
         for s in parms["DCals"]:
             if s['Source'] not in clist:
                 clist.append(s['Source'])
-        retCode = EVLAAutoFlag (uv, clist, err,  flagVer=2, doCalib=-1, doBand=-1,   \
+        retCode = EVLAAutoFlag (uv, clist, err,  flagVer=2, flagTab=2, doCalib=-1, doBand=-1,   \
                                     RMSAvg=parms["RMSAvg"], timeAvg=parms["RMSTimeAvg"], \
                                     nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
@@ -868,8 +882,9 @@ if __name__ == '__main__':
     description = "Make an image from an h5 file."
     parser = OptionParser( usage=usage, description=description)
     parser.add_option("--parms", default=None, help="Overwrite the default imaging parameters using a parameter file.")
-    parser.add_option("--outputdir", default=os.getcwd(), help="Specify the output data directory.")
+    parser.add_option("--outputdir", default='./', help="Specify the output data directory.")
     parser.add_option("--scratchdir", default=None, help="Specify the scratch directory.")
+    parser.add_option("--targets", default=None, help="List of targets to load (You'll need calibrators in this list!!)")
     (options, args) = parser.parse_args()
     if len(args) < 1:
         parser.print_help()

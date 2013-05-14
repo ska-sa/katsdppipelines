@@ -3,6 +3,7 @@
 import katim.AIPSLiteTask as AIPSTask
 import UV, UVDesc, Image, ImageDesc, FArray, ObitTask, AIPSDir, OErr, History
 import InfoList, Table, OSystem, OASDM
+from AIPSData import AIPSImage
 from AIPS import AIPS
 from FITS import FITS
 from AIPSDir import AIPSdisks, nAIPS
@@ -51,7 +52,7 @@ def KATInitContParms(obsdata):
     parms["polcal"] = []
 
     # Archive parameters
-    parms["archRoot"]      = "NOT VLA DATA" # Root of ASDM/BDF data
+    parms["archRoot"]      = "KAT-7 DATA" # Root of ASDM/BDF data
     parms["selBand"]       = "L"   # Selected band, def = first  
     parms["selConfig"]     = 1     # Selected frequency config, def = first  
     parms["selNIF"]        = 1     # Selected number of IFs, def = first  
@@ -95,6 +96,7 @@ def KATInitContParms(obsdata):
     parms["doClearBP"]    = True        # Clear BP tables?
     parms["doCopyFG"]     = True        # Copy FG 1 to FG 2
     parms["doQuack"]      = True        # Quack data?
+    parms["doInitFlag"]   = True        # Initial broad Frequency and time domain flagging 
     parms["quackBegDrop"] = 0.1         # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
@@ -103,7 +105,7 @@ def KATInitContParms(obsdata):
     parms["doElev"]       = False       # Do elevation flagging
     parms["minElev"]      = 15.0        # Minimum elevation to keep.
     parms["doFD1"]        = True        # Do initial frequency domain flagging
-    parms["FD1widMW"]     = 40          # Width of the initial FD median window
+    parms["FD1widMW"]     = 41          # Width of the initial FD median window
     parms["FD1maxRes"]    = 5.0         # Clipping level in sigma
     parms["FD1TimeAvg"]   = 1.0         # time averaging in min. for initial FD flagging
     parms["FD1baseSel"]   = None        # Baseline fitting region for FD1 (updates by KAT7CorrParms)
@@ -123,8 +125,8 @@ def KATInitContParms(obsdata):
     parms["XClip"]       = None         # AutoFlag cross-pol clipping
     parms["timeAvg"]     = 0.33         # AutoFlag time averaging in min.
     parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
-    parms["FDwidMW"]     = 40           # Width of the median window
-    parms["FDmaxRMS"]    = [6.0,0.1]    # Channel RMS limits (Jy)
+    parms["FDwidMW"]     = 101          # Width of the median window
+    parms["FDmaxRMS"]    = [5.0,0.1]    # Channel RMS limits (Jy)
     parms["FDmaxRes"]    = 5.0          # Max. residual flux in sigma
     parms["FDmaxResBL"]  = 5.0          # Max. baseline residual
     parms["FDbaseSel"]   = None         # Channels for baseline fit (Updated by KAT7CorrParms)
@@ -234,9 +236,9 @@ def KATInitContParms(obsdata):
     parms["outIClass"]   = "IClean"     # Output target final image class
     parms["Stokes"]      = "I"          # Stokes to image
     parms["Robust"]      = 0.0          # Weighting robust parameter
-    parms["FOV"]         = None         # Field of view radius in deg.
+    parms["FOV"]         = 2.0          # Field of view radius in deg.
     parms["Niter"]       = 800          # Max number of clean iterations
-    parms["minFlux"]     = 0.0          # Minimum CLEAN flux density
+    parms["minFlux"]     = None          # Minimum CLEAN flux density
     parms["minSNR"]      = 4.0          # Minimum Allowed SNR
     parms["solPMode"]    = "P"          # Phase solution for phase self cal
     parms["solPType"]    = "    "       # Solution type for phase self cal
@@ -244,26 +246,26 @@ def KATInitContParms(obsdata):
     parms["solAType"]    = "    "       # Solution type for A&P self cal
     parms["avgPol"]      = True         # Average poln in self cal?
     parms["avgIF"]       = False        # Average IF in self cal?
-    parms["maxPSCLoop"]  = 1            # Max. number of phase self cal loops
-    parms["minFluxPSC"]  = 0.025        # Min flux density peak for phase self cal
-    parms["solPInt"]     = 0.25         # phase self cal solution interval (min)
+    parms["maxPSCLoop"]  = 2            # Max. number of phase self cal loops
+    parms["minFluxPSC"]  = None         # Min flux density peak for phase self cal
+    parms["solPInt"]     = 0.333333     # phase self cal solution interval (min)
     parms["maxASCLoop"]  = 1            # Max. number of Amp+phase self cal loops
-    parms["minFluxASC"]  = 0.5          # Min flux density peak for amp+phase self cal
+    parms["minFluxASC"]  = None          # Min flux density peak for amp+phase self cal
     parms["solAInt"]     = 3.0          # amp+phase self cal solution interval (min)
     parms["nTaper"]      = 0            # Number of additional imaging multiresolution tapers
     parms["Tapers"]      = [20.0,0.0]   # List of tapers in pixels
     parms["do3D"]        = False        # Make ref. pixel tangent to celest. sphere for each facet
     parms["noNeg"]       = False        # F=Allow negative components in self cal model
-    parms["BLFact"]      = 1.01         # Baseline dependent time averaging
-    parms["BLchAvg"]     = True         # Baseline dependent frequency averaging
+    parms["BLFact"]      = 1.00         # Baseline dependent time averaging
+    parms["BLchAvg"]     = False        # Baseline dependent frequency averaging
     parms["doMB"]        = None         # Use wideband imaging?
     parms["MBnorder"]    = None         # order on wideband imaging
-    parms["MBmaxFBW"]    = None         # max. MB fractional bandwidth (Set by KAT7InitContFQParms
+    parms["MBmaxFBW"]    = None         # max. MB fractional bandwidth (Set by KAT7InitContFQParms)
     parms["PBCor"]       = False        # Pri. beam corr on final image
     parms["antSize"]     = 12.0         # ant. diameter (m) for PBCor
     parms["CleanRad"]    = None         # CLEAN radius (pix?) about center or None=autoWin
-    parms["xCells"]      = None
-    parms["yCells"]      = None
+    parms["xCells"]      = 15.0
+    parms["yCells"]      = 15.0
 
     # Final
     parms["doReport"]  =     True       # Generate source report?
@@ -280,7 +282,7 @@ def KATInitContParms(obsdata):
     parms["doSpecPlot"]    =  True       # Plot diagnostic spectra?
     parms["doSNPlot"]      =  True       # Plot SN tables etc
     parms["doDiagPlots"]   =  True       # Plot single source diagnostics
-    parms["doKntrPlots"]   =  True       # Contour plots
+    parms["doKntrPlots"]   =  False      # Contour plots
     parms["prtLv"]         =  2          # Amount of task print diagnostics
     parms["doMetadata"]    =  True       # Save source and project metadata
     parms["doHTML"]        =  True       # Output HTML report
@@ -318,7 +320,7 @@ def KATInitTargParms(parms,obsdata):
         source = []             # Desired targets are already in the parameter list.
     else:
         source  = obsdata['source']
-    for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name)   #Target sources + all calibrators
+        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name)   #Target sources + all calibrators
     parms["targets"] = list(set(parms["targets"])) # Remove duplicates
 
     # Fail gracefully if we can't calibrate
@@ -463,7 +465,7 @@ def KATInitContFQParms(parms,obsdata):
         parms["doMB"] = True
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.015
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.02
 	    if parms["MBnorder"]==None: parms["MBnorder"] = 1    
         else:                                             # Narrow-band
 	    parms["doMB"] = True
@@ -4403,14 +4405,11 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     imager.FOV         = FOV
     imager.Robust      = Robust
     imager.Niter       = Niter
-    imager.minFlux     = minFlux
     imager.maxPSCLoop  = maxPSCLoop
-    imager.minFluxPSC  = minFluxPSC
     imager.solPInt     = solPInt
     imager.solPMode    = solPMode
     imager.solPType    = solPType
     imager.maxASCLoop  = maxASCLoop
-    imager.minFluxASC  = minFluxASC
     imager.solAInt     = solAInt
     imager.solAMode    = solAMode
     imager.solAType    = solAType
@@ -4427,7 +4426,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     imager.xCells      = xCells
     imager.yCells      = yCells
     if doOutlier or ((doOutlier==None) and refFreq<6.0e9):
-        imager.OutlierDist = FOV*2.0   # Outliers from NVSS/SUMMS for lower frequencies
+        imager.OutlierDist = FOV*4.0   # Outliers from NVSS/SUMMS for lower frequencies
         if refFreq>1.0e9:
             imager.OutlierFlux = 0.01
         else:
@@ -4459,11 +4458,25 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         exposuresec=suinfo["Exposure"]*3600.*24.
         mindr=iflux/1500.0                       # Cutoff based on dynamic range of 1500:1
         SEFD=1220.18789703
-        # Cutoff cleaning at theoretical noise or minimum dynamic range.
+        thermNoise=SEFD/math.sqrt(exposuresec*bandwidth)
+        # Cutoff cleaning at 3 times theoretical noise or minimum dynamic range.
+        # Cutoff Phase self cal at 20.0sigma
+        # Cutoff Amp&Phase self cal at 500.0sigma
         if exposuresec>0.0:
-            imager.minFlux=max(SEFD/math.sqrt(exposuresec*bandwidth),mindr)
- 	else:
+            if minFlux is None: imager.minFlux=max(3.0*thermNoise,mindr)
+            else: imager.minFlux=minFlux
+        else:
             imager.minFlux=0.0
+        if exposuresec>0.0:
+            if minFluxPSC is None: imager.minFluxPSC=20.0*thermNoise
+            else: imager.minFluxPSC=minFluxPSC
+        else:
+            imager.minFluxPSC=0.002
+        if exposuresec>0.0:
+            if minFluxASC is None: imager.minFluxASC=500.0*thermNoise
+            else: imager.minFluxASC=minFluxASC
+        else:
+            imager.minFluxASC=0.5
         # Half the number of CC's for calibrators and narrow-band observations
 	if iflux>0.0 or bandwidth<50e6: imager.Niter=Niter/2
 	else: imager.Niter=Niter

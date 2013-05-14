@@ -11,14 +11,14 @@ import OErr, OSystem, AIPS, ObitTalkUtil
 # $OBIT_EXEC/share/data.
 
 def AIPSSetup(scratchdir=None):
-    cwd          = os.getcwd()
+    cwd          = './'
     home         = os.path.expanduser("~")
     # Is Obit installed and set up correctly? If not make data cwd/FITS.
     try:
     	OBIT_EXEC    = os.environ['OBIT']
 	OBIT_DATA    = OBIT_EXEC+'/share/data'
     except:
-	OBIT_EXEC    = cwd
+	OBIT_EXEC    = './'
 	OBIT_DATA    = OBIT_EXEC+'/FITS'
 
     #AIPS user number (arbitrary)
@@ -29,7 +29,7 @@ def AIPSSetup(scratchdir=None):
         aips_dir = os.environ['AIPS_ROOT']
         aips_version = os.environ['AIPS_VERSION'][-7:]
     except:
-        aips_dir = cwd
+        aips_dir = './'
         aips_version = '31DEC13'    # Should sort out where to change this if necessary!!
         
     configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
