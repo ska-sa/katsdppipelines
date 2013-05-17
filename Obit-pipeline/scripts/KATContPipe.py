@@ -95,9 +95,11 @@ def pipeline(args, options):
     KATInitContFQParms(parms,obsdata)
 
     # Update the editlist array with the static flags defined in parms["staticflags"]
-    staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
-    if os.path.exists(staticflagfile):
-        parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
+    # Only for wideband!!
+    if parms["selChan"]==1024:
+        staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
+        if os.path.exists(staticflagfile):
+            parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
 
     # General data parameters
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
@@ -642,15 +644,15 @@ def pipeline(args, options):
         else:
             slist = parms["targets"]
         KATImageTargets (uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, \
-                          doCalib=2, doBand=1,  flagVer=1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
+                          doCalib=-1, doBand=-1,  flagVer=-1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
                           Stokes=parms["Stokes"], FOV=parms["FOV"], Robust=parms["Robust"], Niter=parms["Niter"], \
-                          CleanRad=parms["CleanRad"], minFlux=parms["minFlux"], \
-                          xCells=parms["xCells"], yCells=parms["yCells"], \
-                          maxPSCLoop=parms["maxPSCLoop"], minFluxPSC=parms["minFluxPSC"], \
+                          CleanRad=parms["CleanRad"], minFlux=parms["minFlux"], OutlierSize=parms["OutlierSize"], \
+                          xCells=parms["xCells"], yCells=parms["yCells"], Reuse=parms["Reuse"], minPatch=parms["minPatch"], \
+                          maxPSCLoop=parms["maxPSCLoop"], minFluxPSC=parms["minFluxPSC"], noNeg=parms["noNeg"], \
                           solPInt=parms["solPInt"], solPMode=parms["solPMode"], solPType=parms["solPType"], \
-                          maxASCLoop=parms["maxASCLoop"], minFluxASC=parms["minFluxASC"], \
+                          maxASCLoop=parms["maxASCLoop"], minFluxASC=parms["minFluxASC"], nx=parms["nx"], ny=parms["ny"], \
                           solAInt=parms["solAInt"], solAMode=parms["solAMode"], solAType=parms["solAType"], \
-                          avgPol=parms["avgPol"], avgIF=parms["avgIF"], minSNR = 4.0, refAnt=parms["refAnt"], \
+                          avgPol=parms["avgPol"], avgIF=parms["avgIF"], minSNR = parms["minSNR"], refAnt=parms["refAnt"], \
                           do3D=parms["do3D"], BLFact=parms["BLFact"], BLchAvg=parms["BLchAvg"], \
                           doMB=parms["doMB"], norder=parms["MBnorder"], maxFBW=parms["MBmaxFBW"], \
                           PBCor=parms["PBCor"],antSize=parms["antSize"], \
