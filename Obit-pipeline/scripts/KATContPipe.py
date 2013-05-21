@@ -67,7 +67,10 @@ def pipeline(args, options):
         corrmode = "4"
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
-    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
+    try:
+        obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
+    except:
+        exit(-1)
     uv.Header(err)
 
     ####### Initialize parameters #####

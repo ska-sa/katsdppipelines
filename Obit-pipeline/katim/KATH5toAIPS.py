@@ -71,8 +71,19 @@ def KAT2AIPS (h5datafile, outUV, err, \
     if not OK:
         OErr.PSet(err)
         OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in "+h5datafile)
+
+    # Only process an observation if its longer than 30 minutes and has more than 3 antennas
+    
+    if len(katdata.ants)<4:
+        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")    
+        print katdata.end_time - katdata.start_time
+    if (katdata.end_time - katdata.start_time) < 1800.0:
+        OErr.PLog(err, OErr.Fatal, "Observation is too short to process")    
     if err.isErr:
         OErr.printErrMsg(err, "Error with h5 file")
+
+
+        
     # Extract metadata
     meta = GetKATMeta(katdata, targets, err)
     # Extract AIPS parameters of the uv data to the metadata
