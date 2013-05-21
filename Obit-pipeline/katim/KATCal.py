@@ -351,19 +351,6 @@ def KATInitTargParms(parms,obsdata):
                 parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
                 tcals.append(cal.name[0:16])
 
-    # Try and populate the ampcal and bpcal arrays automatically if there are none defined in the observation
-    if len(ampcal)==0 or len(bpcal)==0:
-        for s in source+gaincal+bpcal+ampcal+polcal:
-            fluxcal,offset=fluxcals.closest_to(s)
-            if offset*3600 < 1.5:
-                s.flux_model = fluxcal.flux_model
-                calflux=float(s.flux_density(parms["KAT7Freq"]/1e6))
-                calmodel=EVLACalModel(s.name[0:16],CalFlux=calflux,CalModelFlux=calflux)
-                parms["ACals"].append(calmodel)
-                parms["BPCals"].append(calmodel)
-    
-        EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
-
     #Plot the first bandpass calibrator by default
     if len(parms["BPCals"])>0:
         parms["plotSource"]  = parms["BPCals"][0]["Source"]
