@@ -41,7 +41,7 @@ def pipeline(args, options):
     err = OErr.OErr()
     ObitSys = AIPSSetup.AIPSSetup(scratchdir)
 
-     # Get the set up AIPS environment.
+    # Get the set up AIPS environment.
     AIPS_ROOT    = os.environ['AIPS_ROOT']
     AIPS_VERSION = os.environ['AIPS_VERSION']
 
@@ -81,12 +81,7 @@ def pipeline(args, options):
         exec(open(parmFile).read())
         EVLAAddOutFile(os.path.basename(parmFile), 'project', 'Pipeline input parameters' )
 
-    ########################## Make sure observation is imageable ####################
-    # Don't do anything if there is more than 1 spectral window in the data.
-    if len(obsdata['katdata'].spectral_windows)>1:
-        print "The pipeline only supports imaging with one spectral window."
-        exit(-1)
-
+   
     ############################# Set Project Processing parameters ##################
     ###### Initialise target parameters #####
     KATInitTargParms(parms,obsdata)
@@ -121,6 +116,20 @@ def pipeline(args, options):
     retCode = 0
     EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
    
+    ########################## Make sure observation is imageable ####################
+    # Don't do anything if there is more than 1 spectral window in the data.
+    if len(obsdata['katdata'].spectral_windows)>1:
+        mess = "The pipeline only supports imaging with one spectral window."
+        printMess(mess,logfile)
+        exit(-1)
+    if len(parms["BPCals"])==0:
+        mess = "No Bandpass calibrator. Can't image this observation."
+        printMess(mess,logfile)
+        exit(-1)
+    if len(parms["ACals"])==0:
+        mess = "No Amplitude calibrator. Can't image this observation."
+        exit(-1)
+
     mess = "Start project "+parms["project"]+" AIPS user no. "+str(AIPS.userno)+\
            ", KAT7 configuration "+parms["KAT7Cfg"]
     printMess(mess, logFile)
@@ -192,13 +201,6 @@ def pipeline(args, options):
                       doDescm=parms["doDescm"], flagVer=1, logfile=logFile, check=check, debug=debug)
         if uv==None and not check:
             raise RuntimeError,"Cannot Hann data "
-    
-    # Set uv is not done
-#    if uv==None and not check:
-#        uv = UV.newPAUV("AIPS UV DATA", EVLAAIPSName(project), dataClass[0:6], \
-#                        disk, parms["seq"], True, err)
-#        if err.isErr:
-#            OErr.printErrMsg(err, "Error creating AIPS data")
     
     # Clear any old calibration/editing 
     if parms["doClearTab"]:

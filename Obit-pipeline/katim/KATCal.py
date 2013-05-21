@@ -58,13 +58,14 @@ def KATInitContParms(obsdata):
     parms["selNIF"]        = 1     # Selected number of IFs, def = first  
 
     # Observation parameters
-    parms["selChan"]       = obsdata["numchan"]  # Selected number of channels, def = first  
+    parms["selChan"]       = obsdata["numchan"]       # Selected number of channels, def = first  
     parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
     parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
     parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
     parms["staticflags"]   = "KAT7_SRFI"              # Filename containing a list of frequencies to be flagged (in FITS)
     parms["KAT7Freq"]      = obsdata["centerfreq"]    # Representive frequency
     parms["KAT7Cfg"]       = obsdata["corrmode"]      # KAT-7 correlator configuraton
+    
     # Get the longest baseline
     antennas = obsdata["katdata"].ants
     longBline = 0.0
@@ -313,7 +314,7 @@ def KATInitTargParms(parms,obsdata):
     if len(parms["ACal"])>0:
         ampcal = [obsdata["katdata"].catalogue[cal] for cal in parms["ACal"] if cal is not None]
     else:
-        ampcal = bpcal        # Later provide support for this properly
+        ampcal = bpcal        # TODO: Later provide support for this properly
 
     if len(parms["PCal"])>0:
         gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
@@ -326,21 +327,12 @@ def KATInitTargParms(parms,obsdata):
         source = []             # Desired targets are already in the parameter list.
     else:
         source  = obsdata['source']
-        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name)   #Target sources + all calibrators
+        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name[0:16])   #Target sources + all calibrators
     parms["targets"] = list(set(parms["targets"])) # Remove duplicates
-
-    # Fail gracefully if we can't calibrate
-    if len(bpcal)==0:
-        raise RuntimeError("No bandpass calibrator source in observation!")
-    if len(ampcal)==0:
-        raise RuntimeError("No amplitude calibrator source in observation!")
-    
-    #Plot the first bandpass calibrator by default
-    parms["plotSource"]  = bpcal[0].name
 
     # Now make calibrater model dicts.
     # Bandpass calibrators
-    parms["BPCals"] = [EVLACalModel(cal.name) for cal in bpcal]
+    parms["BPCals"] = [EVLACalModel(cal.name[0:16]) for cal in bpcal]
     EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
 
     # Amplitude Calibrators
@@ -356,16 +348,33 @@ def KATInitTargParms(parms,obsdata):
             cal.flux_model = fluxcal.flux_model
             if not cal in tcals:
                 calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                parms["ACals"].append(EVLACalModel(cal.name,CalFlux=calflux,CalModelFlux=calflux))
-                tcals.append(cal.name)
+                parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
+                tcals.append(cal.name[0:16])
+
+    # Try and populate the ampcal and bpcal arrays automatically if there are none defined in the observation
+    if len(ampcal)==0 or len(bpcal)==0:
+        for s in source+gaincal+bpcal+ampcal+polcal:
+            fluxcal,offset=fluxcals.closest_to(s)
+            if offset*3600 < 1.5:
+                s.flux_model = fluxcal.flux_model
+                calflux=float(s.flux_density(parms["KAT7Freq"]/1e6))
+                calmodel=EVLACalModel(s.name[0:16],CalFlux=calflux,CalModelFlux=calflux)
+                parms["ACals"].append(calmodel)
+                parms["BPCals"].append(calmodel)
+    
+        EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
+
+    #Plot the first bandpass calibrator by default
+    if len(parms["BPCals"])>0:
+        parms["plotSource"]  = parms["BPCals"][0]["Source"]
 
     # Delay Calibrators
     DCals = []
     tcals = []
     for cal in bpcal + gaincal:
         if not cal in tcals:
-            DCals.append(EVLACalModel(cal.name))
-            tcals.append(cal.name)
+            DCals.append(EVLACalModel(cal.name[0:16]))
+            tcals.append(cal.name[0:16])
     # Check for standard model
     EVLAStdModel(DCals, parms["KAT7Freq"])
     parms["DCals"]          = DCals      # delay calibrators
@@ -376,8 +385,8 @@ def KATInitTargParms(parms,obsdata):
     tcals = []
     for cal in gaincal:
         if not cal in tcals:
-            PCals.append(EVLACalModel(cal.name))
-            tcals.append(cal.name)
+            PCals.append(EVLACalModel(cal.name[0:16]))
+            tcals.append(cal.name[0:16])
     # Check for standard model
     EVLAStdModel(PCals, parms["KAT7Freq"])
     parms["PCals"]          = PCals   # Phase calibrator(s)
@@ -4458,6 +4467,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     OK = False   # Some must work
     # Loop over slist
     for sou in slist:
+        sou=sou.replace(' ','_')         # Just in case a stray space in a source name has made it to here
         suinfo = EVLAGetTimes(uv, sou, err, logfile=logfile, check=check,debug=debug)
         if doOutlier or ((doOutlier==None) and refFreq<6.0e9):
             # Use NVSS north of dec 30 S and SUMMS southward
