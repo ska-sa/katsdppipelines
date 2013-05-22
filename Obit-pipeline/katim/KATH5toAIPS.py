@@ -580,7 +580,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         tm = katdata.timestamps[:]
         nint = len(tm)        
         el=target.azel(tm[int(nint/2)])[1]*180./math.pi
-        if el<15.:   # Throw away scans at low elevation
+        if el<20.:   # Throw away scans at low elevation
             msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
             OErr.PLog(err, OErr.Info, msg)
             OErr.printErr(err)

@@ -299,10 +299,11 @@ def KATInitContParms(obsdata):
 
 # end KAT-7 InitContParms
 
-def KATInitTargParms(parms,obsdata):
+def KATInitTargParms(parms,obsdata,uv,err):
     """
     Update the target paramaters for the pipeline using the metadata 
-    extracted from the h5 file.
+    extracted from the h5 file. 
+    Also check the uv data and remove targets which have been removed from the data. 
     """    
     # Sources
     # Check if user has supplied them
@@ -329,10 +330,19 @@ def KATInitTargParms(parms,obsdata):
         source  = obsdata['source']
         for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name[0:16])   #Target sources + all calibrators
     parms["targets"] = list(set(parms["targets"])) # Remove duplicates
+    # Do this here to catch user input targets with spaces in the name.
+    parms["targets"] = [targ.replace(' ','_') for targ in parms["targets"]]
 
     # Now make calibrater model dicts.
     # Bandpass calibrators
-    parms["BPCals"] = [EVLACalModel(cal.name[0:16]) for cal in bpcal]
+    # Check for source in SU table and only use bpcal with the most visibilities
+    maxvis=0
+    for cal in bpcal:
+        calname=cal.name[0:16]
+        suinfo = EVLAGetTimes(uv, calname, err)
+        if suinfo['numVis'] > 0:
+            if suinfo['numVis'] > maxvis:
+                parms["BPCals"]=[EVLACalModel(cal.name[0:16])]
     EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
 
     # Amplitude Calibrators
@@ -351,7 +361,7 @@ def KATInitTargParms(parms,obsdata):
                 parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
                 tcals.append(cal.name[0:16])
 
-    #Plot the first bandpass calibrator by default
+    #Plot the bandpass calibrator with the most visibilities
     if len(parms["BPCals"])>0:
         parms["plotSource"]  = parms["BPCals"][0]["Source"]
 
@@ -1823,7 +1833,7 @@ def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, \
     return 0
     # end EVLADelayCal
 
-def EVLACalAP(uv, target, ACals, err, \
+def KATCalAP(uv, target, ACals, err, \
               PCals=None, FQid=0, calFlux=None, \
               doCalib=-1, gainUse=0, doBand=0, BPVer=0, flagVer=-1, \
               BChan=1, EChan=1, \
@@ -1832,7 +1842,7 @@ def EVLACalAP(uv, target, ACals, err, \
               doPlot=False, plotFile="./APCal.ps", \
               check=False, debug = False, noScrat=[], logfile = ""):
     """
-    Basic Amplitude and phase cal for EVLA data
+    Basic Amplitude and phase cal for KAT-7 data
     
     Amplitude calibration can be based either on a point flux
     density or a calibrator model.
@@ -2106,12 +2116,12 @@ def EVLACalAP(uv, target, ACals, err, \
             else:
                 OK = True
                 OKCals2.append(calib.Sources[0])
-            # end phase calibration loop
-            # Something work?
-            if not OK:
-                printMess("All phase calibrators failed", logfile)
-                return 1  
-        # end if phase cals
+        # end phase calibration loop
+        # Something work?
+        if not OK:
+            printMess("All phase calibrators failed", logfile)
+            return 1  
+    # end if phase cals
 
     solnVer2 = calib.solnVer
     # Smoothing?   
@@ -4454,6 +4464,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     OK = False   # Some must work
     # Loop over slist
     for sou in slist:
+        print sou
         sou=sou.replace(' ','_')         # Just in case a stray space in a source name has made it to here
         suinfo = EVLAGetTimes(uv, sou, err, logfile=logfile, check=check,debug=debug)
         if doOutlier or ((doOutlier==None) and refFreq<6.0e9):

@@ -87,7 +87,7 @@ def pipeline(args, options):
    
     ############################# Set Project Processing parameters ##################
     ###### Initialise target parameters #####
-    KATInitTargParms(parms,obsdata)
+    KATInitTargParms(parms,obsdata,uv,err)
 
     # frequency/configuration dependent default parameters
     KATInitContFQParms(parms,obsdata)
@@ -125,10 +125,12 @@ def pipeline(args, options):
         mess = "The pipeline only supports imaging with one spectral window."
         printMess(mess,logfile)
         exit(-1)
+    # Don't do anything if there are no bandpass calibrators in the data.
     if len(parms["BPCals"])==0:
         mess = "No Bandpass calibrator. Can't image this observation."
         printMess(mess,logfile)
         exit(-1)
+    # Don't do anything if there are no amplitude calibrators in the data.
     if len(parms["ACals"])==0:
         mess = "No Amplitude calibrator. Can't image this observation."
         exit(-1)
@@ -395,7 +397,7 @@ def pipeline(args, options):
     # Amp & phase Calibrate
     if parms["doAmpPhaseCal"]:
         plotFile = fileRoot+"_APCal.ps"
-        retCode = EVLACalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], 
+        retCode = KATCalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], 
                              doCalib=2, doBand=1, BPVer=1, flagVer=2, \
                              BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
                              solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
@@ -507,7 +509,7 @@ def pipeline(args, options):
         # Amp & phase Recalibrate
         if parms["doAmpPhaseCal2"]:
             plotFile = fileRoot+"_APCal2.ps"
-            retCode = EVLACalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], \
+            retCode = KATCalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], \
                                  doCalib=2, doBand=1, BPVer=1, flagVer=2, \
                                  BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
                                  solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
