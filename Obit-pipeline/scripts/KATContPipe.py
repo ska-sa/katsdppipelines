@@ -123,12 +123,12 @@ def pipeline(args, options):
     # Don't do anything if there is more than 1 spectral window in the data.
     if len(obsdata['katdata'].spectral_windows)>1:
         mess = "The pipeline only supports imaging with one spectral window."
-        printMess(mess,logfile)
+        printMess(mess,logFile)
         exit(-1)
     # Don't do anything if there are no bandpass calibrators in the data.
     if len(parms["BPCals"])==0:
         mess = "No Bandpass calibrator. Can't image this observation."
-        printMess(mess,logfile)
+        printMess(mess,logFile)
         exit(-1)
     # Don't do anything if there are no amplitude calibrators in the data.
     if len(parms["ACals"])==0:

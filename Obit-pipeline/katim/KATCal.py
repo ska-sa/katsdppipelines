@@ -214,15 +214,15 @@ def KATInitContParms(obsdata):
     parms["PCChWid"] = 5             # Channel averaging in instrumental polarization
     
     # Right-Left phase (EVPA) calibration, uses same  values as Right-Left delay calibration
-    parms["doRLCal"]    = False    # Set RL phases from RLCal - RLDCal or RLPCal
-    parms["RLPCal"]     = None     # RL Calibrator source name, in None no IF based cal.
-    parms["RLPhase"]    = 0.0      # R-L phase of RLPCal (deg) at 1 GHz
-    parms["RLRM"]       = 0.0      # R-L calibrator RM (NYI)
-    parms["rlChWid"]    = 3        # Number of channels in running mean RL BP soln
-    parms["rlsolint1"]  = 10./60   # First solution interval (min), 0=> scan average
-    parms["rlsolint2"]  = 10.0     # Second solution interval (min)
-    parms["rlCleanRad"] = None     # CLEAN radius about center or None=autoWin
-    parms["rlFOV"]      = 0.05     # Field of view radius (deg) needed to image RLPCal
+    parms["doRLCal"]    = False      # Set RL phases from RLCal - RLDCal or RLPCal
+    parms["RLPCal"]     = None       # RL Calibrator source name, in None no IF based cal.
+    parms["RLPhase"]    = 0.0        # R-L phase of RLPCal (deg) at 1 GHz
+    parms["RLRM"]       = 0.0        # R-L calibrator RM (NYI)
+    parms["rlChWid"]    = 3          # Number of channels in running mean RL BP soln
+    parms["rlsolint1"]  = 10./60     # First solution interval (min), 0=> scan average
+    parms["rlsolint2"]  = 10.0       # Second solution interval (min)
+    parms["rlCleanRad"] = None       # CLEAN radius about center or None=autoWin
+    parms["rlFOV"]      = 0.05       # Field of view radius (deg) needed to image RLPCal
     
     # Recalibration
     parms["doRecal"]       = True        # Redo calibration after editing
@@ -251,11 +251,11 @@ def KATInitContParms(obsdata):
     parms["minFluxPSC"]  = None         # Min flux density peak for phase self cal
     parms["solPInt"]     = 0.2          # phase self cal solution interval (min)
     parms["maxASCLoop"]  = 1            # Max. number of Amp+phase self cal loops
-    parms["minFluxASC"]  = None          # Min flux density peak for amp+phase self cal
+    parms["minFluxASC"]  = None         # Min flux density peak for amp+phase self cal
     parms["solAInt"]     = 1.0          # amp+phase self cal solution interval (min)
     parms["nTaper"]      = 0            # Number of additional imaging multiresolution tapers
-    parms["Tapers"]      = [20.0,0.0]   # List of tapers in pixels
-    parms["do3D"]        = True        # Make ref. pixel tangent to celest. sphere for each facet
+    parms["Tapers"]      = [0.0]        # List of tapers in pixels
+    parms["do3D"]        = True         # Make ref. pixel tangent to celest. sphere for each facet
     parms["noNeg"]       = False        # F=Allow negative components in self cal model
     parms["BLFact"]      = 1.00         # Baseline dependent time averaging
     parms["BLchAvg"]     = False        # Baseline dependent frequency averaging
@@ -337,6 +337,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
     # Bandpass calibrators
     # Check for source in SU table and only use bpcal with the most visibilities
     maxvis=0
+    parms["BPCals"]=[]
     for cal in bpcal:
         calname=cal.name[0:16]
         suinfo = EVLAGetTimes(uv, calname, err)
@@ -4384,7 +4385,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             pass
         imager.norder = norder
         imager.maxFBW = maxFBW
-        imager.prtLv = 2
+        imager.prtLv = 5
     else:
         imager = ObitTask.ObitTask("Imager")
         imager.prtLv = 2
@@ -4461,6 +4462,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         imager.prtLv = 5
         imager.i
         imager.debug = debug
+    imager.debug=True
     OK = False   # Some must work
     # Loop over slist
     for sou in slist:
