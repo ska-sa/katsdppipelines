@@ -38,7 +38,7 @@ except Exception, exception:
     raise  RuntimeError, "KAT software unavailable"
 else:
     pass
-import time,math
+import time,math,os
 import UV, UVVis, OErr, UVDesc, Table, History
 from OTObit import day2dhms
 import numpy      
@@ -71,16 +71,18 @@ def KAT2AIPS (h5datafile, outUV, err, \
     if not OK:
         OErr.PSet(err)
         OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in "+h5datafile)
-
     # Only process an observation if its longer than 30 minutes and has more than 3 antennas   
     if len(katdata.ants)<4:
         OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")    
-        print katdata.end_time - katdata.start_time
-    if (katdata.end_time - katdata.start_time) < 1800.0:
-        OErr.PLog(err, OErr.Fatal, "Observation is too short to process")    
+    #if (katdata.end_time - katdata.start_time) < 1800.0:
+    #    OErr.PLog(err, OErr.Fatal, "Observation is too short to process")    
+    # Only image things that have been made with the correct script.
+    script=katdata.file['MetaData/Configuration/Observation'].attrs['script_name']
+    scriptname=os.path.basename(script)
+    if scriptname not in ['image.py','track.py','runobs.py']:
+         OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
     if err.isErr:
         OErr.printErrMsg(err, "Error with h5 file")
-
     # Extract metadata
     meta = GetKATMeta(katdata, targets, err)
     # Extract AIPS parameters of the uv data to the metadata
@@ -342,7 +344,7 @@ def WriteFQTable(outUV, meta, err):
         if err.isErr:
             OErr.printErrMsg(err, "Error zapping old FQ table")
     reffreq =  meta["spw"][0][1]   # reference frequency
-    noif    = len(meta["spw"])     # Number of IFs
+    noif    = 1     # Number of IFs (1 always for KAT7)
     fqtab = outUV.NewTable(Table.READWRITE, "AIPS FQ",1,err,numIF=noif)
     if err.isErr:
         OErr.printErrMsg(err, "Error with FQ table")
@@ -350,7 +352,7 @@ def WriteFQTable(outUV, meta, err):
     if err.isErr:
         OErr.printErrMsg(err, "Error opening FQ table")
     # Update header
-    fqtab.keys['NO_IF'] = len(meta["spw"])  # Structural so no effect
+    fqtab.keys['NO_IF'] = 1  # Structural so no effect
     Table.PDirty(fqtab)  # Force update
     # Create row
     row = {'FRQSEL': [1], 'CH WIDTH': [0.0], 'TOTAL BANDWIDTH': [0.0], \
