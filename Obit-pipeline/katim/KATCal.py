@@ -4385,7 +4385,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             pass
         imager.norder = norder
         imager.maxFBW = maxFBW
-        imager.prtLv = 5
+        imager.prtLv = 2
     else:
         imager = ObitTask.ObitTask("Imager")
         imager.prtLv = 2
@@ -4462,11 +4462,9 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         imager.prtLv = 5
         imager.i
         imager.debug = debug
-    imager.debug=True
     OK = False   # Some must work
     # Loop over slist
     for sou in slist:
-        print sou
         sou=sou.replace(' ','_')         # Just in case a stray space in a source name has made it to here
         suinfo = EVLAGetTimes(uv, sou, err, logfile=logfile, check=check,debug=debug)
         if doOutlier or ((doOutlier==None) and refFreq<6.0e9):
