@@ -85,6 +85,10 @@ def KAT2AIPS (h5datafile, outUV, err, \
         OErr.printErrMsg(err, "Error with h5 file")
     # Extract metadata
     meta = GetKATMeta(katdata, targets, err)
+    if len(meta["spw"])>1:
+        OErr.PLog(err, OErr.Fatal, "Can only image observations with 1 spectral window.")
+    if err.isErr:
+        OErr.printErrMsg(err, "Error with h5 file")
     # Extract AIPS parameters of the uv data to the metadata
     meta["Aproject"] = outUV.Aname
     meta["Aclass"] = outUV.Aclass
@@ -639,8 +643,8 @@ def ConvertKATData(outUV, katdata, meta, err):
     # end loop over scan
     if numvis>0:
         msg= "Applied %s online flags to %s visibilities (%.3f%%)"%(numflags,numvis,float(numflags)/float(numvis))
-    OErr.PLog(err, OErr.Info, msg);
-    OErr.printErr(err)
+        OErr.PLog(err, OErr.Info, msg)
+        OErr.printErr(err)
     outUV.Close(err)
     if err.isErr:
         OErr.printErrMsg(err, "Error closing data")

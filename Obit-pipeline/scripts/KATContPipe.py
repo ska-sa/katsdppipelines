@@ -65,6 +65,8 @@ def pipeline(args, options):
         corrmode = "2"
     elif len(rawfile.channels) == 4096:
         corrmode = "4"
+    elif len(rawfile.channels) == 8192:
+        corrmode = "8"
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
     try:
@@ -93,11 +95,11 @@ def pipeline(args, options):
     KATInitContFQParms(parms,obsdata)
 
     # Update the editlist array with the static flags defined in parms["staticflags"]
-    # Only for wideband!!
+    # Only for wideband !!
     if parms["selChan"]==1024:
-        staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
-        if os.path.exists(staticflagfile):
-            parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
+    	staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
+    	if os.path.exists(staticflagfile):
+        	parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
 
     # General data parameters
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
@@ -354,7 +356,7 @@ def pipeline(args, options):
         retCode = EVLADelayCal(uv, parms["DCals"], err,  \
                                BChan=parms["delayBChan"], EChan=parms["delayEChan"], \
                                doCalib=2, flagVer=2, doBand=-1, \
-                               solInt=parms["delaySolInt"], smoTime=1.0/60.0,  \
+                               solInt=parms["delaySolInt"], smoTime=parms["delaySmoo"],  \
                                refAnts=[parms["refAnt"]], doTwo=parms["doTwo"], 
                                doZeroPhs=parms["delayZeroPhs"], \
                                doPlot=parms["doSNPlot"], plotFile=plotFile, \
@@ -467,7 +469,7 @@ def pipeline(args, options):
             retCode = EVLADelayCal(uv, parms["DCals"], err, \
                                    BChan=parms["delayBChan"], EChan=parms["delayEChan"], \
                                    doCalib=2, flagVer=2, doBand=-1, \
-                                   solInt=parms["delaySolInt"], smoTime=1.0/60.0,  \
+                                   solInt=parms["delaySolInt"], smoTime=parms["delaySmoo"],  \
                                    refAnts=[parms["refAnt"]], doTwo=parms["doTwo"], \
                                    doZeroPhs=parms["delayZeroPhs"], \
                                    doPlot=parms["doSNPlot"], plotFile=plotFile, \

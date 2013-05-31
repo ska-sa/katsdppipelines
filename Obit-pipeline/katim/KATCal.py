@@ -101,7 +101,7 @@ def KATInitContParms(obsdata):
     parms["quackBegDrop"] = 0.1         # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
-    parms["doShad"]       = None        # Shadow flagging (config dependent)
+    parms["doShad"]       = True        # Shadow flagging (config dependent)
     parms["shadBl"]       = 25.0        # Minimum shadowing baseline (m)
     parms["doElev"]       = False       # Do elevation flagging
     parms["minElev"]      = 15.0        # Minimum elevation to keep.
@@ -140,10 +140,10 @@ def KATInitContParms(obsdata):
                                         # NB: based on original number of channels, halved for Hanning
 
     # Delay calibration
-    parms["doDelayCal"]   =  False      # Determine/apply delays from contCals
-    parms["delaySolInt"]  =  0.25        # delay solution interval (min)
-    parms["delaySmoo"]    =  0.25       # Delay smoothing time (hr)
-    parms["doTwo"]        =  True       # Use two baseline combinations in delay cal
+    parms["doDelayCal"]   =  True       # Determine/apply delays from contCals
+    parms["delaySolInt"]  =  10.0        # delay solution interval (min)
+    parms["delaySmoo"]    =  1.5        # Delay smoothing time (hr)
+    parms["doTwo"]        =  True      # Use two baseline combinations in delay cal
     parms["delayZeroPhs"] =  False      # Zero phase in Delay solutions?
     parms["delayBChan"]   =  None       # first channel to use in delay solutions
     parms["delayEChan"]   =  None       # highest channel to use in delay solutions
@@ -152,14 +152,14 @@ def KATInitContParms(obsdata):
     parms["doBPCal"] =       True       # Determine Bandpass calibration
     parms["bpBChan1"] =      1          # Low freq. channel,  initial cal
     parms["bpEChan1"] =      0          # Highest freq channel, initial cal, 0=>all
-    parms["bpDoCenter1"] =   0.1        # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
-    parms["bpBChan2"] =      1          # Low freq. channel for BP cal
-    parms["bpEChan2"] =      0          # Highest freq channel for BP cal,  0=>all 
+    parms["bpDoCenter1"] =   0.05       # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
+    parms["bpBChan2"] =      None       # Low freq. channel for BP cal
+    parms["bpEChan2"] =      None       # Highest freq channel for BP cal,  0=>all 
     parms["bpChWid2"] =      1          # Number of channels in running mean BP soln
     parms["bpdoAuto"] =      False      # Use autocorrelations rather than cross?
     parms["bpsolMode"] =     'A&P'      # Band pass type 'A&P', 'P', 'P!A'
     parms["bpsolint1"] =     10.0/60.0  # BPass phase correction solution in min
-    parms["bpsolint2"] =     0.0       # BPass bandpass solution in min 0.0->scan average
+    parms["bpsolint2"] =     0.0        # BPass bandpass solution in min 0.0->scan average
     parms["bpUVRange"] =    [0.0,0.0]   # uv range for bandpass cal
     parms["specIndex"] =    -0.7        # Spectral index of BP Cal
     parms["doSpecPlot"] =    True       # Plot the amp. and phase across the spectrum
@@ -226,7 +226,7 @@ def KATInitContParms(obsdata):
     
     # Recalibration
     parms["doRecal"]       = True        # Redo calibration after editing
-    parms["doDelayCal2"]   = False       # Group Delay calibration of averaged data?, 2nd pass
+    parms["doDelayCal2"]   = True       # Group Delay calibration of averaged data?, 2nd pass
     parms["doBPCal2"]      = True        # Determine Bandpass calibration, 2nd pass
     parms["doAmpPhaseCal2"]= True        # Amplitude/phase calibration, 2nd pass
     parms["doAutoFlag2"]   = True        # Autoflag editing after final calibration?
@@ -315,7 +315,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
     if len(parms["ACal"])>0:
         ampcal = [obsdata["katdata"].catalogue[cal] for cal in parms["ACal"] if cal is not None]
     else:
-        ampcal = bpcal        # TODO: Later provide support for this properly
+        ampcal = obsdata['bpcal']        # TODO: Later provide support for this properly
 
     if len(parms["PCal"])>0:
         gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
@@ -343,7 +343,8 @@ def KATInitTargParms(parms,obsdata,uv,err):
         suinfo = EVLAGetTimes(uv, calname, err)
         if suinfo['numVis'] > 0:
             if suinfo['numVis'] > maxvis:
-                parms["BPCals"]=[EVLACalModel(cal.name[0:16])]
+                parms["plotSource"] = calname
+            parms["BPCals"].append(EVLACalModel(calname))
     EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
 
     # Amplitude Calibrators
@@ -360,19 +361,15 @@ def KATInitTargParms(parms,obsdata,uv,err):
             if not cal in tcals:
                 calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
                 parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
-                tcals.append(cal.name[0:16])
+                tcals.append(cal)
 
-    #Plot the bandpass calibrator with the most visibilities
-    if len(parms["BPCals"])>0:
-        parms["plotSource"]  = parms["BPCals"][0]["Source"]
-
-    # Delay Calibrators
+    # Delay Calibrators (use bandpass calibrators only)
     DCals = []
     tcals = []
-    for cal in bpcal + gaincal:
+    for cal in bpcal + ampcal + gaincal:
         if not cal in tcals:
             DCals.append(EVLACalModel(cal.name[0:16]))
-            tcals.append(cal.name[0:16])
+            tcals.append(cal)
     # Check for standard model
     EVLAStdModel(DCals, parms["KAT7Freq"])
     parms["DCals"]          = DCals      # delay calibrators
@@ -384,7 +381,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
     for cal in gaincal:
         if not cal in tcals:
             PCals.append(EVLACalModel(cal.name[0:16]))
-            tcals.append(cal.name[0:16])
+            tcals.append(cal)
     # Check for standard model
     EVLAStdModel(PCals, parms["KAT7Freq"])
     parms["PCals"]          = PCals   # Phase calibrator(s)
@@ -419,20 +416,34 @@ def KATInitContFQParms(parms,obsdata):
     if doHann:
         nchan = int(nchan/2)
     # halve the number of channels if Hanning
+    # Set spectral baseline for FD flagging ignoring end channels
+    ch1 = int (max(2, nchan*0.2))
+    ch2 = nchan - int (max(2, nchan*0.2))
+    #Correct bandwidth for final averaged data
+    frac = 1.0 - (ch1 + (nchan - ch2))/nchan 
+    bandwidth = bandwidth*frac
 
     # Delay channels
-    parms["delayBChan"] =  max(2, 0.05*nchan)              # first channel to use in delay solutions
-    parms["delayEChan"] =  min(nchan-2, nchan-0.05*nchan)  # highest channel to use in delay solutions
+    if parms["delayBChan"] == None:
+        parms["delayBChan"] =  int(max(2, 0.05*nchan))              # first channel to use in delay solutions
+    if parms["delayEChan"] == None:
+        parms["delayEChan"] =  int(min(nchan-2, nchan-0.05*nchan))  # highest channel to use in delay solutions
 
+    # BPCal channels
+    if parms["bpBChan2"] == None:
+        parms["bpBChan2"] = int(max(2, 0.05*nchan))          
+    if parms["bpEChan2"] == None:
+        parms["bpEChan2"] = int(min(nchan-2, nchan-0.05*nchan))
+        
     # Amp cal channels
     if parms["doAmpPhaseCal"]==None:
-        parms["doAmpPhaseCal"] = True                       # Amplitude/phase calibration
+        parms["doAmpPhaseCal"] = True                            # Amplitude/phase calibration
     parms["ampBChan"]  =  int(max(2, 0.05*nchan))                # first channel to use in A&P solutions
     parms["ampEChan"]  =  int(min(nchan-2, nchan-0.05*nchan))    # highest channel to use in A&P solutions
-    parms["doAmpEdit"] =  True                              # Edit/flag on the basis of amplitude solutions
-    parms["ampSigma"]  =  20.0                              # Multiple of median RMS about median gain to clip/flag
+    parms["doAmpEdit"] =  True                                   # Edit/flag on the basis of amplitude solutions
+    parms["ampSigma"]  =  20.0                                   # Multiple of median RMS about median gain to clip/flag
     # Should be fairly large
-    parms["ampEditFG"] =  2                                 # FG table to add flags to, <=0 -> no FG entries
+    parms["ampEditFG"] =  2                                      # FG table to add flags to, <=0 -> no FG entries
 
     # Flag the first 20% and last 20% of channels
     if parms["BChDrop"]== None:
@@ -450,9 +461,7 @@ def KATInitContFQParms(parms,obsdata):
     if (parms["FDmaxAmp"]==None):
         parms["FDmaxAmp"]    = parms["IClip"][0]     # Maximum average amplitude (Jy)
     
-    # Set spectral baseline for FD flagging ignoring end channels
-    ch1 = int (max(2, nchan*0.2))
-    ch2 = nchan - int (max(2, nchan*0.2))
+    
     if parms["FDbaseSel"]==None:
         parms["FDbaseSel"] = [ch1, ch2, 1, 0]
     # Set spectral baseline for FD1 flagging ignoring end channels
@@ -463,9 +472,7 @@ def KATInitContFQParms(parms,obsdata):
         parms["CABChan"] =       ch1          # First Channel to copy
     if parms["CAEChan"] == None:
         parms["CAEChan"] =       ch2          # Highest Channel to copy
-    #Correct bandwidth for final averaged data
-    frac = 1.0 - (ch1 + (nchan - ch2))/nchan 
-    bandwidth = bandwidth*frac
+    
     if parms["chAvg"] == None:
         if bandwidth>50e6:
             parms["chAvg"] =         1
