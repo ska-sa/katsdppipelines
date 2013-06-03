@@ -36,10 +36,20 @@ def pipeline(args, options):
         print 'Specified output directory: '+ outputdir + 'does not exist.'
         exit(-1)
 
+    #################### Initialize filenames ####################################
+    ################################## Process #####################################
+    fileRoot      = outputdir+'/'+os.path.basename(h5file).rstrip('.h5') # root of file name
+    logFile       = fileRoot+".log"   # Processing log file
+    uvc           = None
+    avgClass      = ("UVAv")[0:6]  # Averaged data AIPS class
+
     ############################# Initialize OBIT and AIPS ##########################################
     noScrat     = []
     err = OErr.OErr()
     ObitSys = AIPSSetup.AIPSSetup(scratchdir)
+    # Logging directly to logFile
+    OErr.PInit(err, 2, logFile)
+    EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
 
     # Get the set up AIPS environment.
     AIPS_ROOT    = os.environ['AIPS_ROOT']
@@ -104,22 +114,13 @@ def pipeline(args, options):
     # General data parameters
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
-    
-    ################################## Process #####################################
-    fileRoot      = outputdir+'/'+parms["project"] # root of file name
-    logFile       = fileRoot[:-1]+".log"   # Processing log file
-    uvc           = None
-    avgClass      = ("UVAv")[0:6]  # Averaged data AIPS class
     outIClass     = parms["outIClass"] # image AIPS class
-
+    
     # Load the outputs pickle jar
     EVLAFetchOutFiles()
 
-    # Logging directly to logFile
-    OErr.PInit(err, parms["prtLv"], logFile)
     OSystem.PAllowThreads(nThreads)   # Allow threads in Obit/oython
     retCode = 0
-    EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
    
     ########################## Make sure observation is imageable ####################
     # Don't do anything if there is more than 1 spectral window in the data.
@@ -171,14 +172,49 @@ def pipeline(args, options):
                          Stokes=edt["Stokes"], Reason=edt["Reason"])
             OErr.printErrMsg(err, "Error Flagging")
 
+    # Drop End Channels
+    if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
+        # Channels based on original number, reduced if Hanning
+        nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
+        #fact = parms["selChan"]/nchan   # Hanning reduction factor
+        BChDrop = parms["BChDrop"]
+        EChDrop = parms["EChDrop"]
+        mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
+        printMess(mess, logFile)
+        retCode = EVLADropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
+                                logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error Copying FG table"
+   
+    # Quack to remove data from start and end of each scan
+    if parms["doQuack"]:
+        retCode = EVLAQuack (uv, err, begDrop=parms["quackBegDrop"], endDrop=parms["quackEndDrop"], \
+                             Reason=parms["quackReason"], \
+                             logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error Quacking data"
+    
+    # Flag antennas shadowed by others?
+    if parms["doShad"]:
+        retCode = EVLAShadow (uv, err, shadBl=parms["shadBl"], \
+                              logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error Shadow flagging data"
 
+    # Perform elevation flagging?
+    if parms["doElev"]:
+        retcode = KAT7Elev (uv, err, minelev=parms["minElev"], \
+                                logfile=logFile, check=check, debug=debug)
+        if retcode!=0:
+            raise RuntimeError,"Error Elevation flagging data"
+    
     # Initial wide average frequency + time domain editing
     if parms["doInitFlag"] and not check:
         mess = "Initial time domain editing"
         printMess(mess, logFile)
         #Time editing First
         retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
-                                  avgTime=0.0, avgFreq=1,  chAvg=256, \
+                                  avgTime=0.0, avgFreq=1,  chAvg=int(parms["selChan"]/2), \
                                   timeWind=5.0,flagVer=1, flagTab=1,flagSig=5.0, \
                                   logfile=logFile, check=check, debug=False)
         if retCode!=0:
@@ -190,7 +226,7 @@ def pipeline(args, options):
                                 timeAvg=5.0, \
                                 doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=255,  \
                                 FDmaxRMS=[5.0,0.1], FDmaxRes=20.0,  \
-                                FDmaxResBL=5.0,  FDbaseSel=parms["FDbaseSel"],\
+                                FDmaxResBL=5.0,  FDbaseSel=[parms["BChDrop"],parms["selChan"]-parms["EChDrop"],1,1],\
                                 nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
            raise  RuntimeError,"Error in AutoFlag"
@@ -216,49 +252,13 @@ def pipeline(args, options):
         EVLAClearCal(uv, err, doGain=parms["doClearGain"], doFlag=parms["doClearFlag"], doBP=parms["doClearBP"], check=check)
         OErr.printErrMsg(err, "Error resetting calibration")
     
-    # Drop end channels of spectra?  Only if new FG 2
-    if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
-        # Channels based on original number, reduced if Hanning
-        nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
-        #fact = parms["selChan"]/nchan   # Hanning reduction factor
-        BChDrop = parms["BChDrop"]
-        EChDrop = parms["EChDrop"]
-        mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
-        printMess(mess, logFile)
-        retCode = EVLADropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
-                                logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Copying FG table"
-   
     # Copy FG 1 to FG 2
-    if parms["doCopyFG"]:
-        mess =  "Copy FG 1 to FG 2"
-        printMess(mess, logFile)
-        retCode = EVLACopyFG (uv, err, logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Copying FG table"
-    
-    # Quack to remove data from start and end of each scan
-    if parms["doQuack"]:
-        retCode = EVLAQuack (uv, err, begDrop=parms["quackBegDrop"], endDrop=parms["quackEndDrop"], \
-                             Reason=parms["quackReason"], \
-                             logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Quacking data"
-    
-    # Flag antennas shadowed by others?
-    if parms["doShad"]:
-        retCode = EVLAShadow (uv, err, shadBl=parms["shadBl"], \
-                              logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Shadow flagging data"
-
-    # Perform elevation flagging?
-    if parms["doElev"]:
-        retcode = KAT7Elev (uv, err, minelev=parms["minElev"], \
-                                logfile=logFile, check=check, debug=debug)
-        if retcode!=0:
-            raise RuntimeError,"Error Elevation flagging data"
+    #if parms["doCopyFG"]:
+    #    mess =  "Copy FG 1 to FG 2"
+    #    printMess(mess, logFile)
+    #    retCode = EVLACopyFG (uv, err, logfile=logFile, check=check, debug=debug)
+    #    if retCode!=0:
+    #        raise RuntimeError,"Error Copying FG table"
     
     # Median window time editing, for RFI impulsive in time
     if parms["doMednTD1"]:

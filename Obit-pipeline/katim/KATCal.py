@@ -102,7 +102,7 @@ def KATInitContParms(obsdata):
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
     parms["doShad"]       = True        # Shadow flagging (config dependent)
-    parms["shadBl"]       = 25.0        # Minimum shadowing baseline (m)
+    parms["shadBl"]       = 18.0        # Minimum shadowing baseline (m)
     parms["doElev"]       = False       # Do elevation flagging
     parms["minElev"]      = 15.0        # Minimum elevation to keep.
     parms["doFD1"]        = True        # Do initial frequency domain flagging
@@ -267,11 +267,11 @@ def KATInitContParms(obsdata):
     parms["CleanRad"]    = None         # CLEAN radius (pix?) about center or None=autoWin
     parms["xCells"]      = 15.0         # x-cell size in final image
     parms["yCells"]      = 15.0         # y-cell  "
-    parms["nx"]          = [500]        # x-Size of a facet in pixels
-    parms["ny"]          = [500]        # y-size of a facet in pixels
+    parms["nx"]          = [300]        # x-Size of a facet in pixels
+    parms["ny"]          = [300]        # y-size of a facet in pixels
     parms["Reuse"]       = 0.0          # How many CC's to reuse after each self-cal loop??
-    parms["minPatch"]    = 500          # Minumum beam patch to subtract in pixels
-    parms["OutlierSize"] = 400          # Size of outlier fields
+    parms["minPatch"]    = 250          # Minumum beam patch to subtract in pixels
+    parms["OutlierSize"] = 250          # Size of outlier fields
 
 
     # Final
@@ -290,7 +290,7 @@ def KATInitContParms(obsdata):
     parms["doSNPlot"]      =  True       # Plot SN tables etc
     parms["doDiagPlots"]   =  True       # Plot single source diagnostics
     parms["doKntrPlots"]   =  False      # Contour plots
-    parms["prtLv"]         =  2          # Amount of task print diagnostics
+    #parms["prtLv"]         =  2          # Amount of task print diagnostics
     parms["doMetadata"]    =  True       # Save source and project metadata
     parms["doHTML"]        =  True       # Output HTML report
     parms["doVOTable"]     =  True       # VOTable 
@@ -445,11 +445,11 @@ def KATInitContFQParms(parms,obsdata):
     # Should be fairly large
     parms["ampEditFG"] =  2                                      # FG table to add flags to, <=0 -> no FG entries
 
-    # Flag the first 20% and last 20% of channels
+    # Flag the first 20% and last 20% of channels before hanning
     if parms["BChDrop"]== None:
-        parms["BChDrop"]=int(nchan*0.2)
+        parms["BChDrop"]=int(parms["selChan"]*0.2)
     if parms["EChDrop"]== None:
-        parms["EChDrop"]=int(nchan*0.2)
+        parms["EChDrop"]=int(parms["selChan"]*0.2)
 
     # Ipol clipping levels
     if parms["IClip"]==None:
@@ -4503,6 +4503,9 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         if iflux>0.0:
             imager.FOV=1.0
             imager.do3D=False
+	else:
+	    imager.FOV=FOV
+	    imager.do3D=do3D
         del suinfo
         imager.Sources[0] = sou
         mess = "Image "+sou

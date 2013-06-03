@@ -59,6 +59,9 @@ def KAT2AIPS (h5datafile, outUV, err, \
     * targets     = List of targets to extract from the file
     """
     ################################################################
+
+    OErr.PLog(err, OErr.Info, "Converting h5 data to AIPS UV format.")
+    OErr.printErr(err)
     # get interface
     OK = False
     try:
@@ -82,13 +85,16 @@ def KAT2AIPS (h5datafile, outUV, err, \
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
     if err.isErr:
+	print "Error with h5 file"
         OErr.printErrMsg(err, "Error with h5 file")
     # Extract metadata
     meta = GetKATMeta(katdata, targets, err)
     if len(meta["spw"])>1:
         OErr.PLog(err, OErr.Fatal, "Can only image observations with 1 spectral window.")
     if err.isErr:
+	print "Error with h5 file"
         OErr.printErrMsg(err, "Error with h5 file")
+
     # Extract AIPS parameters of the uv data to the metadata
     meta["Aproject"] = outUV.Aname
     meta["Aclass"] = outUV.Aclass
