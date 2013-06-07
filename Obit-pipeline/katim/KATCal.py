@@ -485,9 +485,9 @@ def KATInitContFQParms(parms,obsdata):
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
             if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.014
-	    if parms["MBnorder"]==None: parms["MBnorder"] = 1
+            if parms["MBnorder"]==None: parms["MBnorder"] = 1
         else:                                             # Narrow-band
-	    parms["doMB"] = False
+            parms["doMB"] = False
 #            if parms["MBnorder"]==None: parms["MBnorder"] = 1
 #            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = float((bandwidth/(4.0*refFreq)))
 
@@ -4496,16 +4496,16 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         if minFluxASC is None: imager.minFluxASC=max(500.0*thermNoise,0.5)
         else: imager.minFluxASC=minFluxASC
         # 1/3 the number of CC's for calibrators and narrow-band observations
-	if iflux>0.0 or bandwidth<50e6:
+        if iflux>0.0 or bandwidth<50e6:
             imager.Niter=int(Niter/3)
-	else: imager.Niter=Niter
+        else: imager.Niter=Niter
         # 1deg field of view for calibrators and 3D imaging off.
         if iflux>0.0:
             imager.FOV=1.0
             imager.do3D=False
-	else:
-	    imager.FOV=FOV
-	    imager.do3D=do3D
+        else:
+            imager.FOV=FOV
+            imager.do3D=do3D
         del suinfo
         imager.Sources[0] = sou
         mess = "Image "+sou
