@@ -101,7 +101,7 @@ def make_da00(da00_path=None, force=False):
 	os.environ['NET0'] = da00_path
 	# Added by TM 25/3/2012 Set up NETSP file in $NET0 to remove error messages.
 	open(da00_path+'/NETSP', 'w').close()
-	
+
 def make_disk(disk_path=None):
 	"""Make the directory and put the 'SPACE' file in it."""
 	if not disk_path:
@@ -111,7 +111,7 @@ def make_disk(disk_path=None):
 		if not os.path.isdir(disk_path):
 			os.makedirs(disk_path)
 		open(space_file, 'w').close()
-	
+
 	disk_list_add(disk_path)
 
 def ehex(num, width=0, pad_char='0'):
@@ -136,7 +136,7 @@ def disk_list_add(*args):
 	for i in range(len(args)):
 		os.environ['DA%s' % ehex(nvol+1+i, 2, 0)] = args[i]
 	os.environ['NVOL'] = str(nvol + len(args))
-        
+
 def get_aips(basedir=None, version=default_version, force=False):
 	"""Get all the required files from NRAO and setup the environment"""
 	if not basedir:
@@ -177,7 +177,7 @@ def filaip(force=False,data_dir=None):
 		os.system('echo 8 2 | %s/%s/LOAD/FILAIP.EXE' % (os.environ['AIPS_VERSION'], os.environ['ARCH']))
 	for var in ['DA00', 'NET0', 'NVOL']:
 		del os.environ[var]
-	
+
 def setup_all(basedir=None, version=default_version, force=False):
 	"""Get required files and make DA00 and DISK areas"""
 	get_aips(basedir=basedir, version=version, force=force)

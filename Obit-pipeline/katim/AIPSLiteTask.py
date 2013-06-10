@@ -19,15 +19,15 @@ class AIPSTask(obAIPSTask):
     # List of adverbs referring to data.
     _data_adverbs = ['indata', 'outdata',
                      'in2data', 'in3data', 'in4data', 'out2data']
-    
+
     # List of adverbs referring to disks.
     _disk_adverbs = ['indisk', 'outdisk',
                      'in2disk', 'in3disk', 'in4disk', 'out2disk']
-    
+
     # List of adverbs referring to file names.
     _file_adverbs = ['infile', 'infile2', 'outfile', 'outprint',
                      'ofmfile', 'boxfile', 'oboxfile']
-    
+
     # Default version.
     version = os.environ.get('VERSION', 'NEW')
 
@@ -42,7 +42,7 @@ class AIPSTask(obAIPSTask):
 
     # Run synchronous?
     doWait = False
-    
+
     # Logging file?
     logFile = ""
 

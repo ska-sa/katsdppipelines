@@ -41,14 +41,14 @@ else:
 import time,math,os
 import UV, UVVis, OErr, UVDesc, Table, History
 from OTObit import day2dhms
-import numpy      
+import numpy
 from numpy import numarray
 
 def KAT2AIPS (h5datafile, outUV, err, \
               calInt=1.0, targets=None):
-    """ 
+    """
     Convert KAT-7 HDF 5 data set to an Obit UV
-    
+
     This module requires katfile and katpoint and their dependencies
      contact Ludwig Schwardt <schwardt@ska.ac.za> for details
     * h5datafile  = input KAT data file
@@ -74,11 +74,11 @@ def KAT2AIPS (h5datafile, outUV, err, \
     if not OK:
         OErr.PSet(err)
         OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in "+h5datafile)
-    # Only process an observation if its longer than 30 minutes and has more than 3 antennas   
+    # Only process an observation if its longer than 30 minutes and has more than 3 antennas
     if len(katdata.ants)<4:
-        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")    
+        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
     #if (katdata.end_time - katdata.start_time) < 1800.0:
-    #    OErr.PLog(err, OErr.Fatal, "Observation is too short to process")    
+    #    OErr.PLog(err, OErr.Fatal, "Observation is too short to process")
     # Only image things that have been made with the correct script.
     script=katdata.file['MetaData/Configuration/Observation'].attrs['script_name']
     scriptname=os.path.basename(script)
@@ -184,7 +184,7 @@ def GetKATMeta(katdata, targets, err):
     tt = []
     td = {}
     i = 0
-    if targets: 
+    if targets:
         targlist=[t for t in katdata.catalogue.targets if t.name in targets]
     else: targlist=katdata.catalogue.targets
     if len(targlist)>30:
@@ -402,7 +402,7 @@ def WriteFGTable(outUV, katdata, meta, err):
     err      = Python Obit Error/message stack to init
     """
     ###############################################################
-    
+
     # work out Start time in unix sec
     tm = katdata.timestamps[1:2]
     tx = time.gmtime(tm[0])
@@ -492,15 +492,15 @@ def WriteSUTable(outUV, meta, err):
 def StopFringes(visData,freqData,wData,polProd):
     """
     Stop the fringes for a KAT-7 antenna/polarisation pair.
-    
+
     * visData  = input array of visibilities
     * freqData = the frequencies corresponding to each channel in visData
     * wData    = the w term for each channel in VisData
     * polProd  = the polarisation product which is being stopped
-    
+
     Outputs an array of the same size as visData with fringes stopped
     """
-    
+
     # KAT-7 Antenna Delays (From h5toms.py)
     # NOTE: This should be checked before running (only for w stopping) to see how up to date the cable delays are !!!
     delays = {}
@@ -511,9 +511,9 @@ def StopFringes(visData,freqData,wData,polProd):
     # Result of delay model in turns of phase. This is now frequency dependent so has shape (tstamps, channels)
     turns = numpy.outer((wData / katpoint.lightspeed) - cable_delay, freqData)
     outVisData = visData*numpy.exp(-2j * numpy.pi * turns)
-    
+
     return outVisData
-    
+
 
 def ConvertKATData(outUV, katdata, meta, err):
     """
@@ -539,7 +539,7 @@ def ConvertKATData(outUV, katdata, meta, err):
 
     # Set data to read one vis per IO
     outUV.List.set("nVisPIO", 1)
-    
+
     # Open data
     zz = outUV.Open(UV.READWRITE, err)
     if err.isErr:
@@ -564,7 +564,7 @@ def ConvertKATData(outUV, katdata, meta, err):
     shape = len(outUV.VisBuf) / 4
     buffer =  numarray.array(sequence=outUV.VisBuf,
                              type=numarray.Float32, shape=shape)
-    
+
     # Template vis
     vis = outUV.ReadVis(err, firstVis=1)
     first = True
@@ -592,7 +592,7 @@ def ConvertKATData(outUV, katdata, meta, err):
             continue
         # Fetch data
         tm = katdata.timestamps[:]
-        nint = len(tm)        
+        nint = len(tm)
         el=target.azel(tm[int(nint/2)])[1]*180./math.pi
         if el<20.:   # Throw away scans at low elevation
             msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
@@ -602,7 +602,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         vs = katdata.vis[:]
         wt = katdata.weights()[:]
         fg = katdata.flags()[:]
-        # Zero the weights that are online flagged (ie. apply the online flags here) 
+        # Zero the weights that are online flagged (ie. apply the online flags here)
         wt = numpy.where(fg,0.0,wt)
         numflags += numpy.sum(fg)
         numvis += fg.size
@@ -612,7 +612,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         # Number of integrations
         msg = "Scan %4d Int %16s Start %s"%(nint,name,day2dhms((tm[0]-time0)/86400.0)[0:12])
         OErr.PLog(err, OErr.Info, msg);
-        OErr.printErr(err)        
+        OErr.printErr(err)
         # Loop over integrations
         for iint in range(0,nint):
             # loop over data products/baselines

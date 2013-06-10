@@ -15,12 +15,12 @@ parms["polcal"] = []
 
 # Archive parameters
 parms["archRoot"]      = "NOT VLA DATA" # Root of ASDM/BDF data
-parms["selBand"]       = "L"   # Selected band, def = first  
-parms["selConfig"]     = 1     # Selected frequency config, def = first  
-parms["selNIF"]        = 1     # Selected number of IFs, def = first  
+parms["selBand"]       = "L"   # Selected band, def = first
+parms["selConfig"]     = 1     # Selected frequency config, def = first
+parms["selNIF"]        = 1     # Selected number of IFs, def = first
 
 # Observation parameters
-parms["selChan"]       = obsdata["numchan"]  # Selected number of channels, def = first  
+parms["selChan"]       = obsdata["numchan"]  # Selected number of channels, def = first
 parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
 parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
 parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
@@ -102,7 +102,7 @@ parms["bpBChan1"] =      1          # Low freq. channel,  initial cal
 parms["bpEChan1"] =      0          # Highest freq channel, initial cal, 0=>all
 parms["bpDoCenter1"] =   0.1        # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
 parms["bpBChan2"] =      1          # Low freq. channel for BP cal
-parms["bpEChan2"] =      0          # Highest freq channel for BP cal,  0=>all 
+parms["bpEChan2"] =      0          # Highest freq channel for BP cal,  0=>all
 parms["bpChWid2"] =      1          # Number of channels in running mean BP soln
 parms["bpdoAuto"] =      False      # Use autocorrelations rather than cross?
 parms["bpsolMode"] =     'A&P'      # Band pass type 'A&P', 'P', 'P!A'
@@ -235,4 +235,4 @@ parms["doKntrPlots"]   =  True       # Contour plots
 parms["prtLv"]         =  2          # Amount of task print diagnostics
 parms["doMetadata"]    =  True       # Save source and project metadata
 parms["doHTML"]        =  True       # Output HTML report
-parms["doVOTable"]     =  True       # VOTable 
+parms["doVOTable"]     =  True       # VOTable
