@@ -1,18 +1,15 @@
 """
 """
 import katim.AIPSLiteTask as AIPSTask
-import UV, UVDesc, Image, ImageDesc, FArray, ObitTask, AIPSDir, OErr, History
+import UV, UVDesc, Image, FArray, ObitTask, AIPSDir, OErr, History
 import InfoList, Table, OSystem, OASDM
-from AIPSData import AIPSImage
-from AIPS import AIPS
-from FITS import FITS
-from AIPSDir import AIPSdisks, nAIPS
-from OTObit import Acat, AMcat, getname, zap, imhead, tabdest, tput
+from OTObit import AMcat, getname, zap
 from Obit import Version
-from PipeUtil import *
-import os, os.path, re, shutil, pickle, math, copy, pprint, string
-import urllib, urllib2
-import sys, commands
+from PipeUtil import check, day2dhms, imstat, setname, setoname
+from PipeUtil import getStartStopTime, getSVNVersion, printMess
+from PipeUtil import AllDest, FetchObject, QUlux, QUMS, SaveObject, XMLAddDescription, XMLSetAttributes
+import os, os.path, re, math, copy, pprint, string
+import sys
 import numpy as np
 import itertools
 import datetime
@@ -349,7 +346,6 @@ def KATInitTargParms(parms,obsdata,uv,err):
 
     # Amplitude Calibrators
     parms["ACals"] = []
-    dupcal = []
     tcals = []
     # Read in amplitude calibrator models
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
@@ -520,7 +516,6 @@ def KATGetStaticFlags(staticflagfile,obsdata):
     #Get the list of frequency ranges from staticflagfile and find flags
     editlist=[]
     with open(staticflagfile) as f:
-        satellites = []
         for line in f:
             line = line.partition('#')[0]      # Ignore comments
             line = line.split()
@@ -800,10 +795,10 @@ def EVLAUVLoadT(filename, disk, Aname, Aclass, Adisk, Aseq, err, logfile="  ", \
 
     # Get output
     if uvc.retCode==0:
-        outuv = UV.newPAUV("UVdata", Aname, Aclass, Adisk, Aseq, True, err)
+        outUV = UV.newPAUV("UVdata", Aname, Aclass, Adisk, Aseq, True, err)
     else:
         outUV = None
-    return outuv
+    return outUV
     # end EVLAUVLoadT
 
 def EVLAUVLoadArch(dataroot, Aname, Aclass, Adisk, Aseq, err, \
@@ -873,7 +868,7 @@ def EVLAUVLoadArch(dataroot, Aname, Aclass, Adisk, Aseq, err, \
 
     # Get output
     if bdf.retCode==0:
-        outuv = UV.newPAUV("UVdata", Aname, Aclass, Adisk, Aseq, True, err)
+        outUV = UV.newPAUV("UVdata", Aname, Aclass, Adisk, Aseq, True, err)
     else:
         outUV = None
 
@@ -881,7 +876,7 @@ def EVLAUVLoadArch(dataroot, Aname, Aclass, Adisk, Aseq, err, \
     if not check:
         UV.PFlag (outuv, err, timeRange=[1.0e20,1.0e21], Ants=[999,0], Reason="Dummy flag")
 
-    return outuv
+    return outUV
     # end EVLAUVLoadArch
 
 def KATHann(inUV, Aname, Aclass, Adisk, Aseq, err, doDescm=True, \
@@ -2756,7 +2751,6 @@ def EVLACalAvg2(uv, avgClass, avgSeq, CalAvgTime,  err,  FQid=0, \
                 del outuv
             outuv = UV.newPAUV("CalAvg", uv.Aname, avgClass, uv.Disk, avgSeq, True, err)
             #print "DEBUG Copy history"
-            inHistory  = History.History("inhistory",  uv.List, err)
             outHistory = History.History("outhistory", outuv.List, err)
 
             # Add history
@@ -2840,7 +2834,8 @@ def EVLASetImager (uv, target, outIclass="", nThreads=1, noScrat=[], logfile = "
     img = ObitTask.ObitTask("MFImage")
     try:
         img.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
-    except Exception, exception:
+    except Exception, e:
+        print e
         pass
     img.taskLog = logfile
     if not check:
@@ -3461,7 +3456,7 @@ def EVLARLCal(uv, err, \
                 IRMS.append(stat["RMSHist"])
                 x.Zap(err)  # Cleanup
                 del x
-                out2File = img.Sources[0].strip()+"TEMPPOLCAL2.uvtab"
+                # out2File = img.Sources[0].strip()+"TEMPPOLCAL2.uvtab"
                 u =  UV.newPFUV("UV",outFile,img.outDisk,True,err)
                 u.Zap(err)
                 del u
@@ -3818,7 +3813,7 @@ def EVLARLCal2(uv, err, uv2 = None, \
                     URMS.append(stat["RMSHist"])
                     x.Zap(err)  # Cleanup
                     del x
-                    out2File = img.Sources[0].strip()+"TEMPPOLCAL2.uvtab"
+                    # out2File = img.Sources[0].strip()+"TEMPPOLCAL2.uvtab"
                     u =  UV.newPFUV("UV",outFile,img.outDisk,True,err)
                     u.Zap(err)
                     del u
@@ -3852,7 +3847,8 @@ def EVLARLCal2(uv, err, uv2 = None, \
             UFlux   = SouCal[ical]["UFlux"]
             URMS    = SouCal[ical]["URMS"]
             RLPhase = SouCal[ical]["Phase"]
-            RM      = SouCal[ical]["RM"]
+            #Rotatation measure
+            # RM      = SouCal[ical]["RM"]
             mess = SouCal[ical]["name"]+"\n IF     IFlux    IRMS    QFlux   QRMS    UFlux  URMS   R-L Corr     Wt"
             printMess(mess, logfile)
             for i in range (0,len(IFlux)):
@@ -3896,7 +3892,7 @@ def EVLARLCal2(uv, err, uv2 = None, \
 
         # If calibrating second uv data, copy AN table 1
         if uv2:
-            z = uv2.ZapTable("AIPS AN",1,err)
+            # z = uv2.ZapTable("AIPS AN",1,err)
             EVLACopyTable (uv, uv2, "AIPS AN", err, \
                            logfile=logfile, check=check, debug=debug)
             if err.isErr:
@@ -4479,7 +4475,6 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             if suinfo["Dec"]<-30.0:
                 imager.Catalog = 'SUMMSVZ.FIT'
         # Get the source parameters for this source
-        numvis=suinfo["numVis"]
         iflux=suinfo["IFlux"][0]
         exposuresec=suinfo["Exposure"]*3600.*24.
         mindr=iflux/1500.0                       # Cutoff based on dynamic range of 1500:1
@@ -4587,7 +4582,6 @@ def EVLAAllSource(uv, err, \
     # Is there an SU table?
     hiver = uv.GetHighVer("AIPS SU")
     if hiver<=0:
-        mess = str(nrow)+" sources in database"
         printMess("No SoUrce table found", logfile)
         return allSou
     mess = "List of sources in database"
@@ -4751,7 +4745,7 @@ def EVLAWritePlots(uv, loPL, hiPL, plotFile, err, \
 
     # Delete plot files
     if not check:
-        zz=uv.ZapTable("AIPS PL", -1,err)
+        uv.ZapTable("AIPS PL", -1,err)
 
     return 0
     # end EVLAWritePlots
@@ -5590,14 +5584,16 @@ def EVLASNStats(uv, SNver, solInt, err, refAnts=[0], logfile='', check=False, de
         return badDict
     # Initialize
     solIntD = solInt/1440.
-    time0   = -1.0e20       # Beginning time of current interval
+    # time0   = -1.0e20       # Beginning time of current interval
     timeE   = -1.0e20       # End time of current interval
     tlast   = -1.0e20       # Last time
-    souId   = -10           # Current source ID
+    # souId   = -10           # Current source ID
     accum   = []            # solution period statistics array
     times   = None
     SNR1    = None
     SNR2    = None
+    CNT1    = None
+    CNT2    = None
     antCnt  = None
     fract   = 0.0
     avgSNR  = 0.0
@@ -5621,6 +5617,8 @@ def EVLASNStats(uv, SNver, solInt, err, refAnts=[0], logfile='', check=False, de
         if err.isErr:
             return
         time     = SNrow["TIME"][0]
+        if i == 0:
+            souID = SNrow["SOURCE ID"][0]
         curSouID = SNrow["SOURCE ID"][0]
         # New interval?
         if (time>timeE) or (souID!=curSouID):
@@ -5909,8 +5907,8 @@ def EVLAGetParms( fileDict):
     * fileDict = a single file dictionary returned in the response from
       ParseASDM
     """
-    session = EVLAGetSessionCode( fileDict )
-    wavelength = 2.99e8/fileDict['VLAFreq']
+    # session = EVLAGetSessionCode( fileDict )
+    # wavelength = 2.99e8/fileDict['VLAFreq']
     parms = [ ('@PROJECT@',    fileDict['project_code']),
               ('@SESSION@',    fileDict['session']),
               ('@BAND@',       fileDict['band']),
@@ -6198,7 +6196,7 @@ def EVLAWriteVOTable( projMeta, srcMeta, filename="votable.xml", logfile='' ):
     * projMetadata = dictionary of project metadata
     * srcMetadata  = dictionary of single-source metadata
     """
-    now = datetime.datetime.utcnow()
+    # now = datetime.datetime.utcnow()
 
     doc = xml.dom.minidom.Document()
     vo = doc.createElement("votable") # root element VOTABLE
@@ -6270,14 +6268,14 @@ def EVLAWriteVOTable( projMeta, srcMeta, filename="votable.xml", logfile='' ):
         elif key == "PhsCals":
             # All strings in array must have same length
             maxLen = 0
-            for string in projMeta[key]:
-                length = len(string)
+            for s in projMeta[key]:
+                length = len(s)
                 if length > maxLen:
                     maxLen = length
             value = ""
-            for string in projMeta[key]:
+            for s in projMeta[key]:
                 # Concatenate strings, left justified, with min length maxLen+1
-                value += "%-*s" % ( maxLen+1, string )
+                value += "%-*s" % ( maxLen+1, s )
             arraysize = str(maxLen+1) + "x" + str( len(projMeta) )
             setAttribs( pr, [ ("name", key ),
                               ("value", value ),
@@ -6288,14 +6286,14 @@ def EVLAWriteVOTable( projMeta, srcMeta, filename="votable.xml", logfile='' ):
         elif key == "AmpCals":
             # All strings in array must have same length
             maxLen = 0
-            for string in projMeta[key]:
-                length = len(string)
+            for s in projMeta[key]:
+                length = len(s)
                 if length > maxLen:
                     maxLen = length
             value = ""
-            for string in projMeta[key]:
+            for s in projMeta[key]:
                 # Concatenate strings, left justified, with min length maxLen+1
-                value += "%-*s" % ( maxLen+1, string )
+                value += "%-*s" % ( maxLen+1, s )
             arraysize = str(maxLen+1) + "x" + str( len(projMeta) )
             setAttribs( pr, [ ("name", key ),
                               ("value", value ),
@@ -6306,14 +6304,14 @@ def EVLAWriteVOTable( projMeta, srcMeta, filename="votable.xml", logfile='' ):
         elif key == "BPCals":
             # All strings in array must have same length
             maxLen = 0
-            for string in projMeta[key]:
-                length = len(string)
+            for s in projMeta[key]:
+                length = len(s)
                 if length > maxLen:
                     maxLen = length
             value = ""
-            for string in projMeta[key]:
+            for s in projMeta[key]:
                 # Concatenate strings, left justified, with min length maxLen+1
-                value += "%-*s" % ( maxLen+1, string )
+                value += "%-*s" % ( maxLen+1, s )
             arraysize = str(maxLen+1) + "x" + str( len(projMeta) )
             setAttribs( pr, [ ("name", key ),
                               ("value", value ),
@@ -6324,14 +6322,14 @@ def EVLAWriteVOTable( projMeta, srcMeta, filename="votable.xml", logfile='' ):
         elif key == "DlyCals":
             # All strings in array must have same length
             maxLen = 0
-            for string in projMeta[key]:
-                length = len(string)
+            for s in projMeta[key]:
+                length = len(s)
                 if length > maxLen:
                     maxLen = length
             value = ""
-            for string in projMeta[key]:
+            for s in projMeta[key]:
                 # Concatenate strings, left justified, with min length maxLen+1
-                value += "%-*s" % ( maxLen+1, string )
+                value += "%-*s" % ( maxLen+1, s )
             arraysize = str(maxLen+1) + "x" + str( len(projMeta) )
             setAttribs( pr, [ ("name", key ),
                               ("value", value ),
@@ -6676,16 +6674,6 @@ def EVLAFetchOutFiles( pickleFile='manifest.pickle', logFile=None):
             del srcFiles[ srcName ]
 # end EVLAFetchOutFiles
 
-def EVLASaveOutFiles( pickleFile='manifest.pickle' ):
-    """
-    Save pipeline output files Python object in a pickle file.
-
-    * pickleFile = name of pickle file
-    """
-    EVLAAddOutFile( pickleFile, 'project', 'Python object pickle file' )
-    SaveObject( manifest, pickleFile, True)
-# end EVLASaveOutFiles
-
 def EVLAAIPSName( project):
     """
     Derive AIPS Name.  AIPS file name will be project+session with project
@@ -6826,7 +6814,7 @@ def EVLAKntrPlots( err, catNos=[], imClass='?Clean', imName=[], project='tProj',
 
         # Delete plot files
         if not check:
-            zz=image.ZapTable("AIPS PL", -1,err)
+            image.ZapTable("AIPS PL", -1,err)
 # end EVLAKntrPlots
 
 def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
@@ -7101,7 +7089,7 @@ def EVLAProjMetadata( uv, AIPS_VERSION, err,
 
     # Calculate the minimum fringe spacing
     maxBl = 0 # maximum baseline length
-    maxBlAnt = [] # antenna indices forming maximum baseline
+    # maxBlAnt = [] # antenna indices forming maximum baseline
     for (i, p1) in enumerate( anpos ):
         for (j, p2) in enumerate( anpos ):
             if i == j: continue
@@ -7112,7 +7100,7 @@ def EVLAProjMetadata( uv, AIPS_VERSION, err,
             bl = ( dpos[0]**2 + dpos[1]**2 + dpos[2]**2 )**(0.5)
             if bl > maxBl:
                 maxBl = bl
-                maxBlAnt = [i, j]
+                # maxBlAnt = [i, j]
     # r["maxBl"] = [ annames[ maxBlAnt[0] ], # antennas forming max baseline
     #                annames[ maxBlAnt[1] ] ]
     lightSpeed = 299792458 # ( meters / second)
