@@ -6813,7 +6813,6 @@ def EVLAKntrPlots( err, catNos=[], imClass='?Clean', imName=[], project='tProj',
         cmd = 'pstops 1000:0 ' + outfile + ' > ' + tmpPS + ';' + \
             'ps2pdf ' + tmpPS + ' ' + tmpPDF + ';' + \
             'convert -density 96 ' + tmpPDF + ' ' + jpg
-        print cmd
         rtn = os.system(cmd)
         if rtn == 0:
             EVLAAddOutFile( jpg, name, "Contour plot (Stokes I)" )
