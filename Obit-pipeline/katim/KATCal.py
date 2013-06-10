@@ -6792,9 +6792,8 @@ def EVLAKntrPlots( err, catNos=[], imClass='?Clean', imName=[], project='tProj',
             EVLAAddOutFile( outfile, name, "Contour plot" )
 
         # Convert 1st page of PS (Stokes I) to JPG
-        tmpPS = outfile[:-3] + '.1.ps'
-        tmpPDF = outfile[:-3] + '.pdf'
-        jpg = outfile[:-3] + '.jpg'
+        tmpPS, tmpPDF, jpg = map(lambda file_ext: '%s.%s' % (os.path.splitext(outfile)[0], file_ext), \
+                                    ['ps', 'pdf', 'jpg'])
         printMess('Converting '+outfile+' (1st page) -> '+jpg,logfile)
         # Extract first page of PS; Convert to PDF; Convert to JPG
         # (on 64-bit, converting directly from PS to JPG does not work)
@@ -6935,8 +6934,8 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
                     if JPEG:
                         # Convert PS -> PDF; Convert PDF -> JPG
                         # (on 64-bit, converting directoy PS -> JPG fails)
-                        tmpPDF = outfile[:-3] + '.pdf'
-                        jpg = outfile[:-3] + '.jpg'
+                        tmpPDF, jpg = map(lambda file_ext: '%s.%s' % (os.path.splitext(outfile)[0], file_ext), \
+                                            ['pdf', 'jpg'])
                         printMess('Converting '+outfile+' -> '+jpg,logfile)
                         cmd = 'convert ' + outfile + ' ' + tmpPDF + ';' + \
                             'convert -density 96 ' + tmpPDF + ' ' + jpg
