@@ -39,7 +39,7 @@ def AIPSSetup(scratchdir=None):
     config.read(home + '/.katimrc')
 
     if scratchdir:
-	config.set('KATPIPE' ,'scratch_area', scratchdir)
+        config.set('KATPIPE' ,'scratch_area', scratchdir)
 
     ############################# Initialize AIPS ##########################################
 

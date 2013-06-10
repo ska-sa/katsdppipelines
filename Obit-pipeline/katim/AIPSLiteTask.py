@@ -47,5 +47,5 @@ class AIPSTask(obAIPSTask):
     logFile = ""
 
     def __init__(self, name, **kwds):
-		AIPSLite.get_task(name)
-		obAIPSTask.__init__(self, name, **kwds)
+        AIPSLite.get_task(name)
+        obAIPSTask.__init__(self, name, **kwds)
