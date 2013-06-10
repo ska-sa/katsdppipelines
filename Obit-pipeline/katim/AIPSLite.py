@@ -116,7 +116,7 @@ def make_disk(disk_path=None):
 
 def ehex(num, width=0, pad_char='0'):
         """Convert a number to base 36."""
-    chars = string.digits + string.uppercase
+        chars = string.digits + string.uppercase
         base = len(chars)
         hex_str = ''
         while num > 0:
