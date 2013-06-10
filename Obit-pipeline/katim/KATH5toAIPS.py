@@ -85,14 +85,12 @@ def KAT2AIPS (h5datafile, outUV, err, \
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
     if err.isErr:
-	print "Error with h5 file"
         OErr.printErrMsg(err, "Error with h5 file")
     # Extract metadata
     meta = GetKATMeta(katdata, targets, err)
     if len(meta["spw"])>1:
         OErr.PLog(err, OErr.Fatal, "Can only image observations with 1 spectral window.")
     if err.isErr:
-	print "Error with h5 file"
         OErr.printErrMsg(err, "Error with h5 file")
 
     # Extract AIPS parameters of the uv data to the metadata
@@ -189,6 +187,10 @@ def GetKATMeta(katdata, targets, err):
     if targets: 
         targlist=[t for t in katdata.catalogue.targets if t.name in targets]
     else: targlist=katdata.catalogue.targets
+    if len(targlist)>30:
+        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
+        OErr.printErr(err)
+        targlist=targlist[0:30]
     for t in  targlist:
         #Aips doesn't like spaces in names!!
         t.name = t.name.replace(' ','_')
