@@ -1,13 +1,19 @@
 """
 """
 import katim.AIPSLiteTask as AIPSTask
-import UV, UVDesc, Image, FArray, ObitTask, AIPSDir, OErr, History
+import UV, UVDesc, Image, ImageDesc, FArray, ObitTask, AIPSDir, OErr, History
 import InfoList, Table, OSystem, OASDM
-from OTObit import AMcat, getname, zap
+from AIPSData import AIPSImage
+from AIPS import AIPS
+from FITS import FITS
+from AIPSDir import AIPSdisks, nAIPS
+from OTObit import Acat, AMcat, getname, zap, imhead, tabdest, tput
 from Obit import Version
-from PipeUtil import check, day2dhms, imstat, setname, setoname
+# The following imports are not used in this script, but are somehow passed onto another part of the script
+# ImageDesc, AIPSImage, AIPS, FITS, AIPSdisks, nAIPS, tput, imhead, tabdest, Acat
+from PipeUtil import day2dhms, imstat, setname, setoname
 from PipeUtil import getStartStopTime, getSVNVersion, printMess
-from PipeUtil import AllDest, FetchObject, QUlux, QUMS, SaveObject, XMLAddDescription, XMLSetAttributes
+from PipeUtil import AllDest, FetchObject, SaveObject, XMLAddDescription, XMLSetAttributes
 import os, os.path, re, math, copy, pprint, string
 import sys
 import numpy as np
@@ -2816,7 +2822,7 @@ def EVLACalAvg2(uv, avgClass, avgSeq, CalAvgTime,  err,  FQid=0, \
     return 0
     # end EVLACalAvg2
 
-def EVLASetImager (uv, target, outIclass="", nThreads=1, noScrat=[], logfile = ""):
+def EVLASetImager (uv, target, outIclass="", nThreads=1, noScrat=[], logfile = "", check=False):
     """
     Setup to run Imager or MFImage
 
@@ -3415,8 +3421,8 @@ def EVLARLCal(uv, err, \
                         x.Zap(err)  # Cleanup
                         del x
                     except:
-                        QUlux.append(-1.0)
-                        QUMS.append(-1.0)
+                        UFlux.append(-1.0)
+                        URMS.append(-1.0)
                 else:
                     UFlux.append(-1.0)
                     URMS.append(-1.0)

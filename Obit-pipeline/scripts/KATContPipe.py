@@ -14,6 +14,7 @@ import subprocess
 import katim.KATH5toAIPS as KATH5toAIPS
 import os
 import katim.AIPSSetup as AIPSSetup
+import shutil
 
 def pipeline(args, options):
     """

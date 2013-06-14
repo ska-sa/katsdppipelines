@@ -115,17 +115,17 @@ def make_disk(disk_path=None):
     disk_list_add(disk_path)
 
 def ehex(num, width=0, pad_char='0'):
-        """Convert a number to base 36."""
-        chars = string.digits + string.uppercase
-        base = len(chars)
-        hex_str = ''
-        while num > 0:
-                hex_str = chars[num % base] + hex_str
-                num /= base
-        pad_len = width - len(hex_str)
-        if pad_len > 0:
-                hex_str = str(pad_char) * pad_len + hex_str
-        return hex_str
+    """Convert a number to base 36."""
+    chars = string.digits + string.uppercase
+    base = len(chars)
+    hex_str = ''
+    while num > 0:
+        hex_str = chars[num % base] + hex_str
+        num /= base
+    pad_len = width - len(hex_str)
+    if pad_len > 0:
+        hex_str = str(pad_char) * pad_len + hex_str
+    return hex_str
 
 def disk_list_add(*args):
     """Add DAxx entries for the directories supplied and update NVOL."""
