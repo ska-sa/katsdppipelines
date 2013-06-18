@@ -691,7 +691,7 @@ def pipeline(args, options):
         if cno>0:
             uvt = UV.newPAUV("AIPS CAL UV DATA", Aname, avgClass, disk, parms["seq"], True, err)
             filename = fileRoot+"_Cal.uvtab"
-            fuv = EVLAUVFITS (uvt, filename, 0, err, compress=parms["Compress"], logfile=logFile)
+            fuv = KATUVFITS (uvt, filename, 0, err, exclude=["AIPS HI", "AIPS SL", "AIPS PL"], include=["AIPS AN", "AIPS FQ"], compress=parms["Compress"], logfile=logFile)
             EVLAAddOutFile(os.path.basename(filename), 'project', "Calibrated Averaged UV data" )
             # Save list of output files
             EVLASaveOutFiles(manifestfile)

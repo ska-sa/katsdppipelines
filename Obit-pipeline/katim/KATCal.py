@@ -171,7 +171,7 @@ def KATInitContParms(obsdata):
     parms["doAmpPhaseCal"] = True
     parms["refAnt"]   =       0          # Reference antenna
     parms["refAnts"]  =      [0]         # List of Reference antenna for fringe fitting
-    parms["solInt"]   =      0.5         # solution interval (min)
+    parms["solInt"]   =      1.0         # solution interval (min)
     parms["ampScalar"]=     False        # Ampscalar solutions?
     parms["solSmo"]   =      0.0          # Smoothing interval for Amps (min)
 
@@ -477,7 +477,7 @@ def KATInitContFQParms(parms,obsdata):
 
     if parms["chAvg"] == None:
         if bandwidth>50e6:
-            parms["chAvg"] =         1
+            parms["chAvg"] =         2
         else:
             parms["chAvg"] =         6
     if parms["avgFreq"] == None:
@@ -1015,17 +1015,17 @@ def EVLAImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
     del outImage
     # end EVLAImFITS
 
-def EVLAUVFITS(inUV, filename, outDisk, err, compress=False, \
-              exclude=["AIPS HI", "AIPS AN", "AIPS FQ", "AIPS SL", "AIPS PL"], \
-                  include=[], headHi=False, logfile=""):
+def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
+              exclude=["AIPS HI", "AIPS SL", "AIPS PL"], \
+                  include=["AIPS AN", "AIPS FQ", "AIPS SU"], headHi=False, logfile=""):
     """
     Write UV data as FITS file
-
+    
     Write a UV data set as a FITAB format file
     History written to header
 
     * inUV       = UV data to copy
-    * filename   = name of FITS file, any whitespace characters replaced with underscore
+    * filename   = name of FITS file, any whitespace characters replaced with underscore 
     * outDisk    = FITS directory number
     * err        = Python Obit Error/message stack
     * exclude    = List of table types NOT to copy
@@ -1046,39 +1046,42 @@ def EVLAUVFITS(inUV, filename, outDisk, err, compress=False, \
     if not OErr.OErrIsA(err):
         raise TypeError,"err MUST be an OErr"
     #
+    # First convert to AIPS (This might not be needed- but just to make sure)
     # Deblank filename
     fn = re.sub('\s','_',filename)
     # Set output
-    outUV = UV.newPFUV("FITS UV DATA", fn, outDisk, False, err)
+    outUV = UV.newPAUV("AIPS UV DATA", 'TEMP', 'TEMP', 1, 1, False, err)
     if err.isErr:
-        OErr.printErrMsg(err, "Error creating FITS data")
-    #Compressed?
-    if compress:
-        inInfo = UV.PGetList(outUV)    #
-        dim = [1,1,1,1,1]
-        InfoList.PAlwaysPutBoolean (inInfo, "Compress", dim, [True])
+        OErr.printErrMsg(err, "Error creating AIPS data")
     # Copy
     UV.PCopy (inUV, outUV, err)
     if err.isErr:
-        OErr.printErrMsg(err, "Error copying UV data to FITS")
-    # History
-    inHistory  = History.History("inhistory",  outUV.List, err)
-    outHistory = History.History("outhistory", outUV.List, err)
-    # Add history
-    outHistory.Open(History.READWRITE, err)
-    outHistory.TimeStamp(" Start Obit uvtab",err)
-    outHistory.WriteRec(-1,"uvtab   / FITS file "+fn+" disk "+str(outDisk),err)
-    outHistory.Close(err)
-    # History in header?
-    if headHi:
-        History.PCopy2Header (inHistory, outHistory, err)
-        OErr.printErrMsg(err, "Error with history")
-        # zap table
-        outHistory.Zap(err)
+        OErr.printErrMsg(err, "Error copying UV data to AIPS")
     # Copy Tables
     UV.PCopyTables (inUV, outUV, exclude, include, err)
-    return outUV  # return new object
-    # end EVLAUVFITS
+
+    # Add output directory to the environment so AIPS can see it
+    if os.path.exists(fn):
+        os.remove(fn)
+    pth,fnn=os.path.split(fn)
+    if not pth:
+        os.environ['FTD']=os.environ['PWD']
+    else:
+        os.environ['FTD']=pth
+    
+    #Now use FITTP to write out uv data properly so CASA can read it in.
+    fittp=AIPSTask.AIPSTask("fittp")
+    try:
+        fittp.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
+    except Exception, exception:
+        pass    
+    setname(outUV, fittp)
+    
+    fittp.dataout='FTD:'+fnn
+    fittp.g
+    os.unsetenv('FTD')
+    return outUV
+    # end KATUVFITS
 
 def EVLAUVFITSTab(inUV, filename, outDisk, err, \
               exclude=["AIPS HI", "AIPS AN", "AIPS FQ", "AIPS SL", "AIPS PL"], \
@@ -2615,6 +2618,7 @@ def EVLACalAvg(uv, avgClass, avgSeq, CalAvgTime,  err, \
     splat.timeAvg  = CalAvgTime
     splat.avgFreq  = avgFreq
     splat.chAvg    = chAvg
+    splat.corrType = 0    #Only pass cross corrs.
     splat.Compress = Compress
     splat.outClass = avgClass
     splat.outDisk  = splat.inDisk
