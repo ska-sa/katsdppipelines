@@ -137,6 +137,7 @@ def pipeline(args, options):
     # Don't do anything if there are no amplitude calibrators in the data.
     if len(parms["ACals"])==0:
         mess = "No Amplitude calibrator. Can't image this observation."
+	printMess(mess,logFile)
         exit(-1)
 
     mess = "Start project "+parms["project"]+" AIPS user no. "+str(AIPS.userno)+\

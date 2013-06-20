@@ -358,7 +358,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
     for cal in ampcal:
         # Get the nearest calibrator in the database to the target source
         fluxcal,offset=fluxcals.closest_to(cal)
-        if offset*3600.0 < 1.5:        # 1.5 arcseconds should be close enough...
+        if offset*3600.0 < 20.0:        # 20.0 arcseconds should be close enough...
             cal.flux_model = fluxcal.flux_model
             if not cal in tcals:
                 calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
