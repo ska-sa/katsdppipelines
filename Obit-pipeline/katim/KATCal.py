@@ -83,7 +83,7 @@ def KATInitContParms(obsdata):
     parms["doDescm"]      = True        # Descimate Hanning?
 
     # Parallactic angle correction
-    parms["doPACor"] =     False         # Make parallactic angle correction
+    parms["doPACor"]      = False         # Make parallactic angle correction
 
     # Special editing list
     parms["doEditList"] =  True        # Edit using editList?
@@ -100,28 +100,31 @@ def KATInitContParms(obsdata):
     parms["doClearBP"]    = True        # Clear BP tables?
     parms["doCopyFG"]     = True        # Copy FG 1 to FG 2
     parms["doQuack"]      = True        # Quack data?
+    parms["doBadAnt"]     = True        # Check for bad antennas?
     parms["doInitFlag"]   = True        # Initial broad Frequency and time domain flagging
-    parms["quackBegDrop"] = 0.1         # Time to drop from start of each scan in min
+    parms["quackBegDrop"] = 5.0/60.0    # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
+    parms["begChanFrac"]  = 0.2         # Fraction of beginning channels to drop
+    parms["endChanFrac"]  = 0.2         # Fraction of end channels to drop
     parms["doShad"]       = True        # Shadow flagging (config dependent)
     parms["shadBl"]       = 18.0        # Minimum shadowing baseline (m)
     parms["doElev"]       = False       # Do elevation flagging
     parms["minElev"]      = 15.0        # Minimum elevation to keep.
     parms["doFD1"]        = True        # Do initial frequency domain flagging
-    parms["FD1widMW"]     = 41          # Width of the initial FD median window
+    parms["FD1widMW"]     = 35          # Width of the initial FD median window
     parms["FD1maxRes"]    = 5.0         # Clipping level in sigma
     parms["FD1TimeAvg"]   = 1.0         # time averaging in min. for initial FD flagging
     parms["FD1baseSel"]   = None        # Baseline fitting region for FD1 (updates by KAT7CorrParms)
     parms["doMednTD1"]    = True        # Median editing in time domain?
     parms["mednSigma"]    = 5.0         # Median sigma clipping level
     parms["mednTimeWind"] = 1.0         # Median window width in min for median flagging
-    parms["mednAvgTime"]  = 0.0         # Median Averaging time in min
+    parms["mednAvgTime"]  = 0.1         # Median Averaging time in min
     parms["mednAvgFreq"]  = 1           # Median 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
     parms["mednChAvg"]    = 5           # Median flagger number of channels to average
     parms["doRMSAvg"]    = True         # Edit calibrators by RMSAvg?
     parms["RMSAvg"]      = 3.0          # AutoFlag Max RMS/Avg for time domain RMS filtering
-    parms["RMSTimeAvg"]  = 0.0          # AutoFlag time averaging in min.
+    parms["RMSTimeAvg"]  = 0.1          # AutoFlag time averaging in min.
     parms["doAutoFlag"]  = True         # Autoflag editing after first pass calibration?
     parms["doAutoFlag2"] = True         # Autoflag editing after final (2nd) calibration?
     parms["IClip"]       = None         # AutoFlag Stokes I clipping
@@ -129,7 +132,7 @@ def KATInitContParms(obsdata):
     parms["XClip"]       = None         # AutoFlag cross-pol clipping
     parms["timeAvg"]     = 0.33         # AutoFlag time averaging in min.
     parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
-    parms["FDwidMW"]     = 101          # Width of the median window
+    parms["FDwidMW"]     = 35          # Width of the median window
     parms["FDmaxRMS"]    = [5.0,0.1]    # Channel RMS limits (Jy)
     parms["FDmaxRes"]    = 5.0          # Max. residual flux in sigma
     parms["FDmaxResBL"]  = 5.0          # Max. baseline residual
@@ -153,8 +156,8 @@ def KATInitContParms(obsdata):
 
     # Bandpass Calibration?
     parms["doBPCal"] =       True       # Determine Bandpass calibration
-    parms["bpBChan1"] =      1          # Low freq. channel,  initial cal
-    parms["bpEChan1"] =      0          # Highest freq channel, initial cal, 0=>all
+    parms["bpBChan1"] =      300        # Low freq. channel,  initial cal
+    parms["bpEChan1"] =      325        # Highest freq channel, initial cal, 0=>all
     parms["bpDoCenter1"] =   0.05       # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
     parms["bpBChan2"] =      None       # Low freq. channel for BP cal
     parms["bpEChan2"] =      None       # Highest freq channel for BP cal,  0=>all
@@ -183,8 +186,9 @@ def KATInitContParms(obsdata):
     parms["CAEIF"] =         0          # Highest IF to copy
     parms["CABChan"] =       None       # First Channel to copy
     parms["CAEChan"] =       None       # Highest Channel to copy
-    parms["chAvg"] =         None       # No channel average
+    parms["chAvg"]   =       None       # No channel average
     parms["avgFreq"] =       None       # No channel average
+    parms["doAuto"]  =       True       # Export the AutoCorrs as well.
 
     # Right-Left delay calibration
     parms["doRLDelay"] =  False             # Determine/apply R-L delays
@@ -275,7 +279,7 @@ def KATInitContParms(obsdata):
     parms["Reuse"]       = 0.0          # How many CC's to reuse after each self-cal loop??
     parms["minPatch"]    = 250          # Minumum beam patch to subtract in pixels
     parms["OutlierSize"] = 250          # Size of outlier fields
-
+    parms["autoCen"]     = True         # Do autoCen? 
 
     # Final
     parms["doReport"]  =     True       # Generate source report?
@@ -286,14 +290,13 @@ def KATInitContParms(obsdata):
     parms["doCleanup"] =     True       # Destroy AIPS files
 
     # diagnostics
-    parms["plotSource"]    =  'None'      # Name of source for spectral plot
+    parms["plotSource"]    =  None      # Name of source for spectral plot
     parms["plotTime"]      =  [0.,1000.]  # timerange for spectral plot
     parms["doRawSpecPlot"] =  True       # Plot diagnostic raw spectra?
     parms["doSpecPlot"]    =  True       # Plot diagnostic spectra?
     parms["doSNPlot"]      =  True       # Plot SN tables etc
     parms["doDiagPlots"]   =  True       # Plot single source diagnostics
     parms["doKntrPlots"]   =  False      # Contour plots
-    #parms["prtLv"]         =  2          # Amount of task print diagnostics
     parms["doMetadata"]    =  True       # Save source and project metadata
     parms["doHTML"]        =  True       # Output HTML report
     parms["doVOTable"]     =  True       # VOTable
@@ -314,16 +317,20 @@ def KATInitTargParms(parms,obsdata,uv,err):
         bpcal = [obsdata["katdata"].catalogue[cal] for cal in parms["BPCal"] if cal is not None]
     else:
         bpcal = obsdata['bpcal']
+        parms["BPCal"] = [cal.name.replace('_',' ') for cal in bpcal if cal is not None]
 
     if len(parms["ACal"])>0:
         ampcal = [obsdata["katdata"].catalogue[cal] for cal in parms["ACal"] if cal is not None]
     else:
         ampcal = obsdata['bpcal']        # TODO: Later provide support for this properly
+        parms["ACal"] = [cal.name.replace('_',' ') for cal in ampcal if cal is not None]
+
 
     if len(parms["PCal"])>0:
         gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
     else:
         gaincal = obsdata['gaincal']
+        parms["PCal"] = [cal.name.replace('_',' ') for cal in gaincal if cal is not None]
 
     polcal  = []                # Place-holder for polarisation calibrator
 
@@ -338,57 +345,126 @@ def KATInitTargParms(parms,obsdata,uv,err):
 
     # Now make calibrater model dicts.
     # Bandpass calibrators
+    parms["BPCals"]=parms.get("BPCals",[])
+    if not parms["BPCals"]:
+        for cal in bpcal:
+            calname=cal.name[0:16]
+            suinfo = EVLAGetTimes(uv, calname, err)
+            if suinfo['numVis'] > 0:
+                parms["BPCals"].append(EVLACalModel(calname))
+        EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
+
+    # Check the best bandpass calibrator to plot
     # Check for source in SU table and only use bpcal with the most visibilities
-    maxvis=0
-    parms["BPCals"]=[]
-    for cal in bpcal:
-        calname=cal.name[0:16]
-        suinfo = EVLAGetTimes(uv, calname, err)
-        if suinfo['numVis'] > 0:
+    if not parms["plotSource"]:
+        maxvis=0
+        for cal in parms["BPCals"]:
+            calname=cal['Source']
+            suinfo = EVLAGetTimes(uv, calname, err)
             if suinfo['numVis'] > maxvis:
                 parms["plotSource"] = calname
-            parms["BPCals"].append(EVLACalModel(calname))
-    EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
+                maxvis=suinfo['numVis']
 
     # Amplitude Calibrators
-    parms["ACals"] = []
-    tcals = []
-    # Read in amplitude calibrator models
-    fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
-    for cal in ampcal:
-        # Get the nearest calibrator in the database to the target source
-        fluxcal,offset=fluxcals.closest_to(cal)
-        if offset*3600.0 < 20.0:        # 20.0 arcseconds should be close enough...
-            cal.flux_model = fluxcal.flux_model
-            if not cal in tcals:
-                calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
-                tcals.append(cal)
+    parms["ACals"]= parms.get("ACals",[])
+    if not parms["ACals"]:
+        tcals = []
+        # Read in amplitude calibrator models
+        fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
+        for cal in ampcal:
+            # Get the nearest calibrator in the database to the target source
+            fluxcal,offset=fluxcals.closest_to(cal)
+            if offset*3600.0 < 200.0:        # 20.0 arcseconds should be close enough...
+                cal.flux_model = fluxcal.flux_model
+                if not cal in tcals:
+                    calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
+                    parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
+                    tcals.append(cal)
 
-    # Delay Calibrators (use bandpass calibrators only)
-    DCals = []
-    tcals = []
-    for cal in bpcal + ampcal + gaincal:
-        if not cal in tcals:
-            DCals.append(EVLACalModel(cal.name[0:16]))
-            tcals.append(cal)
-    # Check for standard model
-    EVLAStdModel(DCals, parms["KAT7Freq"])
-    parms["DCals"]          = DCals      # delay calibrators
+    # Delay Calibrators
+    parms["DCals"]= parms.get("DCals",[])
+    if not parms["DCals"]:
+        DCals = []
+        tcals = []
+        for cal in bpcal + ampcal + gaincal:
+            if not cal in tcals:
+                DCals.append(EVLACalModel(cal.name[0:16]))
+                tcals.append(cal)
+        # Check for standard model
+        EVLAStdModel(DCals, parms["KAT7Freq"])
+        parms["DCals"]          = DCals      # delay calibrators
 
     # Gain Calibrators
     # Amp/phase calibration
-    PCals = []
-    tcals = []
-    for cal in gaincal:
-        if not cal in tcals:
-            PCals.append(EVLACalModel(cal.name[0:16]))
-            tcals.append(cal)
-    # Check for standard model
-    EVLAStdModel(PCals, parms["KAT7Freq"])
-    parms["PCals"]          = PCals   # Phase calibrator(s)
+    parms["PCals"]=parms.get("PCals",[])
+    if not parms["PCals"]:
+        PCals = []
+        tcals = []
+        for cal in gaincal:
+            if not cal in tcals:
+                PCals.append(EVLACalModel(cal.name[0:16]))
+                tcals.append(cal)
+        # Check for standard model
+        EVLAStdModel(PCals, parms["KAT7Freq"])
+        parms["PCals"]          = PCals   # Phase calibrator(s)
 
 #Done KATInitCalModel
+
+def KATGetBadAnts(obsdata,checktargs,specrange):
+    """
+    Check the data for bad antennas by calculating Stokes I over specrange channels
+    from the Auto-Correlations on the highest elevation scan from selected targets 
+    and looking for outliers using the median absolute deviation.
+
+    Inputs: 
+    obsdata: metadata dict from KATH5toAIPS 
+    checktargs: list of the target names to check the scans from.
+    specrange: tuple selecting minimum and maximum channels to use
+
+    Outputs:
+    editlist: A list of editlist dicts with each entry containing an antenna to be flagged
+    """
+    
+    katdata=obsdata['katdata']
+    targs = [katdata.catalogue[cal] for cal in checktargs if cal is not None]
+    # Get data from the highest elevation scan from checktargs in katdata
+    el=0
+    #Exit gracefully if we don't have anything to check
+    if len(targs)==0:
+        return []
+    for scan, state, target in katdata.scans():
+        if state == 'track' and target in targs:
+            tm=katdata.timestamps[:]
+            nint=len(tm)
+            if target.azel(tm[int(nint/2)])[1]*180./math.pi > el:
+                # Highest elevation so far
+                vis = katdata.vis[:]
+                wt  = katdata.weights()[:]
+                # Apply flags
+                wt  = np.where(katdata.flags()[:],0.0,wt)
+
+    pol_data = np.zeros((len(obsdata['ants']),2))
+    # Get stokes I for the chosen scan on each antenna
+    for corrnum,corrprod in enumerate(obsdata['products']):
+        #AutoCorr and not cross pol
+        if corrprod[0]==corrprod[1] and corrprod[2]<2:
+            avvis = np.average(np.abs(vis[:,specrange[0]:specrange[1],corrnum]),weights=wt[:,specrange[0]:specrange[1],corrnum])
+            pol_data[corrprod[0]-1,corrprod[2]]=avvis
+
+    stokesI = pol_data[:,0] + pol_data[:,1]
+    
+    # Get the median absolute deviation
+    medI = np.median(stokesI)
+    MAD = np.median(np.abs(stokesI - medI))
+    
+    # Reject antennas >10MAD'S from the median
+    rejectList=[]
+    cutoff=medI-(10.0*MAD)
+    for antnum,thisI in enumerate(stokesI):
+        if thisI<cutoff:
+            rejectList.append({"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[antnum+1 ,0],"IFs":[1,1],"Chans":[0,0], "Stokes":'1111',"Reason":"Bad Ant"})
+            
+    return rejectList
 
 def KAT7EditList(obsdata,numchannels,doHann):
 
@@ -415,12 +491,14 @@ def KATInitContFQParms(parms,obsdata):
     blSize    = parms["longBline"]
     nchan     = parms["selChan"]
     doHann    = parms["doHann"]
+    fracstart = parms["begChanFrac"]
+    fracend   = parms["endChanFrac"]
     if doHann:
         nchan = int(nchan/2)
     # halve the number of channels if Hanning
     # Set spectral baseline for FD flagging ignoring end channels
-    ch1 = int (max(2, nchan*0.2))
-    ch2 = nchan - int (max(2, nchan*0.2))
+    ch1 = int (max(2, nchan*fracstart))
+    ch2 = nchan - int (max(2, nchan*fracend))
     #Correct bandwidth for final averaged data
     frac = 1.0 - (ch1 + (nchan - ch2))/nchan
     bandwidth = bandwidth*frac
@@ -449,9 +527,9 @@ def KATInitContFQParms(parms,obsdata):
 
     # Flag the first 20% and last 20% of channels before hanning
     if parms["BChDrop"]== None:
-        parms["BChDrop"]=int(parms["selChan"]*0.2)
+        parms["BChDrop"]=int(parms["selChan"]*fracstart)
     if parms["EChDrop"]== None:
-        parms["EChDrop"]=int(parms["selChan"]*0.2)
+        parms["EChDrop"]=int(parms["selChan"]*fracend)
 
     # Ipol clipping levels
     if parms["IClip"]==None:
@@ -475,18 +553,19 @@ def KATInitContFQParms(parms,obsdata):
     if parms["CAEChan"] == None:
         parms["CAEChan"] =       ch2          # Highest Channel to copy
 
+    # Can probably set this automatically to accomodate bandwidth smearing constraints later on..
     if parms["chAvg"] == None:
-        if bandwidth>50e6:
-            parms["chAvg"] =         2
+        if nchan<1024:
+            parms["chAvg"] =         4
         else:
-            parms["chAvg"] =         6
+            parms["chAvg"] =         16
     if parms["avgFreq"] == None:
         parms["avgFreq"] =       1
 
     if parms["doMB"] == None:
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.014
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.02
             if parms["MBnorder"]==None: parms["MBnorder"] = 1
         else:                                             # Narrow-band
             parms["doMB"] = False
@@ -511,6 +590,7 @@ def KATGetStaticFlags(staticflagfile,obsdata):
 
     staticflagfile   = path to file containing list of frequency ranges to reject
     obsdata          = the KAT7 metadata
+    parms            = the set of parms for the pipeline (CAEchan and CABchan required)
 
     returns: a properly formattted list of edit dictionaries for use with the kat-7 pipeline
     """
@@ -518,7 +598,7 @@ def KATGetStaticFlags(staticflagfile,obsdata):
     channel_freqs=obsdata["katdata"].channel_freqs
     channel_width=obsdata["katdata"].channel_width
     channels=obsdata["katdata"].channels
-    padding=50                                   #Pad the start and the end of a flag range
+    padding=10                                   #Pad the start and the end of a flag range in GHz
     #Get the list of frequency ranges from staticflagfile and find flags
     editlist=[]
     with open(staticflagfile) as f:
@@ -527,9 +607,9 @@ def KATGetStaticFlags(staticflagfile,obsdata):
             line = line.split()
             if len(line) == 3:                 # Only use lines with data
                 name=line[0]
-                startFreq=float(line[1])*1e6
-                endFreq=float(line[2])*1e6
-                thisflag = channels[(channel_freqs>startFreq-padding*channel_width) & (channel_freqs<endFreq+padding*channel_width)]
+                startFreq=(float(line[1])-padding)*1e6
+                endFreq=(float(line[2])+padding)*1e6
+                thisflag = channels[(channel_freqs>startFreq) & (channel_freqs<endFreq)]
                 if len(thisflag)>0:                   # We have some bandwidth to flag!!
                     flag_start = thisflag[0] + 1      # +1 for AIPS channel convention
                     flag_end   = thisflag[-1] + 1     # +1 for AIPS channel convention
@@ -537,6 +617,22 @@ def KATGetStaticFlags(staticflagfile,obsdata):
                     editlist.append(editdict)
     return(editlist)
 
+#def KATGetContChan(parms):
+
+#    """
+#    Check through the list of static flags and get the minimun and maximum channels for the bandpass.
+#    
+#    parms,  the input parameter dict
+#
+#    returns: the modified input parameter list (only BChanDrop and EChanDrop are changed)
+#    """
+#
+#    #Make an initial list
+#    useBand=np.ones(parms["selChan"])
+    
+# Go through 
+
+#    return parms
 
 
 def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
@@ -2557,10 +2653,10 @@ def EVLASplit(uv, target, err, FQid=1, outClass="      ", logfile = "", \
     return 0
     # end EVLAsplit
 
-def EVLACalAvg(uv, avgClass, avgSeq, CalAvgTime,  err, \
+def KATCalAvg(uv, avgClass, avgSeq, CalAvgTime,  err, \
                FQid=0, \
                flagVer=0, doCalib=2, gainUse=0, doBand=1, BPVer=0,  doPol=False, \
-               BIF=1, EIF=0, BChan=1, EChan=0, \
+               BIF=1, EIF=0, BChan=1, EChan=0, doAuto=False, \
                avgFreq=0, chAvg=1, Compress=False, \
                nThreads=1, logfile = "", check=False, debug=False):
     """
@@ -2618,7 +2714,10 @@ def EVLACalAvg(uv, avgClass, avgSeq, CalAvgTime,  err, \
     splat.timeAvg  = CalAvgTime
     splat.avgFreq  = avgFreq
     splat.chAvg    = chAvg
-    splat.corrType = 0    #Only pass cross corrs.
+    if doAuto:
+        splat.corrType = 1   # include autocorrs
+    else:
+        splat.corrType = 0
     splat.Compress = Compress
     splat.outClass = avgClass
     splat.outDisk  = splat.inDisk
@@ -4297,7 +4396,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
                      maxPSCLoop=0, minFluxPSC=0.1, solPInt=20.0/60., \
                      solPMode="P", solPType= "  ", \
                      maxASCLoop=0, minFluxASC=0.5, solAInt=2.0, \
-                     solAMode="A&P", solAType= "  ", \
+                     solAMode="A&P", solAType= "  ", autoCen=False, \
                      avgPol=False, avgIF=False, minSNR = 5.0, refAnt=0, \
                      do3D=True, BLFact=0.999, BLchAvg=False, doOutlier=None, \
                      doMB=False, norder=2, maxFBW=0.05, doComRes=True, \
@@ -4512,6 +4611,8 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             imager.FOV=FOV
             imager.do3D=do3D
         del suinfo
+        # Test autoCen
+        imager.autoCen = max(100.0*thermNoise,0.1)
         imager.Sources[0] = sou
         mess = "Image "+sou
         printMess(mess, logfile)
@@ -6857,7 +6958,7 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
     calAvgTime = 1 # temporal averaging (sec)
     printMess("Averaging: "+str(calAvgTime)+" sec interval, all IFs, all channels",
         logfile = logfile)
-    rtn = EVLACalAvg( uv, avgClass=avgClass, avgSeq=avgSeq, err = err,
+    rtn = KATCalAvg( uv, avgClass=avgClass, avgSeq=avgSeq, err = err,
         logfile = logfile, check=check, debug = debug, CalAvgTime = calAvgTime,
         avgFreq = 3, # avg all IFs
         chAvg   = 0, # avg all channels (should already have been done)
@@ -6866,7 +6967,7 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
         flagVer = 1  # Apply any flags
         )
     if rtn != 0:
-        mess = "Error averaging data. EVLACalAvg returned: " + str(rtn)
+        mess = "Error averaging data. KATCalAvg returned: " + str(rtn)
         printMess(mess, logfile)
         return rtn
 

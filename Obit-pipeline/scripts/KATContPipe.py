@@ -80,12 +80,9 @@ def pipeline(args, options):
         corrmode = "8"
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
-    try:
-        obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
-    except:
-        exit(-1)
+    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
     uv.Header(err)
-
+    
     ####### Initialize parameters #####
     parms = KATInitContParms(obsdata)
     debug = parms["debug"]
@@ -97,7 +94,6 @@ def pipeline(args, options):
         exec(open(parmFile).read())
         EVLAAddOutFile(os.path.basename(parmFile), 'project', 'Pipeline input parameters' )
 
-   
     ############################# Set Project Processing parameters ##################
     ###### Initialise target parameters #####
     KATInitTargParms(parms,obsdata,uv,err)
@@ -107,11 +103,20 @@ def pipeline(args, options):
 
     # Update the editlist array with the static flags defined in parms["staticflags"]
     # Only for wideband !!
-    if parms["selChan"]==1024:
+    bandwidth = obsdata["katdata"].channel_freqs[0] - obsdata["katdata"].channel_freqs[-1]
+    if bandwidth>100e6:
     	staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
     	if os.path.exists(staticflagfile):
         	parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
 
+    # Get bad antennas and update editlist with these
+    if parms["doBadAnt"]:
+        badants = KATGetBadAnts(obsdata,parms["BPCal"],(parms["BChDrop"],-parms["EChDrop"]))
+        for badant in badants:
+            mess = "Flagging "+obsdata['antLookup'].keys()[obsdata['antLookup'].values().index(badant['Ant'][0])]
+            printMess(mess,logFile)
+        parms["editList"]=parms["editList"] + badants
+    
     # General data parameters
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
@@ -137,7 +142,7 @@ def pipeline(args, options):
     # Don't do anything if there are no amplitude calibrators in the data.
     if len(parms["ACals"])==0:
         mess = "No Amplitude calibrator. Can't image this observation."
-	printMess(mess,logFile)
+        printMess(mess,logFile)
         exit(-1)
 
     mess = "Start project "+parms["project"]+" AIPS user no. "+str(AIPS.userno)+\
@@ -161,7 +166,6 @@ def pipeline(args, options):
     ParmsPicklefile = fileRoot+".Parms.pickle"   # Where results saved
     SaveObject(parms, ParmsPicklefile, True)
     EVLAAddOutFile(os.path.basename(ParmsPicklefile), 'project', 'Processing parameters used' )
-
     loadClass = dataClass
     
     # Special editing
@@ -210,25 +214,24 @@ def pipeline(args, options):
         if retcode!=0:
             raise RuntimeError,"Error Elevation flagging data"
     
-    # Initial wide average frequency + time domain editing
+    # Initial wide average time domain editing
     if parms["doInitFlag"] and not check:
         mess = "Initial time domain editing"
         printMess(mess, logFile)
         #Time editing First
         retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
-                                  avgTime=0.0, avgFreq=1,  chAvg=int(parms["selChan"]/2), \
-                                  timeWind=5.0,flagVer=1, flagTab=1,flagSig=5.0, \
+                                  avgTime=0.01, avgFreq=1,  chAvg=int(parms["selChan"]/4), \
+                                  timeWind=5.0, flagVer=-1, flagTab=1,flagSig=5.0, \
                                   logfile=logFile, check=check, debug=False)
         if retCode!=0:
             raise RuntimeError,"Error in MednFlag"
     
         mess =  "Initial frequency domain editing"
         printMess(mess, logFile)
-        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=1,  flagTab=1, doCalib=-1, doBand=-1,   \
-                                timeAvg=5.0, \
-                                doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=255,  \
+        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=-1,  flagTab=1, doCalib=-1, doBand=-1, timeAvg=5.0, \
+                                doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=(parms["selChan"]/4)-1,  \
                                 FDmaxRMS=[5.0,0.1], FDmaxRes=20.0,  \
-                                FDmaxResBL=5.0,  FDbaseSel=[parms["BChDrop"],parms["selChan"]-parms["EChDrop"],1,1],\
+                                FDmaxResBL=5.0,  FDbaseSel=[parms["BChDrop"],parms["selChan"]-parms["EChDrop"],1,0],\
                                 nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
            raise  RuntimeError,"Error in AutoFlag"
@@ -545,10 +548,10 @@ def pipeline(args, options):
     
     # Calibrate and average data
     if parms["doCalAvg"]:
-        retCode = EVLACalAvg (uv, avgClass, parms["seq"], parms["CalAvgTime"], err, \
+        retCode = KATCalAvg (uv, avgClass, parms["seq"], parms["CalAvgTime"], err, \
                               flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
-                              BChan=parms["CABChan"], EChan=parms["CAEChan"], \
+                              BChan=parms["CABChan"], EChan=parms["CAEChan"], doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
                               nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
