@@ -102,6 +102,7 @@ def KATInitContParms(obsdata):
     parms["doQuack"]      = True        # Quack data?
     parms["doBadAnt"]     = True        # Check for bad antennas?
     parms["doInitFlag"]   = True        # Initial broad Frequency and time domain flagging
+    parms["doChopBand"]   = True        # Cut the bandpass from lowest to highest channel after special editing.
     parms["quackBegDrop"] = 5.0/60.0    # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
@@ -505,21 +506,21 @@ def KATInitContFQParms(parms,obsdata):
 
     # Delay channels
     if parms["delayBChan"] == None:
-        parms["delayBChan"] =  int(max(2, 0.05*nchan))              # first channel to use in delay solutions
+        parms["delayBChan"] =  1              # first channel to use in delay solutions
     if parms["delayEChan"] == None:
-        parms["delayEChan"] =  int(min(nchan-2, nchan-0.05*nchan))  # highest channel to use in delay solutions
+        parms["delayEChan"] =  0  # highest channel to use in delay solutions
 
     # BPCal channels
     if parms["bpBChan2"] == None:
-        parms["bpBChan2"] = int(max(2, 0.05*nchan))
+        parms["bpBChan2"] = 1
     if parms["bpEChan2"] == None:
-        parms["bpEChan2"] = int(min(nchan-2, nchan-0.05*nchan))
+        parms["bpEChan2"] = 0
 
     # Amp cal channels
     if parms["doAmpPhaseCal"]==None:
         parms["doAmpPhaseCal"] = True                            # Amplitude/phase calibration
-    parms["ampBChan"]  =  int(max(2, 0.05*nchan))                # first channel to use in A&P solutions
-    parms["ampEChan"]  =  int(min(nchan-2, nchan-0.05*nchan))    # highest channel to use in A&P solutions
+    parms["ampBChan"]  =  1                                      # first channel to use in A&P solutions
+    parms["ampEChan"]  =  0                                      # highest channel to use in A&P solutions
     parms["doAmpEdit"] =  True                                   # Edit/flag on the basis of amplitude solutions
     parms["ampSigma"]  =  20.0                                   # Multiple of median RMS about median gain to clip/flag
     # Should be fairly large
@@ -543,7 +544,7 @@ def KATInitContFQParms(parms,obsdata):
 
 
     if parms["FDbaseSel"]==None:
-        parms["FDbaseSel"] = [ch1, ch2, 1, 0]
+        parms["FDbaseSel"] = [1, 0, 1, 0]
     # Set spectral baseline for FD1 flagging ignoring end channels
     if parms["FD1baseSel"]==None:
         parms["FD1baseSel"] = parms["FDbaseSel"]
@@ -565,7 +566,7 @@ def KATInitContFQParms(parms,obsdata):
     if parms["doMB"] == None:
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.02
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.014
             if parms["MBnorder"]==None: parms["MBnorder"] = 1
         else:                                             # Narrow-band
             parms["doMB"] = False
@@ -598,7 +599,7 @@ def KATGetStaticFlags(staticflagfile,obsdata):
     channel_freqs=obsdata["katdata"].channel_freqs
     channel_width=obsdata["katdata"].channel_width
     channels=obsdata["katdata"].channels
-    padding=10                                   #Pad the start and the end of a flag range in GHz
+    padding=20                                   #Pad the start and the end of a flag range in MHz
     #Get the list of frequency ranges from staticflagfile and find flags
     editlist=[]
     with open(staticflagfile) as f:
@@ -617,22 +618,37 @@ def KATGetStaticFlags(staticflagfile,obsdata):
                     editlist.append(editdict)
     return(editlist)
 
-#def KATGetContChan(parms):
+def KATGetContChan(parms):
 
-#    """
-#    Check through the list of static flags and get the minimun and maximum channels for the bandpass.
-#    
-#    parms,  the input parameter dict
-#
-#    returns: the modified input parameter list (only BChanDrop and EChanDrop are changed)
-#    """
-#
-#    #Make an initial list
-#    useBand=np.ones(parms["selChan"])
+    """
+    Check through the list of static flags and get the minimun and maximum channels for the bandpass.
     
-# Go through 
+    parms,  the input parameter dict
 
-#    return parms
+    returns: the modified input parameter list (only BChanDrop and EChanDrop are changed)
+    """
+
+    nChan=parms["selChan"]
+
+    #Make an initial list
+    useBand=np.ones(nChan)
+
+    # Use BCHDrop and ECHDrop
+    useBand[0:parms["BChDrop"]] = 0.0
+    useBand[nChan-parms["EChDrop"]:nChan] = 0.0
+    
+    #Go through editlist and fill channel flags
+    for thisEdit in parms["editList"]:
+        if thisEdit["Ant"] == [0,0]:
+            startChan=max(0,thisEdit["Chans"][0]-1)  # AIPS to python convention
+            endChan=min(thisEdit["Chans"][1],nChan-1)
+            useBand[startChan:endChan]=0.0
+
+    #Find min channel
+    parms["BChDrop"] = int(np.min(np.where(useBand==1.0)))
+    parms["EChDrop"] = int(nChan-np.max(np.where(useBand==1.0)))
+    parms["selChan"] = nChan - parms["BChDrop"] - parms["EChDrop"]
+    return parms
 
 
 def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
@@ -1235,7 +1251,7 @@ def EVLAUVFITSTab(inUV, filename, outDisk, err, \
     return outUV  # return new object
     # end EVLAUVFITSTab
 
-def EVLADropChan(uv, BChDrop, EChDrop, err, flagVer=2, \
+def KATDropChan(uv, BChDrop, EChDrop, err, flagVer=2, \
                  logfile='', check=False, debug=False):
     """
     Drop end channels from each spectrum (IF)
@@ -1251,20 +1267,78 @@ def EVLADropChan(uv, BChDrop, EChDrop, err, flagVer=2, \
     * debug    = Run tasks debug, show input
     """
     ################################################################
-    if check:
-        return 0
-    if BChDrop>0:
-        UV.PFlag(uv,err,flagVer=flagVer, Chans=[1,max(1,BChDrop)], IFs=[1,0], \
-                 Reason="End Channels")
-    if EChDrop>0:
-        d     = uv.Desc.Dict
-        nchan = d["inaxes"][d["jlocf"]]
-        ch = nchan - EChDrop + 1
-        UV.PFlag(uv,err,flagVer=flagVer, Chans=[ch, nchan], IFs=[1,0], \
-                 Reason="End Channels")
-    OErr.printErrMsg(err, "Error Flagging")
-    return 0
-    # end EVLADropChan
+
+#    if check:
+#        return 0
+#    if BChDrop>0:
+#        UV.PFlag(uv,err,flagVer=flagVer, Chans=[1,max(1,BChDrop)], IFs=[1,0], \
+#                 Reason="End Channels")
+#    if EChDrop>0:
+#        d     = uv.Desc.Dict
+#        nchan = d["inaxes"][d["jlocf"]]
+#        ch = nchan - EChDrop + 1
+#        UV.PFlag(uv,err,flagVer=flagVer, Chans=[ch, nchan], IFs=[1,0], \
+#                 Reason="End Channels")
+#    OErr.printErrMsg(err, "Error Flagging")
+    
+    d     = uv.Desc.Dict
+    nchan = d["inaxes"][d["jlocf"]]
+
+    # Now splat the data
+    splat=ObitTask.ObitTask("Splat")
+    try:
+        splat.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
+    except Exception, exception:
+        pass
+    splat.taskLog = logfile
+    if not check:
+        setname(uv,splat)
+    splat.doCalib  = 0
+    splat.gainUse  = -1
+    splat.doBand   = 0
+    splat.BPVer    = -1
+    splat.BIF      = 1
+    splat.EIF      = 0
+    splat.BChan    = BChDrop
+    splat.EChan    = nchan - EChDrop
+    splat.flagVer  = flagVer
+    splat.FreqID   = 0
+    splat.timeAvg  = -1
+    splat.avgFreq  = 0
+    splat.chAvg    = -1
+    splat.corrType = 1   # include autocorrs
+    splat.Compress = False
+    splat.outName  = splat.inName
+    splat.outClass = 'Cut'
+    splat.outDisk  = splat.inDisk
+    splat.outSeq   = splat.inSeq
+    if debug:
+        splat.i
+        splat.debug = debug
+    # Trap failure
+    try:
+        if not check:
+            splat.g
+            pass
+    except Exception, exception:
+        print exception
+        mess = "Splat Failed retCode="+str(splat.retCode)
+        printMess(mess, logfile)
+        return 1
+    else:
+        pass
+    # end splat
+    
+    outUV = UV.newPAUV("AIPS UV DATA", splat.outName, "Cut", splat.outDisk, splat.outSeq, True, err)
+    if err.isErr:
+        mess =  "Error getting channel cut data."
+        printMess(mess, logfile)
+        return None
+    return outUV
+
+
+
+    # end KATDropChan
 
 def EVLAMedianFlag(uv, target, err, \
                        flagTab=2, flagSig=10.0, alpha=0.5, timeWind=2.0, \

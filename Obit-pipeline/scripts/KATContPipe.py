@@ -178,6 +178,10 @@ def pipeline(args, options):
                          Stokes=edt["Stokes"], Reason=edt["Reason"])
             OErr.printErrMsg(err, "Error Flagging")
 
+    # Get channel range
+    if parms["doChopBand"] and not check:
+        parms=KATGetContChan(parms)
+
     # Drop End Channels
     if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
         # Channels based on original number, reduced if Hanning
@@ -187,7 +191,7 @@ def pipeline(args, options):
         EChDrop = parms["EChDrop"]
         mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
         printMess(mess, logFile)
-        retCode = EVLADropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
+        uv = KATDropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
                                 logfile=logFile, check=check, debug=debug)
         if retCode!=0:
             raise RuntimeError,"Error Copying FG table"
@@ -221,22 +225,22 @@ def pipeline(args, options):
         #Time editing First
         retCode = EVLAMedianFlag (uv, "    ", err, noScrat=noScrat, nThreads=nThreads, \
                                   avgTime=0.01, avgFreq=1,  chAvg=int(parms["selChan"]/4), \
-                                  timeWind=5.0, flagVer=-1, flagTab=1,flagSig=5.0, \
+                                  timeWind=5.0, flagVer=0, flagTab=1,flagSig=5.0, \
                                   logfile=logFile, check=check, debug=False)
         if retCode!=0:
             raise RuntimeError,"Error in MednFlag"
     
         mess =  "Initial frequency domain editing"
         printMess(mess, logFile)
-        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=-1,  flagTab=1, doCalib=-1, doBand=-1, timeAvg=5.0, \
-                                doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=(parms["selChan"]/4)-1,  \
-                                FDmaxRMS=[5.0,0.1], FDmaxRes=20.0,  \
-                                FDmaxResBL=5.0,  FDbaseSel=[parms["BChDrop"],parms["selChan"]-parms["EChDrop"],1,0],\
+        widMW = divmod(parms["selChan"]/4,2)
+        widMW = widMW[0] + widMW[1] + 1
+        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=0,  flagTab=1, doCalib=-1, doBand=-1, timeAvg=10.0, \
+                                doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=widMW,  \
+                                FDmaxRMS=[5.0,0.1], FDmaxRes=20.0, FDmaxResBL=5.0,  FDbaseSel=[1,0,1,0],\
                                 nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
            raise  RuntimeError,"Error in AutoFlag"
     
-
     # Hanning
     if parms["doHann"]:
         # Set uv if not done
@@ -257,14 +261,7 @@ def pipeline(args, options):
         EVLAClearCal(uv, err, doGain=parms["doClearGain"], doFlag=parms["doClearFlag"], doBP=parms["doClearBP"], check=check)
         OErr.printErrMsg(err, "Error resetting calibration")
     
-    # Copy FG 1 to FG 2
-    #if parms["doCopyFG"]:
-    #    mess =  "Copy FG 1 to FG 2"
-    #    printMess(mess, logFile)
-    #    retCode = EVLACopyFG (uv, err, logfile=logFile, check=check, debug=debug)
-    #    if retCode!=0:
-    #        raise RuntimeError,"Error Copying FG table"
-    
+
     # Median window time editing, for RFI impulsive in time
     if parms["doMednTD1"]:
         mess =  "Median window time editing, for RFI impulsive in time:"
@@ -551,7 +548,7 @@ def pipeline(args, options):
         retCode = KATCalAvg (uv, avgClass, parms["seq"], parms["CalAvgTime"], err, \
                               flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
-                              BChan=parms["CABChan"], EChan=parms["CAEChan"], doAuto=parms["doAuto"], \
+                              BChan=1, EChan=0, doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
                               nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
