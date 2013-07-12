@@ -146,6 +146,10 @@ def KATInitContParms(obsdata):
     parms["EChDrop"]     = None         # number of channels to drop from end of each spectrum
                                         # NB: based on original number of channels, halved for Hanning
 
+    # Construct a calibrator model from initial image??
+    parms["getCalModel"]  =  True
+
+
     # Delay calibration
     parms["doDelayCal"]   =  True       # Determine/apply delays from contCals
     parms["delaySolInt"]  =  10.0        # delay solution interval (min)
@@ -175,7 +179,7 @@ def KATInitContParms(obsdata):
     parms["doAmpPhaseCal"] = True
     parms["refAnt"]   =       0          # Reference antenna
     parms["refAnts"]  =      [0]         # List of Reference antenna for fringe fitting
-    parms["solInt"]   =      1.0         # solution interval (min)
+    parms["solInt"]   =      3.0         # solution interval (min)
     parms["ampScalar"]=     False        # Ampscalar solutions?
     parms["solSmo"]   =      0.0          # Smoothing interval for Amps (min)
 
@@ -382,19 +386,6 @@ def KATInitTargParms(parms,obsdata,uv,err):
                     parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
                     tcals.append(cal)
 
-    # Delay Calibrators
-    parms["DCals"]= parms.get("DCals",[])
-    if not parms["DCals"]:
-        DCals = []
-        tcals = []
-        for cal in bpcal + ampcal + gaincal:
-            if not cal in tcals:
-                DCals.append(EVLACalModel(cal.name[0:16]))
-                tcals.append(cal)
-        # Check for standard model
-        EVLAStdModel(DCals, parms["KAT7Freq"])
-        parms["DCals"]          = DCals      # delay calibrators
-
     # Gain Calibrators
     # Amp/phase calibration
     parms["PCals"]=parms.get("PCals",[])
@@ -408,6 +399,21 @@ def KATInitTargParms(parms,obsdata,uv,err):
         # Check for standard model
         EVLAStdModel(PCals, parms["KAT7Freq"])
         parms["PCals"]          = PCals   # Phase calibrator(s)
+
+    # Delay Calibrators
+    parms["DCals"]= parms.get("DCals",[])
+    if not parms["DCals"]:
+        DCals = []
+        tcals = []
+        for cal in parms["PCals"] + parms["ACals"] + parms["BPCals"]:
+            if not cal['Source'] in tcals:
+                DCals.append(EVLACalModel(cal['Source'][0:16]))
+                tcals.append(cal['Source'])
+        # Check for standard model
+        EVLAStdModel(DCals, parms["KAT7Freq"])
+        parms["DCals"]          = DCals      # delay calibrators
+
+
 
 #Done KATInitCalModel
 
@@ -460,7 +466,7 @@ def KATGetBadAnts(obsdata,checktargs,specrange):
     
     # Reject antennas >10MAD'S from the median
     rejectList=[]
-    cutoff=medI-(10.0*MAD)
+    cutoff=medI - (10.0*MAD)
     for antnum,thisI in enumerate(stokesI):
         if thisI<cutoff:
             rejectList.append({"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[antnum+1 ,0],"IFs":[1,1],"Chans":[0,0], "Stokes":'1111',"Reason":"Bad Ant"})
@@ -566,7 +572,7 @@ def KATInitContFQParms(parms,obsdata):
     if parms["doMB"] == None:
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.014
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.02
             if parms["MBnorder"]==None: parms["MBnorder"] = 1
         else:                                             # Narrow-band
             parms["doMB"] = False
@@ -1780,6 +1786,168 @@ def EVLAPACor(uv, err, CLver=0, FreqID=0,\
     return 0
     # end EVLAPACor
 
+def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat=[], nThreads=1):
+    
+    """
+    Make an image of the phase calibrators and make a CC
+    table model that can be used as a calibrator model.
+
+    * uv    = uv data to image
+    * parms = full set of input parameters
+    * err   = Python Obit Error
+    
+    returns: retcode (1=fail)
+             parms   (updated to include calibrator model information)
+    
+    """
+
+    retCode=0
+
+    user = OSystem.PGetAIPSuser()
+
+    uvcop=AIPSTask.AIPSTask("uvcop")
+    setname(uv, uvcop)
+    uvcop.outname = "UV COPY"
+    uvcop.outclass = "UVDATA"
+    uvcop.outdisk = parms["disk"]
+    uvcop.outseq = parms["seq"]
+    uvcop.bchan = 0
+    uvcop.echan = 0
+    uvcop.flagver = 0
+    try:
+        uvcop.g
+    except Exception, exception:
+        print "Unable to Copy UV data"
+        return 1, parms
+
+    # Get uv_alt
+    uv_alt = UV.newPAUV("COPY OF UV DATA", "UV COPY", "UVDATA", parms["disk"], parms["seq"], True, err)
+
+    # Copy uv to uv_alt so we don't modify uv
+    #uv.Copy(uv_alt, err)
+    #UV.PGetTable(uv, 1, "AIPS CL", 0, err)
+    #uv_alt.Header(err)
+    #UV.PCopyTables(uv, uv_alt, [], ['AIPS FG'], err) 
+    clist = [PCal["Source"] for PCal in parms["PCals"]]
+
+    # Bandpass calibration
+    if parms["doBPCal"] and parms["BPCals"]:
+        retCode = EVLABPCal(uv_alt, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+                            solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
+                            BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
+                            BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \
+                            doCenter1=parms["bpDoCenter1"], refAnt=parms["refAnt"], \
+                            UVRange=parms["bpUVRange"], doCalib=-1, gainUse=0, flagVer=2, doPlot=False, \
+                            nThreads=nThreads, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error in Bandpass calibration"
+
+    # Amp & phase Calibrate
+    if parms["doAmpPhaseCal"]:
+        retCode = KATCalAP (uv_alt, [], parms["ACals"], err, PCals=parms["PCals"], 
+                             doCalib=-1, doBand=1, BPVer=1, flagVer=2, \
+                             BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
+                             solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
+                             doAmpEdit=parms["doAmpEdit"], ampSigma=parms["ampSigma"], \
+                             ampEditFG=parms["ampEditFG"], \
+                             doPlot=False, plotFile='',  refAnt=parms["refAnt"], \
+                             nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise RuntimeError,"Error calibrating"
+    
+    #Flag
+    if parms["doAutoFlag"]:
+        retCode = EVLAAutoFlag (uv_alt, clist, err, flagVer=2, \
+                                    doCalib=2, gainUse=0, doBand=1, BPVer=1,  \
+                                    IClip=parms["IClip"], minAmp=parms["minAmp"], timeAvg=parms["timeAvg"], \
+                                    doFD=parms["doAFFD"], FDmaxAmp=parms["FDmaxAmp"], FDmaxV=parms["FDmaxV"], \
+                                    FDwidMW=parms["FDwidMW"], FDmaxRMS=parms["FDmaxRMS"], \
+                                    FDmaxRes=parms["FDmaxRes"],  FDmaxResBL=parms["FDmaxResBL"], \
+                                    FDbaseSel=parms["FDbaseSel"], \
+                                    nThreads=nThreads, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+            raise  RuntimeError,"Error in AutoFlag"
+    
+    # Calibrate and average data
+    if parms["doCalAvg"]:
+        retCode = KATCalAvg (uv_alt, "AVG_T", parms["seq"], parms["CalAvgTime"], err, \
+                              flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
+                              avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
+                              BChan=1, EChan=0, doAuto=parms["doAuto"], \
+                              BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
+                              nThreads=nThreads, logfile=logFile, check=check, debug=debug)
+        if retCode!=0:
+           raise  RuntimeError,"Error in CalAvg"
+
+    # Get calibrated/averaged data
+    if not check:
+        uv_alt_av = UV.newPAUV("AIPS UV DATA", "UV COPY", "AVG_T", \
+                            parms["disk"], parms["seq"], True, err)
+        if err.isErr:
+            OErr.printErrMsg(err, "Error creating cal/avg AIPS data")
+
+    uv_alt.Zap(err)
+    NewPCals=[]
+    # Loop over calibrators
+    for cal in parms["PCals"]:
+        source = cal["Source"]
+        # Get the flux of the calibrators
+        suinfo = EVLAGetTimes(uv_alt_av, source, err, logfile=logFile, check=check, debug=debug)
+        iflux=suinfo["IFlux"][0]
+        fluxlim=max(0.05*iflux,0.1)
+        
+        # Image the calibrators down to 5% of the peak with few CC's and high gain to get a model.
+        KATImageTargets (uv_alt_av, err, Sources=source, seq=parms["seq"], sclass="MODEL", CCVer=1, CGain=0.9,\
+                             doCalib=-1, doBand=-1,  flagVer=-1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
+                             Stokes="I", FOV=3.0, Robust=0.0, Niter=300, \
+                             CleanRad=None, minFlux=fluxlim, OutlierSize=parms["OutlierSize"], \
+                             xCells=parms["xCells"], yCells=parms["yCells"], Reuse=parms["Reuse"], minPatch=parms["minPatch"], \
+                             maxPSCLoop=parms["maxPSCLoop"], minFluxPSC=fluxlim, noNeg=parms["noNeg"], \
+                             solPInt=parms["solPInt"], solPMode=parms["solPMode"], solPType=parms["solPType"], \
+                             maxASCLoop=2, minFluxASC=fluxlim, nx=parms["nx"], ny=parms["ny"], \
+                             solAInt=parms["solAInt"], solAMode=parms["solAMode"], solAType=parms["solAType"], \
+                             avgPol=parms["avgPol"], avgIF=parms["avgIF"], minSNR = parms["minSNR"], refAnt=parms["refAnt"], \
+                             do3D=parms["do3D"], BLFact=parms["BLFact"], BLchAvg=parms["BLchAvg"], \
+                             doMB=parms["doMB"], norder=parms["MBnorder"], maxFBW=parms["MBmaxFBW"], \
+                             PBCor=parms["PBCor"],antSize=parms["antSize"], \
+                             nTaper=parms["nTaper"], Tapers=parms["Tapers"], \
+                             nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=False)
+
+        # Update the model parameters with the output
+        aipsimname=source
+        oclass="IODEL"
+        oseq=parms["seq"]
+        # Test if image exists
+        exists = AIPSDir.PTestCNO(parms["disk"], user, aipsimname, oclass, "MA", oseq, err)
+        if exists > 0:       
+            cal['CalDataType']='AIPS'
+            cal['CalClass']=oclass
+            cal['CalName']=aipsimname
+            cal['CalSeq']=oseq
+            cal['CalDisk']=parms["disk"]
+            cal['CalNfield']=1
+            cal['CalCCVer']=1
+            cal['CalFlux']=fluxlim
+            
+        NewPCals.append(cal)
+
+    uv_alt_av.Zap(err)
+    # Fix PCals array
+    parms["PCals"]=NewPCals
+
+    NewDCals=[]
+    # Fix DCals Array
+    for dcal in parms["DCals"]:
+        for pcal in parms["PCals"]:
+            if dcal["Source"] == pcal["Source"]:
+                NewDCals.append(pcal)
+            else:
+                NewDCals.append(dcal)
+    
+    parms["DCals"] = NewDCals
+
+    return retCode,parms 
+
 def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, \
                      BChan=1, EChan=0, \
                      timeRange=[0.,0.], FreqID=1, doCalib=-1, gainUse=0, minSNR=5.0, \
@@ -1876,7 +2044,7 @@ def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, \
         calib.modelFlux = DlyCal["CalModelFlux"]
         calib.modelPos  = DlyCal["CalModelPos"]
         calib.modelParm = DlyCal["CalModelParm"]
-
+        
         if debug:
             calib.prtLv =6
             calib.i
@@ -2284,7 +2452,8 @@ def KATCalAP(uv, target, ACals, err, \
             if debug:
                 calib.i
                 calib.debug = debug
-           # Trap failure
+                calib.prtLv = 5
+            # Trap failure
             try:
                 mess = "Run Calib on "+calib.Sources[0]
                 printMess(mess, logfile)
@@ -4468,7 +4637,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
                      xCells=0, yCells=0, Reuse=0.0, minPatch=0, OutlierSize=0, noNeg=False, \
                      Stokes="I", FOV=0.1/3600.0, Robust=0, Niter=300, CleanRad=None, \
                      maxPSCLoop=0, minFluxPSC=0.1, solPInt=20.0/60., \
-                     solPMode="P", solPType= "  ", \
+                     solPMode="P", solPType= "  ", CCVer=-1, CGain=0.1, \
                      maxASCLoop=0, minFluxASC=0.5, solAInt=2.0, \
                      solAMode="A&P", solAType= "  ", autoCen=False, \
                      avgPol=False, avgIF=False, minSNR = 5.0, refAnt=0, \
@@ -4603,6 +4772,8 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     imager.FOV         = FOV
     imager.Robust      = Robust
     imager.Niter       = Niter
+    imager.CCVer       = CCVer
+    imager.Gain        = CGain
     imager.maxPSCLoop  = maxPSCLoop
     imager.solPInt     = solPInt
     imager.solPMode    = solPMode
@@ -4677,9 +4848,9 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         if iflux>0.0 or bandwidth<50e6:
             imager.Niter=int(Niter/3)
         else: imager.Niter=Niter
-        # 1deg field of view for calibrators and 3D imaging off.
+        # Half field of view for calibrators and 3D imaging off.
         if iflux>0.0:
-            imager.FOV=1.0
+            imager.FOV=FOV/2.0
             imager.do3D=False
         else:
             imager.FOV=FOV

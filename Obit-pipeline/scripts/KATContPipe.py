@@ -85,6 +85,7 @@ def pipeline(args, options):
     
     ####### Initialize parameters #####
     parms = KATInitContParms(obsdata)
+    parms["disk"] = disk
     debug = parms["debug"]
     check = parms["check"]
 
@@ -320,6 +321,7 @@ def pipeline(args, options):
         refAnt = FetchObject(fileRoot+".refAnt.pickle")
         if refAnt:
             parms["refAnt"] = refAnt
+
     # Use bandpass calibrator and center half of each spectrum
     if parms["refAnt"]<=0:
         mess = "Find best reference antenna: run Calib on BP Cal(s) "
@@ -351,6 +353,16 @@ def pipeline(args, options):
         if retCode!=0:
             raise  RuntimeError,"Error in Plotting spectrum"
         EVLAAddOutFile(plotFile, 'project', 'Pipeline log file' )
+
+    # Get calibrator model
+    if parms["getCalModel"]:
+        mess =  "Determining calibrator model."
+        #uv_alt = UV.newPAUV("COPY OF UV DATA", "TEMP", "UVDATA", disk, parms["seq"], False, err)        
+        printMess(mess, logFile)
+        retCode,parms = KATGetCalModel(uv, parms, err, check=check, debug=debug, logFile=logFile, noScrat=noScrat, nThreads=nThreads)
+    if retCode!=0:
+        raise  RuntimeError,"Error determining calibrator model"
+
 
     # delay calibration
     if parms["doDelayCal"] and parms["DCals"] and not check:
@@ -402,7 +414,7 @@ def pipeline(args, options):
     if parms["doAmpPhaseCal"]:
         plotFile = fileRoot+"_APCal.ps"
         retCode = KATCalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], 
-                             doCalib=2, doBand=1, BPVer=1, flagVer=2, \
+                             doCalib=2, doBand=2, BPVer=1, flagVer=2, \
                              BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
                              solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
                              doAmpEdit=parms["doAmpEdit"], ampSigma=parms["ampSigma"], \
@@ -426,7 +438,7 @@ def pipeline(args, options):
                     clist.append(DCal["Source"])
             for PCal in parms["PCals"]:
                 if PCal["Source"] not in clist:
-                    clist.append(DCal["Source"])
+                    clist.append(PCal["Source"])
             for ACal in parms["ACals"]:
                 if ACal["Source"] not in clist:
                     clist.append(ACal["Source"])
@@ -434,7 +446,7 @@ def pipeline(args, options):
             clist = []
     
         retCode = EVLAAutoFlag (uv, clist, err, flagVer=2, \
-                                doCalib=2, gainUse=0, doBand=1, BPVer=1,  \
+                                doCalib=2, gainUse=0, doBand=2, BPVer=1,  \
                                 IClip=parms["IClip"], minAmp=parms["minAmp"], timeAvg=parms["timeAvg"], \
                                 doFD=parms["doAFFD"], FDmaxAmp=parms["FDmaxAmp"], FDmaxV=parms["FDmaxV"], \
                                 FDwidMW=parms["FDwidMW"], FDmaxRMS=parms["FDmaxRMS"], \
@@ -514,7 +526,7 @@ def pipeline(args, options):
         if parms["doAmpPhaseCal2"]:
             plotFile = fileRoot+"_APCal2.ps"
             retCode = KATCalAP (uv, [], parms["ACals"], err, PCals=parms["PCals"], \
-                                 doCalib=2, doBand=1, BPVer=1, flagVer=2, \
+                                 doCalib=2, doBand=2, BPVer=1, flagVer=2, \
                                  BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
                                  solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
                                  doAmpEdit=parms["doAmpEdit"], ampSigma=parms["ampSigma"], \
@@ -529,7 +541,7 @@ def pipeline(args, options):
             mess =  "Post recalibration editing:"
             printMess(mess, logFile)
             retCode = EVLAAutoFlag (uv, [], err, flagVer=2, \
-                                    doCalib=2, gainUse=0, doBand=1, BPVer=1,  \
+                                    doCalib=2, gainUse=0, doBand=2, BPVer=1,  \
                                     IClip=parms["IClip"], minAmp=parms["minAmp"], timeAvg=parms["timeAvg"], \
                                     doFD=parms["doAFFD"], FDmaxAmp=parms["FDmaxAmp"], FDmaxV=parms["FDmaxV"], \
                                     FDwidMW=parms["FDwidMW"], FDmaxRMS=parms["FDmaxRMS"], \
@@ -540,13 +552,11 @@ def pipeline(args, options):
                 raise  RuntimeError,"Error in AutoFlag"
             
     # end recal
-    
-    
-    
+        
     # Calibrate and average data
     if parms["doCalAvg"]:
         retCode = KATCalAvg (uv, avgClass, parms["seq"], parms["CalAvgTime"], err, \
-                              flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
+                              flagVer=2, doCalib=2, gainUse=0, doBand=2, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
                               BChan=1, EChan=0, doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
