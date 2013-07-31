@@ -83,10 +83,10 @@ def KATInitContParms(obsdata):
     parms["doDescm"]      = True        # Descimate Hanning?
 
     # Parallactic angle correction
-    parms["doPACor"]      = False         # Make parallactic angle correction
+    parms["doPACor"]      = False       # Make parallactic angle correction
 
     # Special editing list
-    parms["doEditList"] =  True        # Edit using editList?
+    parms["doEditList"] =  True         # Edit using editList?
     parms["editFG"] =      1            # Table to apply edit list to
 
     # Create the editlist array for static flags (on instantiation it contains a flag of the middle channel).
@@ -98,7 +98,6 @@ def KATInitContParms(obsdata):
     parms["doClearGain"]  = True        # Clear SN and CL tables >1
     parms["doClearFlag"]  = True        # Clear FG tables > 1
     parms["doClearBP"]    = True        # Clear BP tables?
-    parms["doCopyFG"]     = True        # Copy FG 1 to FG 2
     parms["doQuack"]      = True        # Quack data?
     parms["doBadAnt"]     = True        # Check for bad antennas?
     parms["doInitFlag"]   = True        # Initial broad Frequency and time domain flagging
@@ -129,7 +128,7 @@ def KATInitContParms(obsdata):
     parms["doAutoFlag"]  = True         # Autoflag editing after first pass calibration?
     parms["doAutoFlag2"] = True         # Autoflag editing after final (2nd) calibration?
     parms["IClip"]       = None         # AutoFlag Stokes I clipping
-    parms["VClip"]       = None
+    parms["VClip"]       = None         #
     parms["XClip"]       = None         # AutoFlag cross-pol clipping
     parms["timeAvg"]     = 0.33         # AutoFlag time averaging in min.
     parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
@@ -562,17 +561,17 @@ def KATInitContFQParms(parms,obsdata):
 
     # Can probably set this automatically to accomodate bandwidth smearing constraints later on..
     if parms["chAvg"] == None:
-        if nchan<1024:
-            parms["chAvg"] =         4
+        if nchan<=1024:
+            parms["chAvg"] =         2
         else:
-            parms["chAvg"] =         16
+            parms["chAvg"] =         8
     if parms["avgFreq"] == None:
         parms["avgFreq"] =       1
 
     if parms["doMB"] == None:
         if bandwidth>100e6:                               # Wideband
             parms["doMB"] = True
-            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.02
+            if parms["MBmaxFBW"]==None: parms["MBmaxFBW"] = 0.014
             if parms["MBnorder"]==None: parms["MBnorder"] = 1
         else:                                             # Narrow-band
             parms["doMB"] = False
@@ -705,9 +704,9 @@ def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
     OErr.printErrMsg(err, "EVLAClearCal: Error reseting calibration")
     # end EVLAClearCal
 
-def EVLACopyFG(uv, err, logfile='', check=False, debug = False):
+def KATCopyFG(uv, err, inVer=1, outVer=2, logfile='', check=False, debug = False):
     """
-    Copy AIPS FG table from 1 to 2
+    Copy AIPS FG table from inVer to outVer
 
     Returns task error code, 0=OK, else failed
 
@@ -730,8 +729,8 @@ def EVLACopyFG(uv, err, logfile='', check=False, debug = False):
     taco.outDisk  = taco.inDisk
     taco.outSeq   = taco.inSeq
     taco.inTab    = "AIPS FG"
-    taco.inVer    = 1
-    taco.outVer   = 2
+    taco.inVer    = inVer
+    taco.outVer   = outVer
     taco.taskLog = logfile
     if debug:
         taco.debug = debug
@@ -1786,7 +1785,7 @@ def EVLAPACor(uv, err, CLver=0, FreqID=0,\
     return 0
     # end EVLAPACor
 
-def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat=[], nThreads=1):
+def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=False, noScrat=[], nThreads=1):
     
     """
     Make an image of the phase calibrators and make a CC
@@ -1823,12 +1822,9 @@ def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat
     # Get uv_alt
     uv_alt = UV.newPAUV("COPY OF UV DATA", "UV COPY", "UVDATA", parms["disk"], parms["seq"], True, err)
 
-    # Copy uv to uv_alt so we don't modify uv
-    #uv.Copy(uv_alt, err)
-    #UV.PGetTable(uv, 1, "AIPS CL", 0, err)
-    #uv_alt.Header(err)
-    #UV.PCopyTables(uv, uv_alt, [], ['AIPS FG'], err) 
     clist = [PCal["Source"] for PCal in parms["PCals"]]
+
+
 
     # Bandpass calibration
     if parms["doBPCal"] and parms["BPCals"]:
@@ -1868,12 +1864,13 @@ def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat
         if retCode!=0:
             raise  RuntimeError,"Error in AutoFlag"
     
+    print parms["selChan"],parms["EChDrop"]
     # Calibrate and average data
     if parms["doCalAvg"]:
         retCode = KATCalAvg (uv_alt, "AVG_T", parms["seq"], parms["CalAvgTime"], err, \
                               flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
-                              BChan=1, EChan=0, doAuto=parms["doAuto"], \
+                              BChan=parms["BChDrop"], EChan=parms["selChan"] - parms["EChDrop"], doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
                               nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
@@ -1897,9 +1894,9 @@ def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat
         fluxlim=max(0.05*iflux,0.1)
         
         # Image the calibrators down to 5% of the peak with few CC's and high gain to get a model.
-        KATImageTargets (uv_alt_av, err, Sources=source, seq=parms["seq"], sclass="MODEL", CCVer=1, CGain=0.9,\
+        KATImageTargets (uv_alt_av, err, Sources=source, seq=parms["seq"], sclass="MODEL", CCVer=1, CGain=0.1,\
                              doCalib=-1, doBand=-1,  flagVer=-1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
-                             Stokes="I", FOV=3.0, Robust=0.0, Niter=300, \
+                             Stokes="I", FOV=2.0, OutlierArea=1.5, Robust=0.0, Niter=150, \
                              CleanRad=None, minFlux=fluxlim, OutlierSize=parms["OutlierSize"], \
                              xCells=parms["xCells"], yCells=parms["yCells"], Reuse=parms["Reuse"], minPatch=parms["minPatch"], \
                              maxPSCLoop=parms["maxPSCLoop"], minFluxPSC=fluxlim, noNeg=parms["noNeg"], \
@@ -1919,15 +1916,23 @@ def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat
         oseq=parms["seq"]
         # Test if image exists
         exists = AIPSDir.PTestCNO(parms["disk"], user, aipsimname, oclass, "MA", oseq, err)
+        
         if exists > 0:       
-            cal['CalDataType']='AIPS'
-            cal['CalClass']=oclass
-            cal['CalName']=aipsimname
-            cal['CalSeq']=oseq
-            cal['CalDisk']=parms["disk"]
+            x = Image.newPAImage("out_model", aipsimname, oclass, parms["disk"], oseq, True, err)
+            outfile = fileroot + '_'+source+'_model.fits'
+            xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
+            EVLAAddOutFile(outfile, 'M'+source, 'Model image of '+ source)
+        
+            cal['CalDataType']='FITS'
+            cal['CalFile']=outfile
             cal['CalNfield']=1
-            cal['CalCCVer']=1
+            cal['CalBComp']=[1]
+            cal['CalEComp']=[0]
+            cal['CalCmethod']='DFT'
+            cal['CalCCVer']=0
             cal['CalFlux']=fluxlim
+            cal['CalModelFlux']=0
+            cal['CalModel']='COMP'
             
         NewPCals.append(cal)
 
@@ -1948,8 +1953,7 @@ def KATGetCalModel(uv, parms, err, logFile='', check=False, debug=False, noScrat
 
     return retCode,parms 
 
-def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, \
-                     BChan=1, EChan=0, \
+def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, BChan=1, EChan=0, \
                      timeRange=[0.,0.], FreqID=1, doCalib=-1, gainUse=0, minSNR=5.0, \
                      refAnts=[0], doBand=-1, BPVer=0, flagVer=-1, doTwo=True, doZeroPhs=False, \
                      doPlot=False, plotFile="./DelayCal.ps", \
@@ -2023,6 +2027,7 @@ def EVLADelayCal(uv,DlyCals,  err, solInt=0.5, smoTime=10.0, \
     calib.noScrat   = noScrat
     calib.nThreads  = nThreads
     calib.doTwo     = doTwo
+    calib.noNeg     = True
 
     # Loop over calibrators
     for DlyCal in DlyCals:
@@ -2340,6 +2345,7 @@ def KATCalAP(uv, target, ACals, err, \
     calib.refAnts  = [refAnt]
     calib.noScrat  = noScrat
     calib.solnVer  = solnVer
+    calib.noNeg    = True
     OK      = False   # Must have some work
     OKCals2 = []      # List of ones that worked
     # Loop over calibrators
@@ -2362,7 +2368,7 @@ def KATCalAP(uv, target, ACals, err, \
         calib.modelFlux = ACal["CalModelFlux"]
         calib.modelPos  = ACal["CalModelPos"]
         calib.modelParm = ACal["CalModelParm"]
-
+    
         if debug:
             calib.i
             calib.debug = debug
@@ -2448,7 +2454,7 @@ def KATCalAP(uv, target, ACals, err, \
             calib.modelFlux = PCal["CalModelFlux"]
             calib.modelPos  = PCal["CalModelPos"]
             calib.modelParm = PCal["CalModelParm"]
-
+            
             if debug:
                 calib.i
                 calib.debug = debug
@@ -4632,7 +4638,7 @@ def EVLAGetTimes(uv, Source, err,
     # end EVLAGetTimes
 
 def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", band="", \
-                     doCalib=-1, gainUse=0, doBand=-1, BPVer=0,  flagVer=-1,  \
+                     doCalib=-1, gainUse=0, doBand=-1, BPVer=0,  flagVer=-1,  OutlierArea=6.0, \
                      doPol=False, PDVer=-1,  minFlux=0.0, nx=[0], ny=[0], \
                      xCells=0, yCells=0, Reuse=0.0, minPatch=0, OutlierSize=0, noNeg=False, \
                      Stokes="I", FOV=0.1/3600.0, Robust=0, Niter=300, CleanRad=None, \
@@ -4801,7 +4807,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     imager.minPatch    = minPatch
     imager.OutlierSize = OutlierSize
     if doOutlier or ((doOutlier==None) and refFreq<6.0e9):
-        imager.OutlierDist = FOV*2.0   # Outliers from NVSS/SUMMS for lower frequencies
+        imager.OutlierDist = FOV*OutlierArea   # Outliers from NVSS/SUMMS for lower frequencies
         if refFreq>1.0e9:
             imager.OutlierFlux = 0.01
         else:
@@ -4848,12 +4854,10 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         if iflux>0.0 or bandwidth<50e6:
             imager.Niter=int(Niter/3)
         else: imager.Niter=Niter
-        # Half field of view for calibrators and 3D imaging off.
+        # 3D imaging off for calibrators.
         if iflux>0.0:
-            imager.FOV=FOV/2.0
             imager.do3D=False
         else:
-            imager.FOV=FOV
             imager.do3D=do3D
         del suinfo
         # Test autoCen

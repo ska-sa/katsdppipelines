@@ -182,20 +182,22 @@ def pipeline(args, options):
     # Get channel range
     if parms["doChopBand"] and not check:
         parms=KATGetContChan(parms)
-
-    # Drop End Channels
-    if parms["doCopyFG"] and (parms["BChDrop"]>0) or (parms["EChDrop"]>0):
-        # Channels based on original number, reduced if Hanning
-        nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
-        #fact = parms["selChan"]/nchan   # Hanning reduction factor
-        BChDrop = parms["BChDrop"]
-        EChDrop = parms["EChDrop"]
-        mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
-        printMess(mess, logFile)
-        uv = KATDropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
+        # Drop End Channels
+        if parms["BChDrop"]>0 or parms["EChDrop"]>0:
+            # Channels based on original number, reduced if Hanning
+            nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
+            #fact = parms["selChan"]/nchan   # Hanning reduction factor
+            BChDrop = parms["BChDrop"]
+            EChDrop = parms["EChDrop"]
+            mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
+            printMess(mess, logFile)
+            uv = KATDropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
                                 logfile=logFile, check=check, debug=debug)
-        if retCode!=0:
-            raise RuntimeError,"Error Copying FG table"
+            if retCode==0:
+                parms["BChDrop"]=0
+                parms["EChDrop"]=0
+            if retCode!=0:
+                raise RuntimeError,"Error trimming start and end channels"
    
     # Quack to remove data from start and end of each scan
     if parms["doQuack"]:
@@ -252,6 +254,9 @@ def pipeline(args, options):
     
         uv = KATHann(uv, EVLAAIPSName(project), dataClass, disk, parms["seq"], err, \
                       doDescm=parms["doDescm"], flagVer=1, logfile=logFile, check=check, debug=debug)
+        parms["selChan"]=int(parms["selChan"]/2)
+        parms["BChDrop"]=int(parms["BChDrop"]/2)
+        parms["EChDrop"]=int(parms["EChDrop"]/2)
         if uv==None and not check:
             raise RuntimeError,"Cannot Hann data "
     
@@ -359,10 +364,10 @@ def pipeline(args, options):
         mess =  "Determining calibrator model."
         #uv_alt = UV.newPAUV("COPY OF UV DATA", "TEMP", "UVDATA", disk, parms["seq"], False, err)        
         printMess(mess, logFile)
-        retCode,parms = KATGetCalModel(uv, parms, err, check=check, debug=debug, logFile=logFile, noScrat=noScrat, nThreads=nThreads)
+        retCode,parms = KATGetCalModel(uv, parms, fileRoot, err, check=check, debug=debug, logFile=logFile, noScrat=noScrat, nThreads=nThreads)
     if retCode!=0:
         raise  RuntimeError,"Error determining calibrator model"
-
+    
 
     # delay calibration
     if parms["doDelayCal"] and parms["DCals"] and not check:
@@ -558,7 +563,7 @@ def pipeline(args, options):
         retCode = KATCalAvg (uv, avgClass, parms["seq"], parms["CalAvgTime"], err, \
                               flagVer=2, doCalib=2, gainUse=0, doBand=2, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
-                              BChan=1, EChan=0, doAuto=parms["doAuto"], \
+                              BChan=parms["BChDrop"], EChan=parms["selChan"] - parms["EChDrop"], doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
                               nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
