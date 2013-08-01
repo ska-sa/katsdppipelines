@@ -169,7 +169,7 @@ def KATInitContParms(obsdata):
     parms["bpdoAuto"] =      False      # Use autocorrelations rather than cross?
     parms["bpsolMode"] =     'A&P'      # Band pass type 'A&P', 'P', 'P!A'
     parms["bpsolint1"] =     10.0/60.0  # BPass phase correction solution in min
-    parms["bpsolint2"] =     0.0        # BPass bandpass solution in min 0.0->scan average
+    parms["bpsolint2"] =     5.0        # BPass bandpass solution in min 0.0->scan average
     parms["bpUVRange"] =    [0.0,0.0]   # uv range for bandpass cal
     parms["specIndex"] =    -0.7        # Spectral index of BP Cal
     parms["doSpecPlot"] =    True       # Plot the amp. and phase across the spectrum
@@ -231,7 +231,7 @@ def KATInitContParms(obsdata):
     parms["RLRM"]       = 0.0        # R-L calibrator RM (NYI)
     parms["rlChWid"]    = 3          # Number of channels in running mean RL BP soln
     parms["rlsolint1"]  = 10./60     # First solution interval (min), 0=> scan average
-    parms["rlsolint2"]  = 10.0       # Second solution interval (min)
+    parms["rlsolint2"]  = 5.0       # Second solution interval (min)
     parms["rlCleanRad"] = None       # CLEAN radius about center or None=autoWin
     parms["rlFOV"]      = 0.05       # Field of view radius (deg) needed to image RLPCal
 
@@ -249,7 +249,7 @@ def KATInitContParms(obsdata):
     parms["Stokes"]      = "I"          # Stokes to image
     parms["Robust"]      = 0.0          # Weighting robust parameter
     parms["FOV"]         = 2.0          # Field of view radius in deg.
-    parms["Niter"]       = 1000         # Max number of clean iterations
+    parms["Niter"]       = 2000         # Max number of clean iterations
     parms["minFlux"]     = None         # Minimum CLEAN flux density
     parms["minSNR"]      = 4.0          # Minimum Allowed SNR
     parms["solPMode"]    = "P"          # Phase solution for phase self cal
@@ -258,7 +258,7 @@ def KATInitContParms(obsdata):
     parms["solAType"]    = "    "       # Solution type for A&P self cal
     parms["avgPol"]      = True         # Average poln in self cal?
     parms["avgIF"]       = False        # Average IF in self cal?
-    parms["maxPSCLoop"]  = 2            # Max. number of phase self cal loops
+    parms["maxPSCLoop"]  = 3            # Max. number of phase self cal loops
     parms["minFluxPSC"]  = None         # Min flux density peak for phase self cal
     parms["solPInt"]     = 0.2          # phase self cal solution interval (min)
     parms["maxASCLoop"]  = 1            # Max. number of Amp+phase self cal loops
@@ -278,12 +278,13 @@ def KATInitContParms(obsdata):
     parms["CleanRad"]    = None         # CLEAN radius (pix?) about center or None=autoWin
     parms["xCells"]      = 15.0         # x-cell size in final image
     parms["yCells"]      = 15.0         # y-cell  "
-    parms["nx"]          = [300]        # x-Size of a facet in pixels
-    parms["ny"]          = [300]        # y-size of a facet in pixels
+    parms["nx"]          = []           # x-Size of a facet in pixels
+    parms["ny"]          = []           # y-size of a facet in pixels
     parms["Reuse"]       = 0.0          # How many CC's to reuse after each self-cal loop??
-    parms["minPatch"]    = 250          # Minumum beam patch to subtract in pixels
-    parms["OutlierSize"] = 250          # Size of outlier fields
-    parms["autoCen"]     = True         # Do autoCen? 
+    parms["minPatch"]    = 500          # Minumum beam patch to subtract in pixels
+    parms["OutlierSize"] = 300          # Size of outlier fields
+    parms["autoCen"]     = False        # Do autoCen? 
+    parms["outlierArea"] = 4            # Multiple of FOV around phase center to find outlying CC's
 
     # Final
     parms["doReport"]  =     True       # Generate source report?
@@ -562,9 +563,9 @@ def KATInitContFQParms(parms,obsdata):
     # Can probably set this automatically to accomodate bandwidth smearing constraints later on..
     if parms["chAvg"] == None:
         if nchan<=1024:
-            parms["chAvg"] =         2
+            parms["chAvg"] =         4
         else:
-            parms["chAvg"] =         8
+            parms["chAvg"] =         16
     if parms["avgFreq"] == None:
         parms["avgFreq"] =       1
 
@@ -1841,7 +1842,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
     # Amp & phase Calibrate
     if parms["doAmpPhaseCal"]:
         retCode = KATCalAP (uv_alt, [], parms["ACals"], err, PCals=parms["PCals"], 
-                             doCalib=-1, doBand=1, BPVer=1, flagVer=2, \
+                             doCalib=-1, doBand=2, BPVer=1, flagVer=2, \
                              BChan=parms["ampBChan"], EChan=parms["ampEChan"], \
                              solInt=parms["solInt"], solSmo=parms["solSmo"], ampScalar=parms["ampScalar"], \
                              doAmpEdit=parms["doAmpEdit"], ampSigma=parms["ampSigma"], \
@@ -1854,7 +1855,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
     #Flag
     if parms["doAutoFlag"]:
         retCode = EVLAAutoFlag (uv_alt, clist, err, flagVer=2, \
-                                    doCalib=2, gainUse=0, doBand=1, BPVer=1,  \
+                                    doCalib=2, gainUse=0, doBand=2, BPVer=1,  \
                                     IClip=parms["IClip"], minAmp=parms["minAmp"], timeAvg=parms["timeAvg"], \
                                     doFD=parms["doAFFD"], FDmaxAmp=parms["FDmaxAmp"], FDmaxV=parms["FDmaxV"], \
                                     FDwidMW=parms["FDwidMW"], FDmaxRMS=parms["FDmaxRMS"], \
@@ -1864,11 +1865,10 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
         if retCode!=0:
             raise  RuntimeError,"Error in AutoFlag"
     
-    print parms["selChan"],parms["EChDrop"]
     # Calibrate and average data
     if parms["doCalAvg"]:
         retCode = KATCalAvg (uv_alt, "AVG_T", parms["seq"], parms["CalAvgTime"], err, \
-                              flagVer=2, doCalib=2, gainUse=0, doBand=1, BPVer=1, doPol=False, \
+                              flagVer=2, doCalib=2, gainUse=0, doBand=2, BPVer=1, doPol=False, \
                               avgFreq=parms["avgFreq"], chAvg=parms["chAvg"], \
                               BChan=parms["BChDrop"], EChan=parms["selChan"] - parms["EChDrop"], doAuto=parms["doAuto"], \
                               BIF=parms["CABIF"], EIF=parms["CAEIF"], Compress=parms["Compress"], \
@@ -4638,7 +4638,7 @@ def EVLAGetTimes(uv, Source, err,
     # end EVLAGetTimes
 
 def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", band="", \
-                     doCalib=-1, gainUse=0, doBand=-1, BPVer=0,  flagVer=-1,  OutlierArea=6.0, \
+                     doCalib=-1, gainUse=0, doBand=-1, BPVer=0,  flagVer=-1,  OutlierArea=5.0, \
                      doPol=False, PDVer=-1,  minFlux=0.0, nx=[0], ny=[0], \
                      xCells=0, yCells=0, Reuse=0.0, minPatch=0, OutlierSize=0, noNeg=False, \
                      Stokes="I", FOV=0.1/3600.0, Robust=0, Niter=300, CleanRad=None, \
@@ -4861,7 +4861,8 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             imager.do3D=do3D
         del suinfo
         # Test autoCen
-        imager.autoCen = max(100.0*thermNoise,0.1)
+        if autoCen:
+            imager.autoCen = max(100.0*thermNoise,0.1)
         imager.Sources[0] = sou
         mess = "Image "+sou
         printMess(mess, logfile)

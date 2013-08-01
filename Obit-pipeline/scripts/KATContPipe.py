@@ -410,7 +410,7 @@ def pipeline(args, options):
         if parms["doSpecPlot"] and  parms["plotSource"]:
             plotFile = fileRoot+"_BPSpec.ps"
             retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, \
-                                   parms["refAnt"], err, Stokes=["RR","LL"], doband=1,          \
+                                   parms["refAnt"], err, Stokes=["RR","LL"], doband=2,          \
                                    check=check, debug=debug, logfile=logFile )
             if retCode!=0:
                 raise  RuntimeError,"Error in Plotting spectrum"
@@ -522,7 +522,7 @@ def pipeline(args, options):
         if parms["doSpecPlot"] and parms["plotSource"]:
             plotFile = fileRoot+"_BPSpec2.ps"
             retCode = EVLASpectrum(uv, parms["plotSource"], parms["plotTime"], plotFile, parms["refAnt"], err, \
-                                   Stokes=["RR","LL"], doband=1,          \
+                                   Stokes=["RR","LL"], doband=2,          \
                                    check=check, debug=debug, logfile=logFile )
             if retCode!=0:
                 raise  RuntimeError,"Error in Plotting spectrum"
@@ -669,7 +669,7 @@ def pipeline(args, options):
             slist = EVLAAllSource(uv,err,logfile=logFile,check=check,debug=debug)
         else:
             slist = parms["targets"]
-        KATImageTargets (uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, \
+        KATImageTargets (uv, err, Sources=slist, seq=parms["seq"], sclass=outIClass, OutlierArea=parms["outlierArea"],\
                           doCalib=-1, doBand=-1,  flagVer=-1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
                           Stokes=parms["Stokes"], FOV=parms["FOV"], Robust=parms["Robust"], Niter=parms["Niter"], \
                           CleanRad=parms["CleanRad"], minFlux=parms["minFlux"], OutlierSize=parms["OutlierSize"], \
@@ -681,7 +681,7 @@ def pipeline(args, options):
                           avgPol=parms["avgPol"], avgIF=parms["avgIF"], minSNR = parms["minSNR"], refAnt=parms["refAnt"], \
                           do3D=parms["do3D"], BLFact=parms["BLFact"], BLchAvg=parms["BLchAvg"], \
                           doMB=parms["doMB"], norder=parms["MBnorder"], maxFBW=parms["MBmaxFBW"], \
-                          PBCor=parms["PBCor"],antSize=parms["antSize"], \
+                          PBCor=parms["PBCor"],antSize=parms["antSize"], autoCen=parms["autoCen"], \
                           nTaper=parms["nTaper"], Tapers=parms["Tapers"], \
                           nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=False)
         # End image
