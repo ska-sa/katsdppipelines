@@ -237,7 +237,7 @@ def pipeline(args, options):
         printMess(mess, logFile)
         widMW = divmod(parms["selChan"]/4,2)
         widMW = widMW[0] + widMW[1] + 1
-        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=0,  flagTab=1, doCalib=-1, doBand=-1, timeAvg=10.0, \
+        retCode = EVLAAutoFlag (uv, "    ", err,flagVer=0,  flagTab=1, doCalib=-1, doBand=-1, timeAvg=2.0, \
                                 doFD=True, FDmaxAmp=1.0e20, FDmaxV=1.0e20, FDwidMW=widMW,  \
                                 FDmaxRMS=[5.0,0.1], FDmaxRes=20.0, FDmaxResBL=5.0,  FDbaseSel=[1,0,1,0],\
                                 nThreads=nThreads, logfile=logFile, check=check, debug=debug)

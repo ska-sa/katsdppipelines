@@ -112,13 +112,13 @@ def KATInitContParms(obsdata):
     parms["doElev"]       = False       # Do elevation flagging
     parms["minElev"]      = 15.0        # Minimum elevation to keep.
     parms["doFD1"]        = True        # Do initial frequency domain flagging
-    parms["FD1widMW"]     = 35          # Width of the initial FD median window
+    parms["FD1widMW"]     = 55          # Width of the initial FD median window
     parms["FD1maxRes"]    = 5.0         # Clipping level in sigma
     parms["FD1TimeAvg"]   = 1.0         # time averaging in min. for initial FD flagging
     parms["FD1baseSel"]   = None        # Baseline fitting region for FD1 (updates by KAT7CorrParms)
     parms["doMednTD1"]    = True        # Median editing in time domain?
     parms["mednSigma"]    = 5.0         # Median sigma clipping level
-    parms["mednTimeWind"] = 1.0         # Median window width in min for median flagging
+    parms["mednTimeWind"] = 5.0         # Median window width in min for median flagging
     parms["mednAvgTime"]  = 0.1         # Median Averaging time in min
     parms["mednAvgFreq"]  = 1           # Median 1=>avg chAvg chans, 2=>avg all chan, 3=> avg chan and IFs
     parms["mednChAvg"]    = 5           # Median flagger number of channels to average
@@ -132,7 +132,7 @@ def KATInitContParms(obsdata):
     parms["XClip"]       = None         # AutoFlag cross-pol clipping
     parms["timeAvg"]     = 0.33         # AutoFlag time averaging in min.
     parms["doAFFD"]      = True         # do AutoFlag frequency domain flag
-    parms["FDwidMW"]     = 35          # Width of the median window
+    parms["FDwidMW"]     = 55           # Width of the median window
     parms["FDmaxRMS"]    = [5.0,0.1]    # Channel RMS limits (Jy)
     parms["FDmaxRes"]    = 5.0          # Max. residual flux in sigma
     parms["FDmaxResBL"]  = 5.0          # Max. baseline residual
