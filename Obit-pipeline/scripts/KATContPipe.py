@@ -365,9 +365,7 @@ def pipeline(args, options):
         #uv_alt = UV.newPAUV("COPY OF UV DATA", "TEMP", "UVDATA", disk, parms["seq"], False, err)        
         printMess(mess, logFile)
         retCode,parms = KATGetCalModel(uv, parms, fileRoot, err, check=check, debug=debug, logFile=logFile, noScrat=noScrat, nThreads=nThreads)
-    if retCode!=0:
-        raise  RuntimeError,"Error determining calibrator model"
-    
+        
 
     # delay calibration
     if parms["doDelayCal"] and parms["DCals"] and not check:

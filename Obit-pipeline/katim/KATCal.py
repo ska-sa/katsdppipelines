@@ -1894,7 +1894,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
         fluxlim=max(0.05*iflux,0.1)
         
         # Image the calibrators down to 5% of the peak with few CC's and high gain to get a model.
-        KATImageTargets (uv_alt_av, err, Sources=source, seq=parms["seq"], sclass="MODEL", CCVer=1, CGain=0.1,\
+        imageret=KATImageTargets (uv_alt_av, err, Sources=source, seq=parms["seq"], sclass="MODEL", CCVer=1, CGain=0.1,\
                              doCalib=-1, doBand=-1,  flagVer=-1, doPol=parms["doPol"], PDVer=parms["PDVer"],  \
                              Stokes="I", FOV=2.0, OutlierArea=1.5, Robust=0.0, Niter=150, \
                              CleanRad=None, minFlux=fluxlim, OutlierSize=parms["OutlierSize"], \
@@ -1917,7 +1917,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
         # Test if image exists
         exists = AIPSDir.PTestCNO(parms["disk"], user, aipsimname, oclass, "MA", oseq, err)
         
-        if exists > 0:       
+        if exists > 0 and imageret == 0:       
             x = Image.newPAImage("out_model", aipsimname, oclass, parms["disk"], oseq, True, err)
             outfile = fileroot + '_'+source+'_model.fits'
             xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
@@ -1943,11 +1943,11 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
     NewDCals=[]
     # Fix DCals Array
     for dcal in parms["DCals"]:
+        newcal=dcal
         for pcal in parms["PCals"]:
             if dcal["Source"] == pcal["Source"]:
-                NewDCals.append(pcal)
-            else:
-                NewDCals.append(dcal)
+                newcal=pcal
+        NewDCals.append(newcal)
     
     parms["DCals"] = NewDCals
 
@@ -4878,7 +4878,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
             printMess(mess, logfile)
             #return 1  Allow some failures
             # Cleanup image mess
-            AllDest(err,Atype="MA",Aname=imager.Sources[0], disk=imager.outDisk, Aseq=imager.outSeq);
+            AllDest(err,Atype="MA",Aname=imager.Sources[0][0:12], disk=imager.outDisk, Aseq=imager.outSeq);
         else:
             OK = True
         # delete Imager file if not debug
