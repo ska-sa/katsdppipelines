@@ -343,7 +343,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
         source = []             # Desired targets are already in the parameter list.
     else:
         source  = obsdata['source']
-        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name[0:16])   #Target sources + all calibrators
+        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name[0:12])   #Target sources + all calibrators
     parms["targets"] = list(set(parms["targets"])) # Remove duplicates
     # Do this here to catch user input targets with spaces in the name.
     parms["targets"] = [targ.replace(' ','_') for targ in parms["targets"]]
@@ -353,7 +353,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
     parms["BPCals"]=parms.get("BPCals",[])
     if not parms["BPCals"]:
         for cal in bpcal:
-            calname=cal.name[0:16]
+            calname=cal.name[0:12]
             suinfo = EVLAGetTimes(uv, calname, err)
             if suinfo['numVis'] > 0:
                 parms["BPCals"].append(EVLACalModel(calname))
@@ -383,7 +383,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
                 cal.flux_model = fluxcal.flux_model
                 if not cal in tcals:
                     calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                    parms["ACals"].append(EVLACalModel(cal.name[0:16],CalFlux=calflux,CalModelFlux=calflux))
+                    parms["ACals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux))
                     tcals.append(cal)
 
     # Gain Calibrators
@@ -394,7 +394,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
         tcals = []
         for cal in gaincal:
             if not cal in tcals:
-                PCals.append(EVLACalModel(cal.name[0:16]))
+                PCals.append(EVLACalModel(cal.name[0:12]))
                 tcals.append(cal)
         # Check for standard model
         EVLAStdModel(PCals, parms["KAT7Freq"])
@@ -407,7 +407,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
         tcals = []
         for cal in parms["PCals"] + parms["ACals"] + parms["BPCals"]:
             if not cal['Source'] in tcals:
-                DCals.append(EVLACalModel(cal['Source'][0:16]))
+                DCals.append(EVLACalModel(cal['Source'][0:12]))
                 tcals.append(cal['Source'])
         # Check for standard model
         EVLAStdModel(DCals, parms["KAT7Freq"])
@@ -1911,7 +1911,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
                              nThreads=nThreads, noScrat=noScrat, logfile=logFile, check=check, debug=False)
 
         # Update the model parameters with the output
-        aipsimname=source
+        aipsimname=source[0:12]
         oclass="IODEL"
         oseq=parms["seq"]
         # Test if image exists
@@ -1923,8 +1923,11 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
             xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
             EVLAAddOutFile(outfile, 'M'+source, 'Model image of '+ source)
         
-            cal['CalDataType']='FITS'
-            cal['CalFile']=outfile
+            cal['CalDataType']='AIPS'
+            cal['CalName']=aipsimname
+            cal['CalClass']=oclass
+            cal['CalSeq']=oseq
+            cal['CalDisk']=parms['disk']
             cal['CalNfield']=1
             cal['CalBComp']=[1]
             cal['CalEComp']=[0]
