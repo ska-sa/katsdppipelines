@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import sys, pydoc 
+import sys, pydoc
 import OErr, OSystem, UV, AIPS, FITS, OTObit
 import ObitTalkUtil
 from AIPS import AIPSDisk
@@ -15,12 +15,20 @@ import katim.AIPSSetup as AIPSSetup
 import shutil
 
 def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFile=None):
-    """
-    KAT-7 Continuum pipeline.    
-    * *parms* = pipeline input parameters file
-    * *outputdir* = location to write output data
-    * *scratchdir* = location to use aips disk (will overwrite any other settings)
-    * *h5file* = args[0] = h5 filename  (leave as a list for now to deal with multiple h5 files in future)
+    """ KAT-7 Continuum pipeline.
+
+    Parameters
+    ----------
+    files : list
+        h5 filename (leave as a list - support multiple h5 files in future releases)
+    outputdir : string, optional
+        Directory location to write output data, 
+    scratchdir : string
+        directory location to use aips disk (will overwrite any other settings)
+    targets : list, optional
+        List of target names to load (You'll need calibrators in this list!)
+    parmFile : string
+        Overwrite the default imaging parameters using this parameter file.
     """
 
     h5file = files[0]
