@@ -603,7 +603,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         wt = katdata.weights()[:]
         fg = katdata.flags()[:]
         # Zero the weights that are online flagged (ie. apply the online flags here)
-        wt = numpy.where(fg,0.0,wt)
+        wt = numpy.where(fg,-wt,wt)
         numflags += numpy.sum(fg)
         numvis += fg.size
         uu = katdata.u

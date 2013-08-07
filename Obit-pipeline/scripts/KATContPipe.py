@@ -19,3 +19,4 @@ try:
     KATPipe.K7ContPipeline(args,parmFile=options.parms,outputdir=options.outputdir,scratchdir=options.scratchdir,targets=options.targets)
 finally:
     pass
+

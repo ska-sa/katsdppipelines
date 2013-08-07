@@ -159,19 +159,19 @@ def KATInitContParms(obsdata):
     parms["delayEChan"]   =  None       # highest channel to use in delay solutions
 
     # Bandpass Calibration?
-    parms["doBPCal"] =       True       # Determine Bandpass calibration
-    parms["bpBChan1"] =      300        # Low freq. channel,  initial cal
-    parms["bpEChan1"] =      325        # Highest freq channel, initial cal, 0=>all
+    parms["doBPCal"]    =    True       # Determine Bandpass calibration
+    parms["bpBChan1"]   =    300        # Low freq. channel,  initial cal
+    parms["bpEChan1"]   =    325        # Highest freq channel, initial cal, 0=>all
     parms["bpDoCenter1"] =   0.05       # Fraction of  channels in 1st, overrides bpBChan1, bpEChan1
-    parms["bpBChan2"] =      None       # Low freq. channel for BP cal
-    parms["bpEChan2"] =      None       # Highest freq channel for BP cal,  0=>all
-    parms["bpChWid2"] =      1          # Number of channels in running mean BP soln
-    parms["bpdoAuto"] =      False      # Use autocorrelations rather than cross?
-    parms["bpsolMode"] =     'A&P'      # Band pass type 'A&P', 'P', 'P!A'
-    parms["bpsolint1"] =     10.0/60.0  # BPass phase correction solution in min
-    parms["bpsolint2"] =     5.0        # BPass bandpass solution in min 0.0->scan average
-    parms["bpUVRange"] =    [0.0,0.0]   # uv range for bandpass cal
-    parms["specIndex"] =    -0.7        # Spectral index of BP Cal
+    parms["bpBChan2"]   =    None       # Low freq. channel for BP cal
+    parms["bpEChan2"]   =    None       # Highest freq channel for BP cal,  0=>all
+    parms["bpChWid2"]   =    1          # Number of channels in running mean BP soln
+    parms["bpdoAuto"]   =    False      # Use autocorrelations rather than cross?
+    parms["bpsolMode"]  =    'A&P'      # Band pass type 'A&P', 'P', 'P!A'
+    parms["bpsolint1"]  =    10.0/60.0  # BPass phase correction solution in min
+    parms["bpsolint2"]  =    10.0       # BPass bandpass solution in min 0.0->scan average
+    parms["bpUVRange"]  =    [0.0,0.0]   # uv range for bandpass cal
+    parms["specIndex"]  =    0.0         # Spectral index of BP Cal
     parms["doSpecPlot"] =    True       # Plot the amp. and phase across the spectrum
 
     # Amp/phase calibration parameters
@@ -221,8 +221,8 @@ def KATInitContParms(obsdata):
     parms["PCSolType"] = "    "      # solution type, "    ", "LM  "
     parms["doPol"]     = False       # Apply polarization cal in subsequent calibration?
     parms["PDVer"]     = 1           # Apply PD table in subsequent polarization cal?
-    parms["PCChInc"] = 5             # Channel increment in instrumental polarization
-    parms["PCChWid"] = 5             # Channel averaging in instrumental polarization
+    parms["PCChInc"]   = 5             # Channel increment in instrumental polarization
+    parms["PCChWid"]   = 5             # Channel averaging in instrumental polarization
 
     # Right-Left phase (EVPA) calibration, uses same  values as Right-Left delay calibration
     parms["doRLCal"]    = False      # Set RL phases from RLCal - RLDCal or RLPCal
@@ -316,6 +316,14 @@ def KATInitTargParms(parms,obsdata,uv,err):
     extracted from the h5 file.
     Also check the uv data and remove targets which have been removed from the data.
     """
+    #Get frequency Range
+    #print parms["BChDrop"],startfreq,parms["EChDrop"],endfreq
+    startfreq=obsdata["katdata"].channel_freqs[int(len(obsdata["katdata"].channel_freqs)*parms["begChanFrac"])]/1e6
+    endfreq=obsdata["katdata"].channel_freqs[int(len(obsdata["katdata"].channel_freqs)*(1.0-parms["endChanFrac"]))]/1e6
+
+    #Get calibrator models
+    fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
+
     # Sources
     # Check if user has supplied them
     if len(parms["BPCal"])>0:
@@ -329,7 +337,6 @@ def KATInitTargParms(parms,obsdata,uv,err):
     else:
         ampcal = obsdata['bpcal']        # TODO: Later provide support for this properly
         parms["ACal"] = [cal.name.replace('_',' ') for cal in ampcal if cal is not None]
-
 
     if len(parms["PCal"])>0:
         gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
@@ -353,11 +360,17 @@ def KATInitTargParms(parms,obsdata,uv,err):
     parms["BPCals"]=parms.get("BPCals",[])
     if not parms["BPCals"]:
         for cal in bpcal:
-            calname=cal.name[0:12]
-            suinfo = EVLAGetTimes(uv, calname, err)
-            if suinfo['numVis'] > 0:
-                parms["BPCals"].append(EVLACalModel(calname))
-        EVLAStdModel(parms["BPCals"], parms["KAT7Freq"])
+            # Get the nearest calibrator in the database to the target source
+            fluxcal,offset=fluxcals.closest_to(cal)
+            # Update the calibrator flux model
+            if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
+                cal.flux_model = fluxcal.flux_model
+                calname=cal.name[0:12]
+                suinfo = EVLAGetTimes(uv, calname, err)
+                if suinfo['numVis'] > 0:
+                    calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
+                    alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
+                    parms["BPCals"].append(EVLACalModel(calname,CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
 
     # Check the best bandpass calibrator to plot
     # Check for source in SU table and only use bpcal with the most visibilities
@@ -374,16 +387,15 @@ def KATInitTargParms(parms,obsdata,uv,err):
     parms["ACals"]= parms.get("ACals",[])
     if not parms["ACals"]:
         tcals = []
-        # Read in amplitude calibrator models
-        fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
         for cal in ampcal:
             # Get the nearest calibrator in the database to the target source
             fluxcal,offset=fluxcals.closest_to(cal)
-            if offset*3600.0 < 200.0:        # 20.0 arcseconds should be close enough...
+            if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
                 cal.flux_model = fluxcal.flux_model
                 if not cal in tcals:
                     calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                    parms["ACals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux))
+                    alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
+                    parms["ACals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
                     tcals.append(cal)
 
     # Gain Calibrators
@@ -407,10 +419,10 @@ def KATInitTargParms(parms,obsdata,uv,err):
         tcals = []
         for cal in parms["PCals"] + parms["ACals"] + parms["BPCals"]:
             if not cal['Source'] in tcals:
-                DCals.append(EVLACalModel(cal['Source'][0:12]))
+                DCals.append(cal)
                 tcals.append(cal['Source'])
         # Check for standard model
-        EVLAStdModel(DCals, parms["KAT7Freq"])
+        #EVLAStdModel(DCals, parms["KAT7Freq"])
         parms["DCals"]          = DCals      # delay calibrators
 
 
@@ -1829,7 +1841,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
 
     # Bandpass calibration
     if parms["doBPCal"] and parms["BPCals"]:
-        retCode = EVLABPCal(uv_alt, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+        retCode = KATBPCal(uv_alt, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
                             solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
                             BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
                             BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \
@@ -2682,10 +2694,10 @@ def KATCalAP(uv, target, ACals, err, \
     return 0
     # end EVLACal
 
-def EVLABPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
+def KATBPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
               doCalib=2, gainUse=0, doBand=0, BPVer=0, flagVer=-1,  \
               doCenter1=None, BChan1=1, EChan1=0, \
-              BChan2=1, EChan2=0, ChWid2=1, \
+              BChan2=1, EChan2=0, ChWid2=1, Alpha=0.0, \
               solInt1=0.0, solInt2=0.0, solMode="A&P", refAnt=0, ampScalar=False, \
               doAuto=False, doPol=False, avgPol=False, avgIF=False, \
               doPlot=False, plotFile="./BPCal.ps", \
@@ -2758,7 +2770,6 @@ def EVLABPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
         setname(uv,bpass)
     bpass.doBand    = doBand
     bpass.BPVer     = BPVer
-    bpass.BPSoln    = newBPVer
     bpass.doCalib   = doCalib
     bpass.gainUse   = gainUse
     bpass.flagVer   = flagVer
@@ -2798,8 +2809,12 @@ def EVLABPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
         bpass.EChan2 = nchan
 
     # Loop over calibrators
+    outBPVer=newBPVer
     for BPCal in BPCals:
-        bpass.Sources[0]= BPCal["Source"]
+        thisOK = False
+        bpass.Sources[0] = BPCal["Source"]
+        bpass.BPSoln    = outBPVer
+        bpass.Alpha     = BPCal["CalModelSI"]
         bpass.DataType2 = BPCal["CalDataType"]
         bpass.in2File   = BPCal["CalFile"]
         bpass.in2Name   = BPCal["CalName"]
@@ -2813,10 +2828,8 @@ def EVLABPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
         bpass.Cmethod   = BPCal["CalCmethod"]
         bpass.Cmodel    = BPCal["CalCmodel"]
         bpass.Flux      = BPCal["CalFlux"]
-        bpass.Alpha     = BPCal["CalModelSI"]
         bpass.modelFlux = BPCal["CalModelFlux"]
         bpass.modelPos  = BPCal["CalModelPos"]
-        bpass.modelParm = BPCal["CalModelParm"]
         if debug:
             bpass.i
             bpass.debug = debug
@@ -2831,11 +2844,28 @@ def EVLABPCal(uv, BPCals, err, newBPVer=1, timerange=[0.,0.], UVRange=[0.,0.], \
             #return 1
         else:
             OK = True
-        # End calibrator loop
+            #Flush the table data to disk 
+            uv.FullInstantiate(UV.READWRITE,err)
+            # Do we have more than one Bandpass calibrator
+            # Then we should merge the tables
+            if outBPVer > newBPVer:
+                origBP=UV.PGetTable(uv,UV.READWRITE,"AIPS BP",newBPVer,err)
+                nextBP=UV.PGetTable(uv,UV.READWRITE,"AIPS BP",outBPVer,err)
+                Table.PConcat(nextBP, origBP, err)
+                uv.FullInstantiate(UV.READWRITE,err)
+                uv.ZapTable("AIPS BP", outBPVer,err)
+            else:
+                outBPVer+=1
     # Something work?
     if not OK:
         printMess("All BPass calibration failed", logfile)
         return 1
+
+    # Sort the final merged BP table
+    uv.FullInstantiate(UV.READWRITE,err)
+    origBP=UV.PGetTable(uv,UV.READWRITE,"AIPS BP",newBPVer,err)
+    Table.PSort(origBP, "TIME", False, err)
+    OErr.printErrMsg(err, "Error merging AIPS BP tables")
 
     # Plot corrected data?
     if doPlot:
