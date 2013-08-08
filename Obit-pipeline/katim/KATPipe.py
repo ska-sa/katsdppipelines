@@ -14,34 +14,36 @@ import os
 import katim.AIPSSetup as AIPSSetup
 import shutil
 
-def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFile=None):
-    """ KAT-7 Continuum pipeline.
+#possible kwargs: scratchdir
+def K7ContPipeline(files, outputdir, **kwargs):
+    """KAT-7 Continuum pipeline.
 
     Parameters
     ----------
     files : list
-        h5 filename (leave as a list - support multiple h5 files in future releases)
-    outputdir : string, optional
+        h5 filenames (note: support for multiple h5 files 
+        i.e. ConcatenatedDataSet is not currently supported)
+    outputdir : string
         Directory location to write output data, 
-    scratchdir : string
-        directory location to use aips disk (will overwrite any other settings)
-    targets : list, optional
-        List of target names to load (You'll need calibrators in this list!)
-    parmFile : string
+    scratchdir : string, optional
+        The directory location of the aips disk
+    parmFile : string, optional
         Overwrite the default imaging parameters using this parameter file.
     """
-
+    if len(files) > 1:
+        raise TooManyKatfilesException('Processing multiple katfiles are not currently supported')
     h5file = files[0]
-    manifestfile = outputdir + '/manifest.pickle'
 
     # Die gracefully if we cannot write to the output area...
     if not os.path.exists(outputdir):
         print 'Specified output directory: '+ outputdir + 'does not exist.'
         exit(-1)
 
+    manifestfile = outputdir + '/manifest.pickle'
+
     #################### Initialize filenames ####################################
     ################################## Process #####################################
-    fileRoot      = outputdir+'/'+os.path.basename(h5file).rstrip('.h5') # root of file name
+    fileRoot      = os.path.join(outputdir, os.path.basename(os.path.splitext(files[0])[0])) # root of file name
     logFile       = fileRoot+".log"   # Processing log file
     uvc           = None
     avgClass      = ("UVAv")[0:6]  # Averaged data AIPS class
@@ -49,7 +51,7 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
     ############################# Initialize OBIT and AIPS ##########################################
     noScrat     = []
     err = OErr.OErr()
-    ObitSys = AIPSSetup.AIPSSetup(scratchdir)
+    ObitSys = AIPSSetup.AIPSSetup(kwargs.get('scratchdir'))
     # Logging directly to logFile
     OErr.PInit(err, 2, logFile)
     EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
@@ -63,7 +65,7 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
     AIPS.userno = user
     disk = 1
     fitsdisk = 0
-    nam = os.path.basename(h5file).rstrip('.h5')
+    nam = os.path.basename(files[0]).rstrip('.h5')
     cls = "Raw"
     seq = 1
 
@@ -71,7 +73,7 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
 
     #######  Load KAT Image ######
     # Need the correlator mode to get the right uvfits template
-    rawfile=katfile.open(h5file)
+    rawfile=katfile.open(files)
     if len(rawfile.channels) == 1024:   #Trap old data
         corrmode = "1"
     elif len(rawfile.channels) == 2048:
@@ -82,7 +84,10 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
         corrmode = "8"
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
-    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0, targets=targets)
+
+    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err, calInt=1.0, targets=kwargs.get('targets'))
+    else:
+        obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0)
     uv.Header(err)
     
     ####### Initialize parameters #####
@@ -92,10 +97,10 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
     check = parms["check"]
 
     ####### User defined parameters ######
-    if parmFile:
-        print "parmFile",parmFile
+    if kwargs.get('parmFile'):
+        print "parmFile",kwargs.get('parmFile')
         exec(open(parmFile).read())
-        EVLAAddOutFile(os.path.basename(parmFile), 'project', 'Pipeline input parameters' )
+        EVLAAddOutFile(os.path.basename(kwargs.get('parmFile')), 'project', 'Pipeline input parameters' )
 
     ############################# Set Project Processing parameters ##################
     ###### Initialise target parameters #####
@@ -396,11 +401,11 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
 
     # Bandpass calibration
     if parms["doBPCal"] and parms["BPCals"]:
-        retCode = KATBPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+        retCode = EVLABPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
                             solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
                             BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
                             BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \
-                            doCenter1=parms["bpDoCenter1"], refAnt=parms["refAnt"], Alpha=parms["specIndex"], \
+                            doCenter1=parms["bpDoCenter1"], refAnt=parms["refAnt"], \
                             UVRange=parms["bpUVRange"], doCalib=2, gainUse=0, flagVer=2, doPlot=False, \
                             nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
@@ -508,11 +513,11 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
     
     # Bandpass calibration
     if parms["doBPCal2"] and parms["BPCals"]:
-        retCode = KATBPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+        retCode = EVLABPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
                             solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
                             BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
                             BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \
-                            doCenter1=parms["bpDoCenter1"], refAnt=parms["refAnt"], Alpha=parms["specIndex"], \
+                            doCenter1=parms["bpDoCenter1"], refAnt=parms["refAnt"], \
                             UVRange=parms["bpUVRange"], doCalib=2, gainUse=0, flagVer=2, doPlot=False, \
                             nThreads=nThreads, logfile=logFile, check=check, debug=debug)
         if retCode!=0:
@@ -904,3 +909,8 @@ def K7ContPipeline(files, outputdir='./', scratchdir=None, targets=None, parmFil
 class DataProductError(Exception):
     """ Exception for data product (output file) errors. """
     pass
+
+class TooManyKatfilesException(Exception):
+    """ Exception in KATPipe. """
+    pass
+

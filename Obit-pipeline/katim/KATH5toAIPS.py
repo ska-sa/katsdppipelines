@@ -45,18 +45,25 @@ import numpy
 from numpy import numarray
 
 def KAT2AIPS (h5datafile, outUV, err, \
-              calInt=1.0, targets=None):
-    """
-    Convert KAT-7 HDF 5 data set to an Obit UV
+              calInt=1.0, **kwargs):
+    """Convert KAT-7 HDF 5 data set to an Obit UV.
 
     This module requires katfile and katpoint and their dependencies
-     contact Ludwig Schwardt <schwardt@ska.ac.za> for details
-    * h5datafile  = input KAT data file
-    * outUV       = Obit UV object, shoud be a KAT template for the
-                    appropriate number of IFs and poln.
-    * err         = Obit error/message stack
-    * calInt      = Calibration interval in min.
-    * targets     = List of targets to extract from the file
+    contact Ludwig Schwardt <schwardt@ska.ac.za> for details.
+
+    Parameters
+    ----------
+    h5datafile : string
+        input KAT data file
+    outUV : ??
+        Obit UV object, shoud be a KAT template for the
+        appropriate number of IFs and poln.
+    err : ??
+        Obit error/message stack
+    calInt : 
+        Calibration interval in min.
+    targets : list, optinal
+        List of targetnames to extract from the file
     """
     ################################################################
 
@@ -65,6 +72,7 @@ def KAT2AIPS (h5datafile, outUV, err, \
     # get interface
     OK = False
     try:
+        #open katfile and perform selection according to kwargs
         katdata = katfile.open(h5datafile)
         OK = True
     except Exception, exception:
@@ -73,21 +81,57 @@ def KAT2AIPS (h5datafile, outUV, err, \
         pass
     if not OK:
         OErr.PSet(err)
-        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in "+h5datafile)
-    # Only process an observation if its longer than 30 minutes and has more than 3 antennas
-    if len(katdata.ants)<4:
-        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
-    #if (katdata.end_time - katdata.start_time) < 1800.0:
-    #    OErr.PLog(err, OErr.Fatal, "Observation is too short to process")
-    # Only image things that have been made with the correct script.
-    script=katdata.file['MetaData/Configuration/Observation'].attrs['script_name']
+        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5datafile)
+
+    # Data conditions:
+    # (1) select on passed in kwargs 
+    # (2) it has has more than 3 antennas 
+    # (4) Has a usable script name - image.py, track.py, runobs.py
+    # (5) truncated to 30 targets
+    # (6) select only tracks in file
+    # (7) reject scans at low elevation
+
+    katdata.select(kwargs)
+
+    #reducing data selections
+    katdata.select(scans='track', reset='')
+
+    good_elevations = []
+    for scan, state, target in katdata.scans():
+        # Fetch data
+        tm = katdata.timestamps[:]
+        nint = len(tm)
+        el=target.azel(tm[int(nint/2)])[1]*180./math.pi
+        if el >= 20.0:
+            good_elevations.append(scan)
+        else:   # Throw away scans at low elevation
+            msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(target.name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
+            OErr.PLog(err, OErr.Info, msg)
+            OErr.printErr(err)
+    katdata.select(scans=good_elevations, reset='')
+
+    if len(katdata.catalogue.targets) > 30:
+        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
+        OErr.printErr(err)
+        katadata.select(targets=katdata.catalogue.targets[0:30], reset='')
+
+    #fatal tests
+    script=katdata.datasets[0]['MetaData/Configuration/Observation'].attrs['script_name']
     scriptname=os.path.basename(script)
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
+
+    if len(katdata.ants) < 4:
+        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
+
+    if len(katdata.scan_indices) == 0:
+        OErr.PLog(err, OErr.Fatal, "No scan of type:track in file to image.")
+
     if err.isErr:
         OErr.printErrMsg(err, "Error with h5 file")
+
     # Extract metadata
-    meta = GetKATMeta(katdata, targets, err)
+    meta = GetKATMeta(katdata, err)
     if len(meta["spw"])>1:
         OErr.PLog(err, OErr.Fatal, "Can only image observations with 1 spectral window.")
     if err.isErr:
@@ -144,14 +188,16 @@ def KAT2AIPS (h5datafile, outUV, err, \
     return meta
    # end KAT2AIPS
 
-def GetKATMeta(katdata, targets, err):
+def GetKATMeta(katdata, err):
     """
-    Get KAT metadata and return as a dictionary
+    Get KAT metadata and return as a dictionary.
 
+    Parameters
+    ----------
      * katdata  = input KAT dataset
-     * targets  = input list of targets to extract.
      * err      = Python Obit Error/message stack to init
-     returns dictionary:
+
+     Returns : dictionary
      "spw"     Spectral window array as tuple (nchan, freq0, chinc)
                nchan=no. channels, freq0 = freq of channel 0,
                chinc=signed channel increment, one tuple per SPW
@@ -184,14 +230,8 @@ def GetKATMeta(katdata, targets, err):
     tt = []
     td = {}
     i = 0
-    if targets:
-        targlist=[t for t in katdata.catalogue.targets if t.name in targets]
-    else: targlist=katdata.catalogue.targets
-    if len(targlist)>30:
-        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
-        OErr.printErr(err)
-        targlist=targlist[0:30]
-    for t in  targlist:
+
+    for t in katdata.catalogue.targets:
         #Aips doesn't like spaces in names!!
         t.name = t.name.replace(' ','_')
         name = (t.name+"                ")[0:16]
@@ -220,7 +260,7 @@ def GetKATMeta(katdata, targets, err):
     al = []
     alook = {}
     i = 0
-    for a in  katdata.ants:
+    for a in katdata.ants:
         name  = a.name
         x,y,z = a.position_ecef
         diam  = a.diameter
@@ -583,22 +623,22 @@ def ConvertKATData(outUV, katdata, meta, err):
         OErr.printErr(err)
     for scan, state, target in katdata.scans():
         name=target.name.replace(' ','_')
-        if state!="track":
-            continue                    # Only on source data
+    #    if state!="track":
+    #        continue                    # Only on source data
         # Only on targets in the input list
-        try:
-            suid = meta["targLookup"][name[0:16]]
-        except:
-            continue
+    #     try:
+    #         suid = meta["targLookup"][name[0:16]]
+    #     except:
+    #         continue
         # Fetch data
         tm = katdata.timestamps[:]
         nint = len(tm)
-        el=target.azel(tm[int(nint/2)])[1]*180./math.pi
-        if el<20.:   # Throw away scans at low elevation
-            msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
-            OErr.PLog(err, OErr.Info, msg)
-            OErr.printErr(err)
-            continue
+    #     el=target.azel(tm[int(nint/2)])[1]*180./math.pi
+    #     if el<20.:   # Throw away scans at low elevation
+    #         msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
+    #         OErr.PLog(err, OErr.Info, msg)
+    #         OErr.printErr(err)
+    #         continue
         vs = katdata.vis[:]
         wt = katdata.weights()[:]
         fg = katdata.flags()[:]
