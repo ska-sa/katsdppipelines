@@ -286,7 +286,7 @@ def KATInitContParms():
 
 # end KAT-7 InitContParms
 
-def KATGetObsParms(obsdata, katdata, parms):
+def KATGetObsParms(obsdata, katdata, parms, logFile):
     """
     Initialise parameters derived from the metadata in the h5 file.
 
@@ -428,7 +428,7 @@ def KATh5Select(katdata, err, **kwargs):
     if len(katdata.catalogue.targets) > 30:
         OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
         OErr.printErr(err)
-        katadata.select(targets=katdata.catalogue.targets[0:30], reset='')
+        katdata.select(targets=katdata.catalogue.targets[0:30], reset='')
 
     # Only select 1 spectral window
     if len(katdata.spectral_windows) > 1:

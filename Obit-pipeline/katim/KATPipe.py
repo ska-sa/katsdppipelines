@@ -113,7 +113,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
 
     ############################# Set Project Processing parameters ###################################
     # Parameters derived from obsdata and katdata
-    KATGetObsParms(obsdata, katdata, parms)
+    KATGetObsParms(obsdata, katdata, parms, logFile)
 
     ###### Initialise target parameters #####
     KATInitTargParms(katdata,parms,err)
