@@ -32,25 +32,24 @@ def K7ContPipeline(files, outputdir, **kwargs):
     """
     if len(files) > 1:
         raise TooManyKatfilesException('Processing multiple katfiles are not currently supported')
-    h5file = files[0]
+    h5file = [files[0]]
 
     # Die gracefully if we cannot write to the output area...
     if not os.path.exists(outputdir):
         print 'Specified output directory: '+ outputdir + 'does not exist.'
         exit(-1)
+    
+    # Obit error logging
+    err = OErr.OErr()
 
-    manifestfile = outputdir + '/manifest.pickle'
-
-    #################### Initialize filenames ####################################
-    ################################## Process #####################################
+    #################### Initialize filenames #######################################################
     fileRoot      = os.path.join(outputdir, os.path.basename(os.path.splitext(files[0])[0])) # root of file name
     logFile       = fileRoot+".log"   # Processing log file
-    uvc           = None
     avgClass      = ("UVAv")[0:6]  # Averaged data AIPS class
+    manifestfile  = outputdir + '/manifest.pickle'
 
     ############################# Initialize OBIT and AIPS ##########################################
     noScrat     = []
-    err = OErr.OErr()
     ObitSys = AIPSSetup.AIPSSetup(kwargs.get('scratchdir'))
     # Logging directly to logFile
     OErr.PInit(err, 2, logFile)
@@ -65,93 +64,74 @@ def K7ContPipeline(files, outputdir, **kwargs):
     AIPS.userno = user
     disk = 1
     fitsdisk = 0
-    nam = os.path.basename(files[0]).rstrip('.h5')
+    nam = os.path.basename(os.path.splitext(files[0])[0])
     cls = "Raw"
     seq = 1
-
-    ############################# Default parameters ##########################################
-
-    #######  Load KAT Image ######
-    # Need the correlator mode to get the right uvfits template
-    rawfile=katfile.open(files)
-    if len(rawfile.channels) == 1024:   #Trap old data
-        corrmode = "1"
-    elif len(rawfile.channels) == 2048:
-        corrmode = "2"
-    elif len(rawfile.channels) == 4096:
-        corrmode = "4"
-    elif len(rawfile.channels) == 8192:
-        corrmode = "8"
-    templatefile='KAT7'+corrmode+'KTemplate.uvtab'
-    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
-
-    obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err, calInt=1.0, targets=kwargs.get('targets'))
-    else:
-        obsdata=KATH5toAIPS.KAT2AIPS(h5file, uv, err,calInt=1.0)
-    uv.Header(err)
     
-    ####### Initialize parameters #####
-    parms = KATInitContParms(obsdata)
-    parms["disk"] = disk
-    debug = parms["debug"]
-    check = parms["check"]
-
+    ############################# Initialise Parameters ##########################################
+    ####### Initialize parameters dictionary ##### 
+    parms = KATInitContParms()
     ####### User defined parameters ######
     if kwargs.get('parmFile'):
         print "parmFile",kwargs.get('parmFile')
         exec(open(parmFile).read())
         EVLAAddOutFile(os.path.basename(kwargs.get('parmFile')), 'project', 'Pipeline input parameters' )
 
-    ############################# Set Project Processing parameters ##################
+    ############### Initialize katfile object, uvfits object and condition data #########################
+    OK = False
+    # Open the h5 file as a katfile object
+    try:
+        #open katfile and perform selection according to kwargs
+        katdata = katfile.open(h5file)
+        OK = True
+    except Exception, exception:
+        print exception
+    if not OK:
+        OErr.PSet(err)
+        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5datafile)
+
+    #Get calibrator models
+    fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
+
+    # Need the correlator mode to get the right uvfits template
+    corrmode = str(len(katdata.channels))[0]
+    templatefile='KAT7'+corrmode+'KTemplate.uvtab'
+    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
+
+    #Condition data (get bpcals, update names for aips conventions etc)
+    katdata = KATh5Condition(katdata,fluxcals,err)
+
+    ###################### Data selection and static edits ############################################
+    # Select data based on static imageable parameters
+    KATh5Select(katdata, err, **kwargs)
+
+    ####################### Import data into AIPS #####################################################
+    obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0)
+
+    # Print the uv data header to screen.
+    uv.Header(err)
+
+    ############################# Set Project Processing parameters ###################################
+    # Parameters derived from obsdata and katdata
+    KATGetObsParms(obsdata, katdata, parms)
+
     ###### Initialise target parameters #####
-    KATInitTargParms(parms,obsdata,uv,err)
+    KATInitTargParms(katdata,parms,err)
 
-    # frequency/configuration dependent default parameters
-    KATInitContFQParms(parms,obsdata)
-
-    # Update the editlist array with the static flags defined in parms["staticflags"]
-    # Only for wideband !!
-    bandwidth = obsdata["katdata"].channel_freqs[0] - obsdata["katdata"].channel_freqs[-1]
-    if bandwidth>100e6:
-    	staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+parms["staticflags"]
-    	if os.path.exists(staticflagfile):
-        	parms["editList"]=parms["editList"] + KATGetStaticFlags(staticflagfile,obsdata)
-
-    # Get bad antennas and update editlist with these
-    if parms["doBadAnt"]:
-        badants = KATGetBadAnts(obsdata,parms["BPCal"],(parms["BChDrop"],-parms["EChDrop"]))
-        for badant in badants:
-            mess = "Flagging "+obsdata['antLookup'].keys()[obsdata['antLookup'].values().index(badant['Ant'][0])]
-            printMess(mess,logFile)
-        parms["editList"]=parms["editList"] + badants
-    
-    # General data parameters
+    # General AIPS data parameters at script level
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
-    outIClass     = parms["outIClass"] # image AIPS class
-    
+    outIClass = parms["outIClass"] # image AIPS class
+    debug     = parms["debug"]
+    check     = parms["check"]
+
     # Load the outputs pickle jar
     EVLAFetchOutFiles()
 
     OSystem.PAllowThreads(nThreads)   # Allow threads in Obit/oython
     retCode = 0
-   
-    ########################## Make sure observation is imageable ####################
-    # Don't do anything if there is more than 1 spectral window in the data.
-    if len(obsdata['katdata'].spectral_windows)>1:
-        mess = "The pipeline only supports imaging with one spectral window."
-        printMess(mess,logFile)
-        exit(-1)
-    # Don't do anything if there are no bandpass calibrators in the data.
-    if len(parms["BPCals"])==0:
-        mess = "No Bandpass calibrator. Can't image this observation."
-        printMess(mess,logFile)
-        exit(-1)
-    # Don't do anything if there are no amplitude calibrators in the data.
-    if len(parms["ACals"])==0:
-        mess = "No Amplitude calibrator. Can't image this observation."
-        printMess(mess,logFile)
-        exit(-1)
+
+    ################### Start processing ###############################################################
 
     mess = "Start project "+parms["project"]+" AIPS user no. "+str(AIPS.userno)+\
            ", KAT7 configuration "+parms["KAT7Cfg"]
@@ -176,7 +156,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     EVLAAddOutFile(os.path.basename(ParmsPicklefile), 'project', 'Processing parameters used' )
     loadClass = dataClass
     
-    # Special editing
+    # Special editing (apply flags from editList)
     if parms["doEditList"] and not check:
         mess =  "Special editing"
         printMess(mess, logFile)
@@ -186,26 +166,24 @@ def K7ContPipeline(files, outputdir, **kwargs):
                          Stokes=edt["Stokes"], Reason=edt["Reason"])
             OErr.printErrMsg(err, "Error Flagging")
 
-    # Get channel range
+    # Remove start and end channels from the data
     if parms["doChopBand"] and not check:
-        parms=KATGetContChan(parms)
         # Drop End Channels
         if parms["BChDrop"]>0 or parms["EChDrop"]>0:
             # Channels based on original number, reduced if Hanning
-            nchan = uv.Desc.Dict["inaxes"][uv.Desc.Dict["jlocf"]]
-            #fact = parms["selChan"]/nchan   # Hanning reduction factor
-            BChDrop = parms["BChDrop"]
-            EChDrop = parms["EChDrop"]
-            mess =  "Trim %d channels from start and %d from end of each spectrum"%(BChDrop,EChDrop)
+            mess =  "Trim %d channels from start and %d from end of each spectrum"%(parms["BChDrop"],parms["EChDrop"])
             printMess(mess, logFile)
-            uv = KATDropChan (uv, BChDrop, EChDrop, err, flagVer=parms["editFG"], \
+            uv = KATDropChan (uv, parms["BChDrop"], parms["EChDrop"], err, flagVer=parms["editFG"], \
                                 logfile=logFile, check=check, debug=debug)
             if retCode==0:
+                # Reset BCHDrop and ECHDrop to zero. 
                 parms["BChDrop"]=0
                 parms["EChDrop"]=0
+                # Reset SelChan to the new number of channels
+                parms["selChan"]=uv.Desc.Dict['inaxes'][2]
             if retCode!=0:
                 raise RuntimeError,"Error trimming start and end channels"
-   
+
     # Quack to remove data from start and end of each scan
     if parms["doQuack"]:
         retCode = EVLAQuack (uv, err, begDrop=parms["quackBegDrop"], endDrop=parms["quackEndDrop"], \
@@ -261,6 +239,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     
         uv = KATHann(uv, EVLAAIPSName(project), dataClass, disk, parms["seq"], err, \
                       doDescm=parms["doDescm"], flagVer=1, logfile=logFile, check=check, debug=debug)
+        #Halve channels after hanning.
         parms["selChan"]=int(parms["selChan"]/2)
         parms["BChDrop"]=int(parms["BChDrop"]/2)
         parms["EChDrop"]=int(parms["EChDrop"]/2)
@@ -367,7 +346,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
         EVLAAddOutFile(plotFile, 'project', 'Pipeline log file' )
 
     # Get calibrator model
-    if parms["getCalModel"]:
+    if parms["getCalModel"] and parms["PCals"] and not check:
         mess =  "Determining calibrator model."
         #uv_alt = UV.newPAUV("COPY OF UV DATA", "TEMP", "UVDATA", disk, parms["seq"], False, err)        
         printMess(mess, logFile)
@@ -401,7 +380,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
 
     # Bandpass calibration
     if parms["doBPCal"] and parms["BPCals"]:
-        retCode = EVLABPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+        retCode = KATBPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
                             solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
                             BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
                             BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \
@@ -513,7 +492,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     
     # Bandpass calibration
     if parms["doBPCal2"] and parms["BPCals"]:
-        retCode = EVLABPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
+        retCode = KATBPCal(uv, parms["BPCals"], err, noScrat=noScrat, solInt1=parms["bpsolint1"], \
                             solInt2=parms["bpsolint2"], solMode=parms["bpsolMode"], \
                             BChan1=parms["bpBChan1"], EChan1=parms["bpEChan1"], \
                             BChan2=parms["bpBChan2"], EChan2=parms["bpEChan2"], ChWid2=parms["bpChWid2"], \

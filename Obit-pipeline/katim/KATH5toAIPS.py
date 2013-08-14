@@ -44,7 +44,7 @@ from OTObit import day2dhms
 import numpy
 from numpy import numarray
 
-def KAT2AIPS (h5datafile, outUV, err, \
+def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
               calInt=1.0, **kwargs):
     """Convert KAT-7 HDF 5 data set to an Obit UV.
 
@@ -53,11 +53,15 @@ def KAT2AIPS (h5datafile, outUV, err, \
 
     Parameters
     ----------
-    h5datafile : string
-        input KAT data file
+    katdata : string
+        input katfile object
     outUV : ??
         Obit UV object, shoud be a KAT template for the
         appropriate number of IFs and poln.
+    disk  : int
+        AIPS Disk number
+    fitsdisk: int
+        FITS Disk number
     err : ??
         Obit error/message stack
     calInt : 
@@ -66,81 +70,19 @@ def KAT2AIPS (h5datafile, outUV, err, \
         List of targetnames to extract from the file
     """
     ################################################################
-
     OErr.PLog(err, OErr.Info, "Converting h5 data to AIPS UV format.")
     OErr.printErr(err)
-    # get interface
-    OK = False
-    try:
-        #open katfile and perform selection according to kwargs
-        katdata = katfile.open(h5datafile)
-        OK = True
-    except Exception, exception:
-        print exception
-    else:
-        pass
-    if not OK:
-        OErr.PSet(err)
-        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5datafile)
-
-    # Data conditions:
-    # (1) select on passed in kwargs 
-    # (2) it has has more than 3 antennas 
-    # (4) Has a usable script name - image.py, track.py, runobs.py
-    # (5) truncated to 30 targets
-    # (6) select only tracks in file
-    # (7) reject scans at low elevation
-
-    katdata.select(kwargs)
-
-    #reducing data selections
-    katdata.select(scans='track', reset='')
-
-    good_elevations = []
-    for scan, state, target in katdata.scans():
-        # Fetch data
-        tm = katdata.timestamps[:]
-        nint = len(tm)
-        el=target.azel(tm[int(nint/2)])[1]*180./math.pi
-        if el >= 20.0:
-            good_elevations.append(scan)
-        else:   # Throw away scans at low elevation
-            msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(target.name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
-            OErr.PLog(err, OErr.Info, msg)
-            OErr.printErr(err)
-    katdata.select(scans=good_elevations, reset='')
-
-    if len(katdata.catalogue.targets) > 30:
-        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
-        OErr.printErr(err)
-        katadata.select(targets=katdata.catalogue.targets[0:30], reset='')
-
-    #fatal tests
-    script=katdata.datasets[0]['MetaData/Configuration/Observation'].attrs['script_name']
-    scriptname=os.path.basename(script)
-    if scriptname not in ['image.py','track.py','runobs.py']:
-         OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
-
-    if len(katdata.ants) < 4:
-        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
-
-    if len(katdata.scan_indices) == 0:
-        OErr.PLog(err, OErr.Fatal, "No scan of type:track in file to image.")
-
-    if err.isErr:
-        OErr.printErrMsg(err, "Error with h5 file")
 
     # Extract metadata
     meta = GetKATMeta(katdata, err)
-    if len(meta["spw"])>1:
-        OErr.PLog(err, OErr.Fatal, "Can only image observations with 1 spectral window.")
-    if err.isErr:
-        OErr.printErrMsg(err, "Error with h5 file")
 
     # Extract AIPS parameters of the uv data to the metadata
     meta["Aproject"] = outUV.Aname
     meta["Aclass"] = outUV.Aclass
     meta["Aseq"] = outUV.Aseq
+    meta["Adisk"] = disk
+    meta["calInt"] = calInt
+    meta["fitsdisk"] = fitsdisk
     # Update descriptor
     UpdateDescriptor (outUV, meta, err)
     # Write AN table
@@ -177,7 +119,7 @@ def KAT2AIPS (h5datafile, outUV, err, \
     outHistory = History.History("outhistory", outUV.List, err)
     outHistory.Open(History.READWRITE, err)
     outHistory.TimeStamp("Convert KAT7 HDF 5 data to Obit", err)
-    outHistory.WriteRec(-1,"datafile = "+h5datafile, err)
+    outHistory.WriteRec(-1,"datafile = "+katdata.name, err)
     outHistory.WriteRec(-1,"calInt   = "+str(calInt), err)
     outHistory.Close(err)
     outUV.Open(UV.READONLY,err)
@@ -222,7 +164,7 @@ def GetKATMeta(katdata, err):
     sw = []
     for s in katdata.spectral_windows:
         sw.append((s.num_chans, s.channel_freqs[0], s.channel_freqs[1]-s.channel_freqs[0]))
-    out["spw"] = sw
+    out["spw"] = [sw[0]]
     # targets
     tl = []
     tb = []
@@ -231,9 +173,9 @@ def GetKATMeta(katdata, err):
     td = {}
     i = 0
 
-    for t in katdata.catalogue.targets:
+    for ti in katdata.target_indices:
+        t = katdata.catalogue.targets[ti]
         #Aips doesn't like spaces in names!!
-        t.name = t.name.replace(' ','_')
         name = (t.name+"                ")[0:16]
         ras, decs = t.radec()
         dec = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
@@ -622,27 +564,19 @@ def ConvertKATData(outUV, katdata, meta, err):
         OErr.PLog(err, OErr.Info, msg)
         OErr.printErr(err)
     for scan, state, target in katdata.scans():
-        name=target.name.replace(' ','_')
-    #    if state!="track":
-    #        continue                    # Only on source data
-        # Only on targets in the input list
-    #     try:
-    #         suid = meta["targLookup"][name[0:16]]
-    #     except:
-    #         continue
         # Fetch data
         tm = katdata.timestamps[:]
         nint = len(tm)
-    #     el=target.azel(tm[int(nint/2)])[1]*180./math.pi
-    #     if el<20.:   # Throw away scans at low elevation
-    #         msg = "Rejecting Scan on %s Start %s: Elevation %4.1f deg."%(name,day2dhms((tm[0]-time0)/86400.0)[0:12],el)
-    #         OErr.PLog(err, OErr.Info, msg)
-    #         OErr.printErr(err)
-    #         continue
         vs = katdata.vis[:]
         wt = katdata.weights()[:]
         fg = katdata.flags()[:]
-        # Zero the weights that are online flagged (ie. apply the online flags here)
+        #Get target suid
+        # Only on targets in the input list
+        try:
+            suid = meta["targLookup"][target.name[0:16]]
+        except:
+            continue
+        # Negate the weights that are online flagged (ie. apply the online flags here)
         wt = numpy.where(fg,-wt,wt)
         numflags += numpy.sum(fg)
         numvis += fg.size
@@ -650,7 +584,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         vv = katdata.v
         ww = katdata.w
         # Number of integrations
-        msg = "Scan %4d Int %16s Start %s"%(nint,name,day2dhms((tm[0]-time0)/86400.0)[0:12])
+        msg = "Scan:%4d Int: %4d %16s Start %s"%(scan,nint,target.name,day2dhms((tm[0]-time0)/86400.0)[0:12])
         OErr.PLog(err, OErr.Info, msg);
         OErr.printErr(err)
         # Loop over integrations

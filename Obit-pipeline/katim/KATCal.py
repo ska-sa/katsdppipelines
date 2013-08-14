@@ -9,6 +9,7 @@ from FITS import FITS
 from AIPSDir import AIPSdisks, nAIPS
 from OTObit import Acat, AMcat, getname, zap, imhead, tabdest, tput
 from Obit import Version
+import ObitTalkUtil
 # The following imports are not used in this script, but are somehow passed onto another part of the script
 # ImageDesc, AIPSImage, AIPS, FITS, AIPSdisks, nAIPS, tput, imhead, tabdest, Acat
 from PipeUtil import day2dhms, imstat, setname, setoname
@@ -26,7 +27,7 @@ from ObitTalkUtil import FITSDir
 manifest = { 'project' : [],  # list of project output files
              'source'  : {} } # dict of source output files
 
-def KATInitContParms(obsdata):
+def KATInitContParms():
     """
     Initialize KAT-7 continuum pipeline parameters
 
@@ -41,11 +42,8 @@ def KATInitContParms(obsdata):
     # General data parameters
     parms["check"]         = False      # Only check script, don't execute tasks
     parms["debug"]         = False      # run tasks debug
-    parms["Compress"]      = False      # Use compressed UV data?
-    parms["doSwPwr"]       = False      # Make EVLA Switched power corr?
-    parms["calInt"]        = 1.0        # Calibration table interval (min)
-    parms["seq"]           = obsdata["Aseq"]  # Sequence number for AIPS files
-    parms["doLoadArchive"] = False       # Load AIPS data from archive?
+    parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
+    parms["staticflags"]   = "KAT7_SRFI"              # Filename containing a list of frequencies to be flagged (in FITS)
 
     # User Supplied data parameters
     parms["BPCal"] = []
@@ -59,24 +57,7 @@ def KATInitContParms(obsdata):
     parms["selBand"]       = "L"   # Selected band, def = first
     parms["selConfig"]     = 1     # Selected frequency config, def = first
     parms["selNIF"]        = 1     # Selected number of IFs, def = first
-
-    # Observation parameters
-    parms["selChan"]       = obsdata["numchan"]       # Selected number of channels, def = first
-    parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
-    parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
-    parms["fluxModel"]     = "PERLEY_BUTLER_2013.csv" # Filename of flux calibrator model (in FITS)
-    parms["staticflags"]   = "KAT7_SRFI"              # Filename containing a list of frequencies to be flagged (in FITS)
-    parms["KAT7Freq"]      = obsdata["centerfreq"]    # Representive frequency
-    parms["KAT7Cfg"]       = obsdata["corrmode"]      # KAT-7 correlator configuraton
-
-    # Get the longest baseline
-    antennas = obsdata["katdata"].ants
-    longBline = 0.0
-    for ant1,ant2 in itertools.combinations(antennas,2):
-        thisBline=np.linalg.norm(ant1.baseline_toward(ant2))
-        if thisBline>longBline:
-            longBline=thisBline
-    parms["longBline"] = longBline
+    parms["Compress"]      = False
 
     # Hanning
     parms["doHann"]       = True        # Hanning needed for RFI?
@@ -89,10 +70,6 @@ def KATInitContParms(obsdata):
     parms["doEditList"] =  True         # Edit using editList?
     parms["editFG"] =      1            # Table to apply edit list to
 
-    # Create the editlist array for static flags (on instantiation it contains a flag of the middle channel).
-    editList = KAT7EditList(obsdata,parms["selChan"],parms["doHann"])
-    parms["editList"]     = editList
-
     # Editing
     parms["doClearTab"]   = True        # Clear cal/edit tables
     parms["doClearGain"]  = True        # Clear SN and CL tables >1
@@ -102,6 +79,7 @@ def KATInitContParms(obsdata):
     parms["doBadAnt"]     = True        # Check for bad antennas?
     parms["doInitFlag"]   = True        # Initial broad Frequency and time domain flagging
     parms["doChopBand"]   = True        # Cut the bandpass from lowest to highest channel after special editing.
+    parms["editList"]     = []          # List of dictionaries    
     parms["quackBegDrop"] = 5.0/60.0    # Time to drop from start of each scan in min
     parms["quackEndDrop"] = 0.0         # Time to drop from end of each scan in min
     parms["quackReason"]  = "Quack"     # Reason string
@@ -188,8 +166,6 @@ def KATInitContParms(obsdata):
     parms["CalAvgTime"] =    10.0/60.0  # Time for averaging calibrated uv data (min)
     parms["CABIF"] =         1          # First IF to copy
     parms["CAEIF"] =         0          # Highest IF to copy
-    parms["CABChan"] =       None       # First Channel to copy
-    parms["CAEChan"] =       None       # Highest Channel to copy
     parms["chAvg"]   =       None       # No channel average
     parms["avgFreq"] =       None       # No channel average
     parms["doAuto"]  =       True       # Export the AutoCorrs as well.
@@ -310,7 +286,191 @@ def KATInitContParms(obsdata):
 
 # end KAT-7 InitContParms
 
-def KATInitTargParms(parms,obsdata,uv,err):
+def KATGetObsParms(obsdata, katdata, parms):
+    """
+    Initialise parameters derived from the metadata in the h5 file.
+
+    Inputs:
+    obsdata: dictionary containing observational parameters derived in KATH5toAIPS
+    parms: parameter dictionary
+    Returns:
+    parms: updates parameter dictionary
+    """
+
+    # Observation parameters
+    parms["selChan"]       = obsdata["numchan"]       # Selected number of channels, def = first
+    parms["project"]       = obsdata["Aproject"]      # Project name (12 char or less, used as AIPS Name)
+    parms["dataClass"]     = obsdata["Aclass"]        # AIPS class of raw uv data
+    parms["disk"]          = obsdata["Adisk"]
+    parms["KAT7Freq"]      = obsdata["centerfreq"]    # Representive frequency
+    parms["KAT7Cfg"]       = obsdata["corrmode"]      # KAT-7 correlator configuraton
+    parms["calInt"]        = obsdata["calInt"]        # Calibration table interval (min)
+    parms["seq"]           = obsdata["Aseq"]          # Sequence number for AIPS files
+    parms["fitsdisk"]      = obsdata["fitsdisk"]
+
+    # Get the longest baseline
+    antennas = obsdata["katdata"].ants
+    longBline = 0.0
+    for ant1,ant2 in itertools.combinations(antennas,2):
+        thisBline=np.linalg.norm(ant1.baseline_toward(ant2))
+        if thisBline>longBline:
+            longBline=thisBline
+    parms["longBline"] = longBline
+
+    # Create the editlist array for static flags (on instantiation it contains a flag of the middle channel).
+    editList = KAT7EditList(parms["selChan"])
+    parms["editList"]     = editList
+
+    # Update the editlist array with the static flags defined in parms["staticflags"]
+    # Only for wideband !!
+    bandwidth = katdata.channel_freqs[0] - katdata.channel_freqs[-1]
+    if bandwidth>100e6:
+        staticflagfile = ObitTalkUtil.FITSDir.FITSdisks[parms["fitsdisk"]]+parms["staticflags"]
+        if os.path.exists(staticflagfile):
+                parms["editList"]=parms["editList"] + KATGetStaticFlags(katdata,staticflagfile)
+    
+    # Update frequency dependent parameters
+    KATInitContFQParms(katdata, parms)
+
+    # Get bad antennas and update editlist with these
+    if parms["doBadAnt"]:
+        badants = KATGetBadAnts(obsdata,(parms["BChDrop"],-parms["EChDrop"]))
+        for badant in badants:
+            mess = "Flagging "+obsdata['antLookup'].keys()[obsdata['antLookup'].values().index(badant['Ant'][0])]
+            printMess(mess,logFile)
+        parms["editList"]=parms["editList"] + badants
+
+    return parms
+
+def KATh5Condition(katdata ,caldata ,err):
+    """ 
+    Condition a katfile object to make it compatible with import into AIPS
+    and for imaging.
+    This function will:
+    (1) convert spaces in target name to underscores
+    (2) insert 'bpcal' tags for bandpass calibrators found in the 'caldata' catalogue
+        and remove 'bpcal' tags for calibrators that are not.
+    (3) add calibrator model information for bandpass calibrators.
+
+    Inputs:
+    katdata: katfile object
+    caldata: katfile.catalogue object containing list of accepted amplitude and bandpass calibtarors
+    err:     Obit error message stack object
+    Returns:
+    katdata: modified katfile object.
+    """
+    # Loop through targets
+    for targind in katdata.target_indices:
+        targ=katdata.catalogue.targets[targind]
+        #Replace spaces in the name with underscores
+        katdata.catalogue.targets[targind].name=targ.name.replace(' ','_')
+        #Get the nearest calibrator in caldata.
+        fluxcal,offset=caldata.closest_to(targ)
+        # Update the calibrator flux model
+        if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
+            katdata.catalogue.targets[targind].flux_model = fluxcal.flux_model
+            if 'bpcal' not in targ.tags: katdata.catalogue.targets[targind].tags.append('bpcal')
+        else:                            # Not a bandpass calibrator
+            if 'bpcal' in targ.tags: katdata.catalogue.targets[targind].tags.remove('bpcal')
+
+    return(katdata)
+    
+
+def KATh5Select(katdata, err, **kwargs):
+    """
+    Select a subset of data from the h5 file that meet criteria for imaging
+    these can be selected form **kwargs (and passed to katdata.select)
+    further selections and fatal failures are hardcoded:
+
+    Data conditions:
+    (1) user target selection via kwargs
+    (2) elevation > 20deg.
+    (3) has < 30 targets
+    (4) 1 spectral window
+    (5) Has a usable script name - image.py, track.py, runobs.py
+    (6) 4 antannas
+    (7) select only tracks in file
+    (8) need to have targets
+    (9) need a 'bpcal' target type (will search targets for bpcals in caldata - and insert model)
+
+    Inputs:
+    katdata:   katfile object
+    caldata:   katfile.catalogue object containing list of accepted amplitude and bandpass calibtarors
+    err:       Obit error message stack object
+    Returns:
+    katdata:   modified katfile object with selection applied and target models inserted.
+    """
+
+    #User defined targets
+    if kwargs.get('targets'):
+        katdata.select(targets=kwargs.get('targets'))
+
+    #reducing data selections
+    # Tracks only
+    katdata.select(scans='track', reset='')
+
+    # Elevation > 20deg.
+    good_elevations = []
+    for scan, state, target in katdata.scans():
+        # Fetch data
+        tm = katdata.timestamps[:]
+        nint = len(tm)
+        el=target.azel(tm[int(nint/2)])[1]*180./math.pi
+        if el >= 20.0:
+            good_elevations.append(scan)
+        else:   # Throw away scans at low elevation
+            msg = "Rejecting Scan:%s, Target:%s Elevation %4.1f deg."%(scan,target.name,el)
+            OErr.PLog(err, OErr.Info, msg)
+            OErr.printErr(err)
+    katdata.select(scans=good_elevations, reset='')
+
+    # Less than 30 targets
+    if len(katdata.catalogue.targets) > 30:
+        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
+        OErr.printErr(err)
+        katadata.select(targets=katdata.catalogue.targets[0:30], reset='')
+
+    # Only select 1 spectral window
+    if len(katdata.spectral_windows) > 1:
+        OErr.PLog(err, OErr.Info, "The file contains more than one spectral window.\n Will only image the first.")
+        OErr.printErr(err)
+        #First spectral window is selected by default.
+
+    #fatal tests
+    # Script intention must be imaging
+    script=katdata.datasets[0].file['MetaData/Configuration/Observation'].attrs['script_name']
+    scriptname=os.path.basename(script)
+    if scriptname not in ['image.py','track.py','runobs.py']:
+         OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
+
+    # More than 4 antennas
+    if len(katdata.ants) < 4:
+        OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
+
+    # Must have some scans
+    if len(katdata.scan_indices) == 0:
+        OErr.PLog(err, OErr.Fatal, "No scan of type:track in file to image.")
+
+    # Must have some targets (not sure this is needed??)
+    if len(katdata.target_indices) == 0:
+        OErr.PLog(err, OErr.Fatal, "No targets in file to image.")
+
+    # Must have a bandpass calibrator
+    BPOK=False
+    for targ in katdata.target_indices:
+        cal=katdata.catalogue.targets[targ]
+        if 'bpcal' in cal.tags: BPOK=True
+    # Check if BPCal exists - exit if not.
+    if not BPOK:
+        OErr.PLog(err, OErr.Fatal, "No Bandpass calibrator. Can't image this observation.")
+
+    #Other errors
+    if err.isErr:
+        OErr.printErrMsg(err, "Error with h5 file")
+
+    return katdata
+
+def KATInitTargParms(katdata,parms,err):
     """
     Update the target paramaters for the pipeline using the metadata
     extracted from the h5 file.
@@ -318,39 +478,36 @@ def KATInitTargParms(parms,obsdata,uv,err):
     """
     #Get frequency Range
     #print parms["BChDrop"],startfreq,parms["EChDrop"],endfreq
-    startfreq=obsdata["katdata"].channel_freqs[int(len(obsdata["katdata"].channel_freqs)*parms["begChanFrac"])]/1e6
-    endfreq=obsdata["katdata"].channel_freqs[int(len(obsdata["katdata"].channel_freqs)*(1.0-parms["endChanFrac"]))]/1e6
-
-    #Get calibrator models
-    fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
+    startfreq=katdata.channel_freqs[parms["BChDrop"]]/1e6
+    endfreq=katdata.channel_freqs[parms["EChDrop"]]/1e6
 
     # Sources
     # Check if user has supplied them
     if len(parms["BPCal"])>0:
-        bpcal = [obsdata["katdata"].catalogue[cal] for cal in parms["BPCal"] if cal is not None]
+        bpcal = [katdata.catalogue[cal] for cal in parms["BPCal"] if cal is not None]
     else:
-        bpcal = obsdata['bpcal']
-        parms["BPCal"] = [cal.name.replace('_',' ') for cal in bpcal if cal is not None]
+    #Otherwise get them from the katfile object
+        bpcal = [katdata.catalogue.targets[cal] for cal in katdata.target_indices if 'bpcal' in katdata.catalogue.targets[cal].tags]
+        parms["BPCal"] = [katdata.catalogue.targets[cal].name for cal in katdata.target_indices if 'bpcal' in katdata.catalogue.targets[cal].tags]
 
     if len(parms["ACal"])>0:
-        ampcal = [obsdata["katdata"].catalogue[cal] for cal in parms["ACal"] if cal is not None]
+        ampcal = [katdata.catalogue[cal] for cal in parms["ACal"] if cal is not None]
     else:
-        ampcal = obsdata['bpcal']        # TODO: Later provide support for this properly
-        parms["ACal"] = [cal.name.replace('_',' ') for cal in ampcal if cal is not None]
+        ampcal = [katdata.catalogue.targets[cal] for cal in katdata.target_indices if 'bpcal' in katdata.catalogue.targets[cal].tags]
+        parms["ACal"] = [katdata.catalogue.targets[cal].name for cal in katdata.target_indices if 'bpcal' in katdata.catalogue.targets[cal].tags]
 
     if len(parms["PCal"])>0:
-        gaincal = [obsdata["katdata"].catalogue[cal] for cal in parms["PCal"] if cal is not None]
+        gaincal = [katdata.catalogue[cal] for cal in parms["PCal"] if cal is not None]
     else:
-        gaincal = obsdata['gaincal']
-        parms["PCal"] = [cal.name.replace('_',' ') for cal in gaincal if cal is not None]
+        gaincal = [katdata.catalogue.targets[cal] for cal in katdata.target_indices if 'gaincal' in katdata.catalogue.targets[cal].tags]
+        parms["PCal"] = [katdata.catalogue.targets[cal].name for cal in katdata.target_indices if 'gaincal' in katdata.catalogue.targets[cal].tags]
 
     polcal  = []                # Place-holder for polarisation calibrator
 
     if len(parms["targets"])>0:
         source = []             # Desired targets are already in the parameter list.
     else:
-        source  = obsdata['source']
-        for cal in source+gaincal+bpcal+ampcal+polcal: parms["targets"].append(cal.name[0:12])   #Target sources + all calibrators
+        for cal in katdata.target_indices: parms["targets"].append(katdata.catalogue.targets[cal].name[0:12])   #All Sources
     parms["targets"] = list(set(parms["targets"])) # Remove duplicates
     # Do this here to catch user input targets with spaces in the name.
     parms["targets"] = [targ.replace(' ','_') for targ in parms["targets"]]
@@ -360,43 +517,30 @@ def KATInitTargParms(parms,obsdata,uv,err):
     parms["BPCals"]=parms.get("BPCals",[])
     if not parms["BPCals"]:
         for cal in bpcal:
-            # Get the nearest calibrator in the database to the target source
-            fluxcal,offset=fluxcals.closest_to(cal)
-            # Update the calibrator flux model
-            if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
-                cal.flux_model = fluxcal.flux_model
-                calname=cal.name[0:12]
-                suinfo = EVLAGetTimes(uv, calname, err)
-                if suinfo['numVis'] > 0:
-                    calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                    alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
-                    parms["BPCals"].append(EVLACalModel(calname,CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
+            calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
+            alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
+            parms["BPCals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
 
     # Check the best bandpass calibrator to plot
     # Check for source in SU table and only use bpcal with the most visibilities
     if not parms["plotSource"]:
         maxvis=0
-        for cal in parms["BPCals"]:
-            calname=cal['Source']
-            suinfo = EVLAGetTimes(uv, calname, err)
-            if suinfo['numVis'] > maxvis:
-                parms["plotSource"] = calname
-                maxvis=suinfo['numVis']
+        for thistarget in parms["BPCal"]:
+            numvis=0
+            for scan, state, target in katdata.scans():
+                if target.name == thistarget:
+                   numvis += katdata.shape[0]                
+            if numvis > maxvis:
+                parms["plotSource"] = thistarget
+                maxvis = numvis
 
     # Amplitude Calibrators
     parms["ACals"]= parms.get("ACals",[])
     if not parms["ACals"]:
-        tcals = []
         for cal in ampcal:
-            # Get the nearest calibrator in the database to the target source
-            fluxcal,offset=fluxcals.closest_to(cal)
-            if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
-                cal.flux_model = fluxcal.flux_model
-                if not cal in tcals:
-                    calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
-                    alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
-                    parms["ACals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
-                    tcals.append(cal)
+            calflux=float(cal.flux_density(parms["KAT7Freq"]/1e6))
+            alpha=math.log(cal.flux_density(startfreq)/cal.flux_density(endfreq))/math.log(startfreq/endfreq)
+            parms["ACals"].append(EVLACalModel(cal.name[0:12],CalFlux=calflux,CalModelFlux=calflux,CalModelSI=alpha))
 
     # Gain Calibrators
     # Amp/phase calibration
@@ -405,7 +549,7 @@ def KATInitTargParms(parms,obsdata,uv,err):
         PCals = []
         tcals = []
         for cal in gaincal:
-            if not cal in tcals:
+            if not cal in parms["PCal"]:
                 PCals.append(EVLACalModel(cal.name[0:12]))
                 tcals.append(cal)
         # Check for standard model
@@ -429,7 +573,40 @@ def KATInitTargParms(parms,obsdata,uv,err):
 
 #Done KATInitCalModel
 
-def KATGetBadAnts(obsdata,checktargs,specrange):
+def KATGetStaticFlags(katdata,staticflagfile):
+
+    """
+    Construct a list of static flags.
+
+    staticflagfile   = path to file containing list of frequency ranges to reject
+    katdata          = the KAT7 metadata
+
+    returns: a properly formattted list of edit dictionaries for use with the kat-7 pipeline
+    """
+    # Get the channel_freqs array from the obsdata database
+    channel_freqs=katdata.channel_freqs
+    channel_width=katdata.channel_width
+    channels=katdata.channels
+    padding=20                                   #Pad the start and the end of a flag range in MHz
+    #Get the list of frequency ranges from staticflagfile and find flags
+    editlist=[]
+    with open(staticflagfile) as f:
+        for line in f:
+            line = line.partition('#')[0]      # Ignore comments
+            line = line.split()
+            if len(line) == 3:                 # Only use lines with data
+                name=line[0]
+                startFreq=(float(line[1])-padding)*1e6
+                endFreq=(float(line[2])+padding)*1e6
+                thisflag = channels[(channel_freqs>startFreq) & (channel_freqs<endFreq)]
+                if len(thisflag)>0:                   # We have some bandwidth to flag!!
+                    flag_start = thisflag[0] + 1      # +1 for AIPS channel convention
+                    flag_end   = thisflag[-1] + 1     # +1 for AIPS channel convention
+                    editdict={"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[0,0],"IFs":[1,1],"Chans":[int(flag_start),int(flag_end)], "Stokes":'1111',"Reason":name}
+                    editlist.append(editdict)
+    return(editlist)
+
+def KATGetBadAnts(obsdata,specrange):
     """
     Check the data for bad antennas by calculating Stokes I over specrange channels
     from the Auto-Correlations on the highest elevation scan from selected targets 
@@ -437,15 +614,14 @@ def KATGetBadAnts(obsdata,checktargs,specrange):
 
     Inputs: 
     obsdata: metadata dict from KATH5toAIPS 
-    checktargs: list of the target names to check the scans from.
     specrange: tuple selecting minimum and maximum channels to use
 
     Outputs:
     editlist: A list of editlist dicts with each entry containing an antenna to be flagged
     """
     
-    katdata=obsdata['katdata']
-    targs = [katdata.catalogue[cal] for cal in checktargs if cal is not None]
+    katdata=obsdata["katdata"]
+    targs = [katdata.catalogue[cal.name] for cal in obsdata["bpcal"] if cal is not None]
     # Get data from the highest elevation scan from checktargs in katdata
     el=0
     #Exit gracefully if we don't have anything to check
@@ -485,42 +661,41 @@ def KATGetBadAnts(obsdata,checktargs,specrange):
             
     return rejectList
 
-def KAT7EditList(obsdata,numchannels,doHann):
+
+def KAT7EditList(numchannels):
 
     # Flag the middle channel
-    outchannels=numchannels/2.0
+    outchannels=int(numchannels/2)
     # Flag the middle channels.
     editlist = [
         {"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[ 0,0],"IFs":[1,1],"Chans":[int(outchannels)-1,int(outchannels)+1], "Stokes":'1111',"Reason":"Bad Ch"}
         ]
     return editlist
 
-def KATInitContFQParms(parms,obsdata):
+def KATInitContFQParms(katdata,parms):
     """
     Initialize KAT continuum pipeline frequency dependent parameters
 
     Some values only set if None on input
-
-    * parms      = Project parameters, modified on output
+    katdata    = katfile object
+    parms      = Project parameters, modified on output
     """
     ################################################################
     refFreq   = parms["KAT7Freq"]
-    bandwidth = obsdata["katdata"].channel_freqs[0] - obsdata["katdata"].channel_freqs[-1]
-    antSize   = parms["antSize"]
-    blSize    = parms["longBline"]
     nchan     = parms["selChan"]
-    doHann    = parms["doHann"]
     fracstart = parms["begChanFrac"]
     fracend   = parms["endChanFrac"]
-    if doHann:
-        nchan = int(nchan/2)
-    # halve the number of channels if Hanning
-    # Set spectral baseline for FD flagging ignoring end channels
-    ch1 = int (max(2, nchan*fracstart))
-    ch2 = nchan - int (max(2, nchan*fracend))
-    #Correct bandwidth for final averaged data
-    frac = 1.0 - (ch1 + (nchan - ch2))/nchan
-    bandwidth = bandwidth*frac
+
+    BChanFracDrop = nchan*fracstart
+    EChanFracDrop = nchan*fracend
+
+    # Get the beginning and end channels to drop.
+    BChDrop,EChDrop = KATGetContChan(parms["editList"],BChanFracDrop,EChanFracDrop,nchan)
+    bandwidth = katdata.channel_freqs[0] - katdata.channel_freqs[-1]
+
+    antSize   = parms["antSize"]
+    blSize    = parms["longBline"]
+    doHann    = parms["doHann"]
 
     # Delay channels
     if parms["delayBChan"] == None:
@@ -544,11 +719,10 @@ def KATInitContFQParms(parms,obsdata):
     # Should be fairly large
     parms["ampEditFG"] =  2                                      # FG table to add flags to, <=0 -> no FG entries
 
-    # Flag the first 20% and last 20% of channels before hanning
     if parms["BChDrop"]== None:
-        parms["BChDrop"]=int(parms["selChan"]*fracstart)
+        parms["BChDrop"]=BChDrop
     if parms["EChDrop"]== None:
-        parms["EChDrop"]=int(parms["selChan"]*fracend)
+        parms["EChDrop"]=EChDrop
 
     # Ipol clipping levels
     if parms["IClip"]==None:
@@ -566,12 +740,8 @@ def KATInitContFQParms(parms,obsdata):
     # Set spectral baseline for FD1 flagging ignoring end channels
     if parms["FD1baseSel"]==None:
         parms["FD1baseSel"] = parms["FDbaseSel"]
-    # Only copy relevant part of final bandpass and average to correct number of channels
-    if parms["CABChan"] == None:
-        parms["CABChan"] =       ch1          # First Channel to copy
-    if parms["CAEChan"] == None:
-        parms["CAEChan"] =       ch2          # Highest Channel to copy
 
+    # Channel averaging before imaging
     # Can probably set this automatically to accomodate bandwidth smearing constraints later on..
     if parms["chAvg"] == None:
         if nchan<=1024:
@@ -602,71 +772,40 @@ def KATInitContFQParms(parms,obsdata):
 
 # end KATInitContFqParms
 
-def KATGetStaticFlags(staticflagfile,obsdata):
 
-    """
-    Construct a list of static flags.
-
-    staticflagfile   = path to file containing list of frequency ranges to reject
-    obsdata          = the KAT7 metadata
-    parms            = the set of parms for the pipeline (CAEchan and CABchan required)
-
-    returns: a properly formattted list of edit dictionaries for use with the kat-7 pipeline
-    """
-    # Get the channel_freqs array from the obsdata database
-    channel_freqs=obsdata["katdata"].channel_freqs
-    channel_width=obsdata["katdata"].channel_width
-    channels=obsdata["katdata"].channels
-    padding=20                                   #Pad the start and the end of a flag range in MHz
-    #Get the list of frequency ranges from staticflagfile and find flags
-    editlist=[]
-    with open(staticflagfile) as f:
-        for line in f:
-            line = line.partition('#')[0]      # Ignore comments
-            line = line.split()
-            if len(line) == 3:                 # Only use lines with data
-                name=line[0]
-                startFreq=(float(line[1])-padding)*1e6
-                endFreq=(float(line[2])+padding)*1e6
-                thisflag = channels[(channel_freqs>startFreq) & (channel_freqs<endFreq)]
-                if len(thisflag)>0:                   # We have some bandwidth to flag!!
-                    flag_start = thisflag[0] + 1      # +1 for AIPS channel convention
-                    flag_end   = thisflag[-1] + 1     # +1 for AIPS channel convention
-                    editdict={"timer":("0/00:00:0.0","5/00:00:0.0"),"Ant":[0,0],"IFs":[1,1],"Chans":[int(flag_start),int(flag_end)], "Stokes":'1111',"Reason":name}
-                    editlist.append(editdict)
-    return(editlist)
-
-def KATGetContChan(parms):
+def KATGetContChan(editList,BChDrop,EChDrop,nChan):
 
     """
     Check through the list of static flags and get the minimun and maximum channels for the bandpass.
     
-    parms,  the input parameter dict
+    parms,  the editList Dict containing static flags
+    BChDrop,EChDrop: int
+        number of channels to drop from beginning and end of the spectrum
+    nChan: int 
+        number of channels
 
     returns: the modified input parameter list (only BChanDrop and EChanDrop are changed)
     """
-
-    nChan=parms["selChan"]
 
     #Make an initial list
     useBand=np.ones(nChan)
 
     # Use BCHDrop and ECHDrop
-    useBand[0:parms["BChDrop"]] = 0.0
-    useBand[nChan-parms["EChDrop"]:nChan] = 0.0
+    useBand[:BChDrop] = 0.0
+    useBand[-EChDrop:] = 0.0
     
     #Go through editlist and fill channel flags
-    for thisEdit in parms["editList"]:
+    for thisEdit in editList:
         if thisEdit["Ant"] == [0,0]:
             startChan=max(0,thisEdit["Chans"][0]-1)  # AIPS to python convention
             endChan=min(thisEdit["Chans"][1],nChan-1)
             useBand[startChan:endChan]=0.0
-
+    
     #Find min channel
-    parms["BChDrop"] = int(np.min(np.where(useBand==1.0)))
-    parms["EChDrop"] = int(nChan-np.max(np.where(useBand==1.0)))
-    parms["selChan"] = nChan - parms["BChDrop"] - parms["EChDrop"]
-    return parms
+    BChDrop = int(np.min(np.where(useBand==1.0)))
+    EChDrop = int(nChan-np.max(np.where(useBand==1.0)))
+
+    return BChDrop,EChDrop
 
 
 def EVLAClearCal(uv, err, doGain=True, doBP=False, doFlag=False,
@@ -1836,8 +1975,6 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
     uv_alt = UV.newPAUV("COPY OF UV DATA", "UV COPY", "UVDATA", parms["disk"], parms["seq"], True, err)
 
     clist = [PCal["Source"] for PCal in parms["PCals"]]
-
-
 
     # Bandpass calibration
     if parms["doBPCal"] and parms["BPCals"]:
