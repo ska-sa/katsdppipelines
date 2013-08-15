@@ -363,7 +363,7 @@ def KATh5Condition(katdata ,caldata ,err):
     for targind in katdata.target_indices:
         targ=katdata.catalogue.targets[targind]
         #Replace spaces in the name with underscores
-        targ.name=targ.name.replace(' ','_')
+        targ.name=targ.name.replace(' ','_')[0:12]
         #Get the nearest calibrator in caldata.
         fluxcal,offset=caldata.closest_to(targ)
         # Update the calibrator flux model
@@ -442,18 +442,22 @@ def KATh5Select(katdata, err, **kwargs):
     scriptname=os.path.basename(script)
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
+         OErr.printErr(err)
 
     # More than 4 antennas
     if len(katdata.ants) < 4:
         OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
+        OErr.printErr(err)
 
     # Must have some scans
     if len(katdata.scan_indices) == 0:
         OErr.PLog(err, OErr.Fatal, "No scan of type:track in file to image.")
+        OErr.printErr(err)
 
     # Must have some targets (not sure this is needed??)
     if len(katdata.target_indices) == 0:
         OErr.PLog(err, OErr.Fatal, "No targets in file to image.")
+        OErr.printErr(err)
 
     # Must have a bandpass calibrator
     BPOK=False
@@ -463,6 +467,7 @@ def KATh5Select(katdata, err, **kwargs):
     # Check if BPCal exists - exit if not.
     if not BPOK:
         OErr.PLog(err, OErr.Fatal, "No Bandpass calibrator. Can't image this observation.")
+        OErr.printErr(err)
 
     #Other errors
     if err.isErr:
