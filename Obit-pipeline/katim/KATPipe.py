@@ -88,7 +88,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
         print exception
     if not OK:
         OErr.PSet(err)
-        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5datafile)
+        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5file)
 
     #Get calibrator models
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
@@ -348,7 +348,6 @@ def K7ContPipeline(files, outputdir, **kwargs):
     # Get calibrator model
     if parms["getCalModel"] and parms["PCals"] and not check:
         mess =  "Determining calibrator model."
-        #uv_alt = UV.newPAUV("COPY OF UV DATA", "TEMP", "UVDATA", disk, parms["seq"], False, err)        
         printMess(mess, logFile)
         retCode,parms = KATGetCalModel(uv, parms, fileRoot, err, check=check, debug=debug, logFile=logFile, noScrat=noScrat, nThreads=nThreads)
         

@@ -363,16 +363,16 @@ def KATh5Condition(katdata ,caldata ,err):
     for targind in katdata.target_indices:
         targ=katdata.catalogue.targets[targind]
         #Replace spaces in the name with underscores
-        katdata.catalogue.targets[targind].name=targ.name.replace(' ','_')
+        targ.name=targ.name.replace(' ','_')
         #Get the nearest calibrator in caldata.
         fluxcal,offset=caldata.closest_to(targ)
         # Update the calibrator flux model
         if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
             katdata.catalogue.targets[targind].flux_model = fluxcal.flux_model
-            if 'bpcal' not in targ.tags: katdata.catalogue.targets[targind].tags.append('bpcal')
+            if 'bpcal' not in targ.tags: targ.tags.append('bpcal')
         else:                            # Not a bandpass calibrator
-            if 'bpcal' in targ.tags: katdata.catalogue.targets[targind].tags.remove('bpcal')
-
+            if 'bpcal' in targ.tags: targ.tags.remove('bpcal')
+            
     return(katdata)
     
 
@@ -631,8 +631,10 @@ def KATGetBadAnts(obsdata,specrange):
         if state == 'track' and target in targs:
             tm=katdata.timestamps[:]
             nint=len(tm)
-            if target.azel(tm[int(nint/2)])[1]*180./math.pi > el:
+            thisel = target.azel(tm[int(nint/2)])[1]*180./math.pi
+            if thisel > el:
                 # Highest elevation so far
+                el  = thisel
                 vis = katdata.vis[:]
                 wt  = katdata.weights()[:]
                 # Apply flags

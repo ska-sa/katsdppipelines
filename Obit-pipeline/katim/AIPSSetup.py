@@ -82,9 +82,9 @@ def AIPSSetup(scratchdir=None):
                                 OBIT_EXEC=OBIT_EXEC, DA00=DA00, ARCH=AIPSLite.arch(), \
                                 aipsdirs=adirs, fitsdirs=fdirs)
 
-    # List directories
-    ObitTalkUtil.ListAIPSDirs()
-    ObitTalkUtil.ListFITSDirs()
+    # List directories - removed for scripting
+    #ObitTalkUtil.ListAIPSDirs()
+    #ObitTalkUtil.ListFITSDirs()
 
     # Disks to avoid
     noScrat     = [0]          # AIPS disks to avoid
