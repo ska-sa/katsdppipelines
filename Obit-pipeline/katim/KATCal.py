@@ -1,6 +1,6 @@
 """
 """
-import katim.AIPSLiteTask as AIPSTask
+import AIPSLiteTask as AIPSTask
 import UV, UVDesc, Image, ImageDesc, FArray, ObitTask, AIPSDir, OErr, History
 import InfoList, Table, OSystem, OASDM
 from AIPSData import AIPSImage
@@ -23,6 +23,7 @@ import datetime
 import xml.dom.minidom
 import katpoint
 from ObitTalkUtil import FITSDir
+from KATImExceptions import KATUnimageableError
 
 manifest = { 'project' : [],  # list of project output files
              'source'  : {} } # dict of source output files
@@ -443,21 +444,25 @@ def KATh5Select(katdata, err, **kwargs):
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
          OErr.printErr(err)
+         raise KATUnimageableError("Imaging run with script: \'%s\' not imagable."%(scriptname))
 
     # More than 4 antennas
     if len(katdata.ants) < 4:
         OErr.PLog(err, OErr.Fatal, "Too few antennas to process image")
         OErr.printErr(err)
+        raise KATUnimageableError("Too few antennas to process image")
 
     # Must have some scans
     if len(katdata.scan_indices) == 0:
         OErr.PLog(err, OErr.Fatal, "No scan of type:track in file to image.")
         OErr.printErr(err)
+        raise KATUnimageableError("No scan of type:track in file to image.")
 
     # Must have some targets (not sure this is needed??)
     if len(katdata.target_indices) == 0:
         OErr.PLog(err, OErr.Fatal, "No targets in file to image.")
         OErr.printErr(err)
+        raise KATUnimageableError("No targets in file to image.")
 
     # Must have a bandpass calibrator
     BPOK=False
@@ -468,6 +473,7 @@ def KATh5Select(katdata, err, **kwargs):
     if not BPOK:
         OErr.PLog(err, OErr.Fatal, "No Bandpass calibrator. Can't image this observation.")
         OErr.printErr(err)
+        raise KATUnimageableError("No Bandpass calibrator. Can't image this observation.")
 
     #Other errors
     if err.isErr:

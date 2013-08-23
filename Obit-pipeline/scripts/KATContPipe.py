@@ -21,6 +21,6 @@ for k in ['parmFile', 'scratchdir', 'targets']:
 	if getattr(options,k) != None:
 		kwargs[k] =  getattr(options,k)
 try:
-	KATPipe.K7ContPipeline(katfilenames, options.outputdir, **kwargs)    	
+    KATPipe.K7ContPipeline(katfilenames, options.outputdir, **kwargs)    	
 finally:
     pass

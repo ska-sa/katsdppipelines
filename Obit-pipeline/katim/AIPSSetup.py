@@ -1,7 +1,7 @@
 # Define AIPS and FITS disks
 
 import os,shutil
-import katim.AIPSLite as AIPSLite
+import AIPSLite
 import ConfigParser
 import OErr, OSystem, AIPS, ObitTalkUtil
 
@@ -10,7 +10,7 @@ import OErr, OSystem, AIPS, ObitTalkUtil
 # default AIPS_VERSION to cwd. Default AIPS_DISK is set to cwd and default FITS to
 # $OBIT_EXEC/share/data.
 
-def AIPSSetup(scratchdir=None):
+def AIPSSetup(err,scratchdir=None):
     cwd          = './'
     home         = os.path.expanduser("~")
     # Is Obit installed and set up correctly? If not make data cwd/FITS.
@@ -67,7 +67,6 @@ def AIPSSetup(scratchdir=None):
     fdirs = [(None, config.get('KATPIPE','metadata_dir'))]
 
     ############################# Initialize OBIT ##########################################
-    err     = OErr.OErr()
     ffdirs = []
     for f in fdirs: ffdirs.append(f[1])
     aadirs = []

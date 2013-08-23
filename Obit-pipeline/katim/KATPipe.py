@@ -5,14 +5,15 @@ import ObitTalkUtil
 from AIPS import AIPSDisk
 from FITS import FITSDisk
 from PipeUtil import *
-from katim.KATCal import *
+from KATCal import *
 import katpoint
 import katfile
 import subprocess
-import katim.KATH5toAIPS as KATH5toAIPS
+import KATH5toAIPS
 import os
-import katim.AIPSSetup as AIPSSetup
+import AIPSSetup
 import shutil
+from KATImExceptions import KATUnimageableError
 
 #possible kwargs: scratchdir
 def K7ContPipeline(files, outputdir, **kwargs):
@@ -50,10 +51,11 @@ def K7ContPipeline(files, outputdir, **kwargs):
 
     ############################# Initialize OBIT and AIPS ##########################################
     noScrat     = []
-    ObitSys = AIPSSetup.AIPSSetup(kwargs.get('scratchdir'))
     # Logging directly to logFile
     OErr.PInit(err, 2, logFile)
     EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
+
+    ObitSys = AIPSSetup.AIPSSetup(err,kwargs.get('scratchdir'))
 
     # Get the set up AIPS environment.
     AIPS_ROOT    = os.environ['AIPS_ROOT']
@@ -89,14 +91,10 @@ def K7ContPipeline(files, outputdir, **kwargs):
     if not OK:
         OErr.PSet(err)
         OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5file)
+        raise KATUnimageableError("Unable to read KAT HDF5 data in " + h5file)
 
     #Get calibrator models
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
-
-    # Need the correlator mode to get the right uvfits template
-    corrmode = str(len(katdata.channels))[0]
-    templatefile='KAT7'+corrmode+'KTemplate.uvtab'
-    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
 
     #Condition data (get bpcals, update names for aips conventions etc)
     katdata = KATh5Condition(katdata,fluxcals,err)
@@ -106,6 +104,11 @@ def K7ContPipeline(files, outputdir, **kwargs):
     KATh5Select(katdata, err, **kwargs)
 
     ####################### Import data into AIPS #####################################################
+    # Need the correlator mode to get the right uvfits template
+    corrmode = str(len(katdata.channels))[0]
+    templatefile='KAT7'+corrmode+'KTemplate.uvtab'
+    uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
+
     obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0)
 
     # Print the uv data header to screen.
@@ -891,4 +894,5 @@ class DataProductError(Exception):
 class TooManyKatfilesException(Exception):
     """ Exception in KATPipe. """
     pass
+
 

@@ -72,6 +72,7 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
     ################################################################
     OErr.PLog(err, OErr.Info, "Converting h5 data to AIPS UV format.")
     OErr.printErr(err)
+    print "Converting h5 data to AIPS UV format.\n"
 
     # Extract metadata
     meta = GetKATMeta(katdata, err)
@@ -109,6 +110,7 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
     # initial CL table
     OErr.PLog(err, OErr.Info, "Create Initial CL table")
     OErr.printErr(err)
+    print "Create Initial CL table\n"
     UV.PTableCLGetDummy(outUV, outUV, 1, err, solInt=calInt)
     outUV.Open(UV.READONLY,err)
     outUV.Close(err)
@@ -563,6 +565,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         msg = "W term in UVW coordinates will be used to stop the fringes."
         OErr.PLog(err, OErr.Info, msg)
         OErr.printErr(err)
+        print msg
     for scan, state, target in katdata.scans():
         # Fetch data
         tm = katdata.timestamps[:]
@@ -587,6 +590,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         msg = "Scan:%4d Int: %4d %16s Start %s"%(scan,nint,target.name,day2dhms((tm[0]-time0)/86400.0)[0:12])
         OErr.PLog(err, OErr.Info, msg);
         OErr.printErr(err)
+        print msg
         # Loop over integrations
         for iint in range(0,nint):
             # loop over data products/baselines
