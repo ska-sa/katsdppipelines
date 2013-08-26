@@ -22,6 +22,7 @@ import itertools
 import datetime
 import xml.dom.minidom
 import katpoint
+import katfile
 from ObitTalkUtil import FITSDir
 from KATImExceptions import KATUnimageableError
 
@@ -439,7 +440,15 @@ def KATh5Select(katdata, err, **kwargs):
 
     #fatal tests
     # Script intention must be imaging
-    script=katdata.datasets[0].file['MetaData/Configuration/Observation'].attrs['script_name']
+    if isinstance(katdata, katfile.ConcatenatedDataSet):
+        script=katdata.datasets[0].file['MetaData/Configuration/Observation'].attrs['script_name']
+    elif isinstance(katdata, katfile.H5DataV2):
+        script=katdata.file['MetaData/Configuration/Observation'].attrs['script_name']
+    else:
+        OErr.PLog(err, OErr.Info, "%s not supported for imaging." % str(type(katdata)))
+        OErr.printErr(err)
+        raise KATUnimageableError("%s not supported for imaging." % str(type(katdata)))
+        
     scriptname=os.path.basename(script)
     if scriptname not in ['image.py','track.py','runobs.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))

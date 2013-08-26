@@ -84,7 +84,10 @@ def K7ContPipeline(files, outputdir, **kwargs):
     # Open the h5 file as a katfile object
     try:
         #open katfile and perform selection according to kwargs
-        katdata = katfile.open(h5file)
+        if len(h5file) == 1:
+            katdata = katfile.open(h5file[0])
+        else:
+            katdata = katfile.open(h5file)
         OK = True
     except Exception, exception:
         print exception
