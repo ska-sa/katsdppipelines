@@ -76,7 +76,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     ####### User defined parameters ######
     if kwargs.get('parmFile'):
         print "parmFile",kwargs.get('parmFile')
-        exec(open(parmFile).read())
+        exec(open(kwargs.get('parmFile')).read())
         EVLAAddOutFile(os.path.basename(kwargs.get('parmFile')), 'project', 'Pipeline input parameters' )
 
     ############### Initialize katfile object, uvfits object and condition data #########################
