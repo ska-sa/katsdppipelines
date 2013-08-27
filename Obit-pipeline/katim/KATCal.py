@@ -641,7 +641,7 @@ def KATGetBadAnts(obsdata,specrange):
     """
     
     katdata=obsdata["katdata"]
-    targs = [katdata.catalogue[cal.name] for cal in obsdata["bpcal"] if cal is not None]
+    targs = obsdata["bpcal"]
     # Get data from the highest elevation scan from checktargs in katdata
     el=0
     #Exit gracefully if we don't have anything to check
