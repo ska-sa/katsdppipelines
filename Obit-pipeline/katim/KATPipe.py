@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+/#! /usr/bin/env python
 import sys, pydoc
 import OErr, OSystem, UV, AIPS, FITS, OTObit
 import ObitTalkUtil
@@ -100,7 +100,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
 
     #Condition data (get bpcals, update names for aips conventions etc)
-    katdata = KATh5Condition(katdata,fluxcals,err)
+    KATh5Condition(katdata,fluxcals,err)
 
     ###################### Data selection and static edits ############################################
     # Select data based on static imageable parameters

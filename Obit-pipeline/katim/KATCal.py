@@ -344,22 +344,24 @@ def KATGetObsParms(obsdata, katdata, parms, logFile):
 
     return parms
 
-def KATh5Condition(katdata ,caldata ,err):
-    """ 
-    Condition a katfile object to make it compatible with import into AIPS
-    and for imaging.
-    This function will:
-    (1) convert spaces in target name to underscores
-    (2) insert 'bpcal' tags for bandpass calibrators found in the 'caldata' catalogue
-        and remove 'bpcal' tags for calibrators that are not.
-    (3) add calibrator model information for bandpass calibrators.
+def KATh5Condition(katdata, caldata, err):
+    """This function will modify the katdata object.
+    This function is used to condition the katdata object to make it compatible for import 
+    into AIPS and imaging.
+    This conditioning performed is as follows:
+        (1) Convert spaces in target name to underscores.
+        (2) Insert 'bpcal' tags for bandpass calibrators found in the 'caldata' catalogue
+            and remove 'bpcal' tags for calibrators that are not.
+        (3) Add calibrator model information for bandpass calibrators.
 
-    Inputs:
-    katdata: katfile object
-    caldata: katfile.catalogue object containing list of accepted amplitude and bandpass calibtarors
-    err:     Obit error message stack object
-    Returns:
-    katdata: modified katfile object.
+    Parameters
+    ----------
+    katdata: class `katfile.ConcatenatedDataSet` object or class `katfile.H5DataV2` object
+        The katfile object on which the conditioning will be performed.
+    caldata: class `katfile.catalogue` object.
+        The catalogue ojbect of amplitude and bandpass calibtarors
+    err: OErr.OErr() 
+        Obit error message stack object
     """
     # Loop through targets
     for targind in katdata.target_indices:
@@ -375,34 +377,41 @@ def KATh5Condition(katdata ,caldata ,err):
         else:                            # Not a bandpass calibrator
             if 'bpcal' in targ.tags: targ.tags.remove('bpcal')
             
-    return(katdata)
-    
 
 def KATh5Select(katdata, err, **kwargs):
+    """This function will modify the katdata object.
+    This function is used to select a subset of targets and scans on the katdata object. 
+    These selections attenuate the 'view' of the katdata object to only show data that 
+    meets the criteria for running the imaging task. Once the selection has been completed, 
+    checks are performed and exceptions are raised if the check fails. The operations are 
+    performed directly on the katdata object passed in.
+
+    The katdata selections are as follows: 
+        (1) Select user requested targets via kwargs. 
+        (2) Select targets that have elevation > 20deg.
+        (3) Select < 30 calibrators (a limit on obit imager).
+        (4) Select the first spectral window (a limit on obit imager)
+
+    The checks performed on the attenuated view are as follows:
+        (1) Check that the script is one of: image.py, track.py, runobs.py.
+        (2) Check that there are at least 4 antannas.
+        (3) Check that there are scans left after the selections. 
+        (4) Check that there are targets left after the selections.
+        (5) Check that there is at least 1 bandpass calibrator.
+
+    Parameters
+    ----------
+        katdata: class `katfile.ConcatenatedDataSet` object or class `katfile.H5DataV2` object
+            The katfile object on which the selections and checks will be performed.
+        err: OErr.OErr()
+            Obit error message stack object
+        **kwargs:
+            Currently can only pass in targets as a kwarg 
+
+    Raises
+    ------
+    KATUnimageableError
     """
-    Select a subset of data from the h5 file that meet criteria for imaging
-    these can be selected form **kwargs (and passed to katdata.select)
-    further selections and fatal failures are hardcoded:
-
-    Data conditions:
-    (1) user target selection via kwargs
-    (2) elevation > 20deg.
-    (3) has < 30 targets
-    (4) 1 spectral window
-    (5) Has a usable script name - image.py, track.py, runobs.py
-    (6) 4 antannas
-    (7) select only tracks in file
-    (8) need to have targets
-    (9) need a 'bpcal' target type (will search targets for bpcals in caldata - and insert model)
-
-    Inputs:
-    katdata:   katfile object
-    caldata:   katfile.catalogue object containing list of accepted amplitude and bandpass calibtarors
-    err:       Obit error message stack object
-    Returns:
-    katdata:   modified katfile object with selection applied and target models inserted.
-    """
-
     #User defined targets
     if kwargs.get('targets'):
         katdata.select(targets=kwargs.get('targets'))
@@ -507,8 +516,6 @@ def KATh5Select(katdata, err, **kwargs):
     #Other errors
     if err.isErr:
         OErr.printErrMsg(err, "Error with h5 file")
-
-    return katdata
 
 def KATInitTargParms(katdata,parms,err):
     """
