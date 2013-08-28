@@ -426,11 +426,31 @@ def KATh5Select(katdata, err, **kwargs):
             OErr.printErr(err)
     katdata.select(scans=good_elevations, reset='')
 
-    # Less than 30 targets
-    if len(katdata.catalogue.targets) > 30:
-        OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
+
+    # Less than 30 calibration targets
+    #if len(katdata.catalogue.targets) > 30:
+    #    OErr.PLog(err, OErr.Info, "Too many targets in file. Truncating to 30 targets.\nYou must manually specify targets if you want to image any that are truncated.")
+    #    OErr.printErr(err)
+    #    katdata.select(targets=katdata.catalogue.targets[0:30], reset='')
+    included_targets = []
+    included_bpcals = []
+    included_gaincals = []
+    included_allcals = []
+    for target_index in katdata.target_indices:
+        target=katdata.catalogue.targets[target_index]
+        if 'bpcal' in target.tags:
+            included_bpcals.append(target_index)            
+        elif 'gaincal' in target.tags:
+            included_gaincals.append(target_index)
+        else:
+            included_targets.append(target_index)
+    #make list starting with BPcals and then truncate to 30 elements if necessary
+    included_allcals = included_bpcals + included_gaincals
+    if len(included_allcals) > 30:
+        OErr.PLog(err, OErr.Info, "Too many calibrators in file. Truncating to 30.")
         OErr.printErr(err)
-        katdata.select(targets=katdata.catalogue.targets[0:30], reset='')
+        included_allcals = included_allcals[0:30]
+    katdata.select(targets=included_allcals+included_targets, reset='')
 
     # Only select 1 spectral window
     if len(katdata.spectral_windows) > 1:
@@ -450,7 +470,7 @@ def KATh5Select(katdata, err, **kwargs):
         raise KATUnimageableError("%s not supported for imaging." % str(type(katdata)))
         
     scriptname=os.path.basename(script)
-    if scriptname not in ['image.py','track.py','runobs.py']:
+    if scriptname not in ['image.py','track.py','runobs.py','dyn_image.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
          OErr.printErr(err)
          raise KATUnimageableError("Imaging run with script: \'%s\' not imagable."%(scriptname))
