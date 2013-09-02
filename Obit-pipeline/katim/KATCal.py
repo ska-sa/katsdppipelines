@@ -2133,7 +2133,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
             cal['CalCCVer']=0
             cal['CalFlux']=fluxlim
             cal['CalModelFlux']=0
-            cal['CalModel']='COMP'
+            cal['CalCModel']='COMP'
             
         NewPCals.append(cal)
 

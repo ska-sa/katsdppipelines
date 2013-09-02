@@ -1,4 +1,4 @@
-/#! /usr/bin/env python
+#! /usr/bin/env python
 import sys, pydoc
 import OErr, OSystem, UV, AIPS, FITS, OTObit
 import ObitTalkUtil
