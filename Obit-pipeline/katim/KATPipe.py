@@ -31,9 +31,9 @@ def K7ContPipeline(files, outputdir, **kwargs):
     parmFile : string, optional
         Overwrite the default imaging parameters using this parameter file.
     """
-    if len(files) > 1:
-        raise TooManyKatfilesException('Processing multiple katfiles are not currently supported')
-    h5file = [files[0]]
+    #if len(files) > 1:
+    #    raise TooManyKatfilesException('Processing multiple katfiles are not currently supported')
+    h5file = files
 
     # Die gracefully if we cannot write to the output area...
     if not os.path.exists(outputdir):
