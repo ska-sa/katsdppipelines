@@ -30,7 +30,7 @@ This module requires katfile and katpoint and their dependencies
 #                         Charlottesville, VA 22903-2475 USA
 #-----------------------------------------------------------------------
 try:
-    import katfile
+    import katdal as katfile
     import katpoint
 except Exception, exception:
     print exception

@@ -7,7 +7,7 @@ from FITS import FITSDisk
 from PipeUtil import *
 from KATCal import *
 import katpoint
-import katfile
+import katdal as katfile
 import subprocess
 import KATH5toAIPS
 import os

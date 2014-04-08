@@ -22,7 +22,7 @@ import itertools
 import datetime
 import xml.dom.minidom
 import katpoint
-import katfile
+import katdal as katfile
 from ObitTalkUtil import FITSDir
 from KATImExceptions import KATUnimageableError
 
@@ -71,6 +71,7 @@ def KATInitContParms():
     # Special editing list
     parms["doEditList"] =  True         # Edit using editList?
     parms["editFG"] =      1            # Table to apply edit list to
+    parms["editList"] = []
 
     # Editing
     parms["doClearTab"]   = True        # Clear cal/edit tables
@@ -321,7 +322,7 @@ def KATGetObsParms(obsdata, katdata, parms, logFile):
 
     # Create the editlist array for static flags (on instantiation it contains a flag of the middle channel).
     editList = KAT7EditList(parms["selChan"])
-    parms["editList"]     = editList
+    parms["editList"]     = parms["editList"] + editList
 
     # Update the editlist array with the static flags defined in parms["staticflags"]
     # Only for wideband !!
@@ -364,15 +365,14 @@ def KATh5Condition(katdata, caldata, err):
         Obit error message stack object
     """
     # Loop through targets
-    for targind in katdata.target_indices:
-        targ=katdata.catalogue.targets[targind]
+    for targ in katdata.catalogue.targets:
         #Replace spaces in the name with underscores
         targ.name=targ.name.replace(' ','_')[0:12]
         #Get the nearest calibrator in caldata.
         fluxcal,offset=caldata.closest_to(targ)
         # Update the calibrator flux model
         if offset*3600.0 < 200.0:        # 200.0 arcseconds should be close enough...
-            katdata.catalogue.targets[targind].flux_model = fluxcal.flux_model
+            targ.flux_model = fluxcal.flux_model
             if 'bpcal' not in targ.tags: targ.tags.append('bpcal')
         else:                            # Not a bandpass calibrator
             if 'bpcal' in targ.tags: targ.tags.remove('bpcal')
