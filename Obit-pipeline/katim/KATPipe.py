@@ -93,8 +93,8 @@ def K7ContPipeline(files, outputdir, **kwargs):
         print exception
     if not OK:
         OErr.PSet(err)
-        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + h5file)
-        raise KATUnimageableError("Unable to read KAT HDF5 data in " + h5file)
+        OErr.PLog(err, OErr.Fatal, "Unable to read KAT HDF5 data in " + str(h5file))
+        raise KATUnimageableError("Unable to read KAT HDF5 data in " + str(h5file))
 
     #Get calibrator models
     fluxcals = katpoint.Catalogue(file(FITSDir.FITSdisks[0]+"/"+parms["fluxModel"]))
