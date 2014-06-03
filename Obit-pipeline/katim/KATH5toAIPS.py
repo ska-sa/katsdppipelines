@@ -242,7 +242,7 @@ def GetKATMeta(katdata, err):
     numchan = len(katdata.channels)
     out["numchan"] = numchan
     # Correlator mode (assuming 1 spectral window KAT-7)
-    out["corrmode"] = katdata.spectral_windows[0].mode
+    out["corrmode"] = katdata.spectral_windows[0].product
     # Central frequency (in Hz)
     out["centerfreq"] = katdata.channel_freqs[numchan //2]
     # Expose all KAT-METADATA to calling script
