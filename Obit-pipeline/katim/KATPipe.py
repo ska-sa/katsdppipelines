@@ -739,6 +739,10 @@ def K7ContPipeline(files, outputdir, **kwargs):
                 EVLAAddOutFile(outfile, target, 'Image of '+ target)
                 # Statistics
                 zz=imstat(x, err, logfile=logFile)
+
+                # Make a Jpeg image
+                
+
     # end writing loop
     
     # Save list of output files
@@ -756,7 +760,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     elif debug:
         mess = "Not creating contour plots ( doKntrPlots = "+str(parms["doKntrPlots"])+ " )"
         printMess(mess, logFile)
-    
+
     # Source uv plane diagnostic plots
     if parms["doDiagPlots"]:
         mess = "INFO --> Diagnostic plots (doDiagPlots)"
