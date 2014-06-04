@@ -9,6 +9,8 @@ import os, sys
 from optparse import OptionParser
 import numpy as np
 
+plt.switch_backend('Agg')
+
 def get_background_variance(data,sigma_clip=5.0,tolerance=0.01):
     """Compute the variance by iteratively removing outliers greater than a given sigma
     until the mean changes by no more than tolerance.
@@ -71,7 +73,7 @@ def writejpeg(data, filename, contrast=99.5, cmap='gray'):
 
 
 
-def fits2jpeg(fitsfilename,contrast=99.9,cmap='jet',chans=None,imchans=False,forceaverage=False,weightaverage=False):
+def fits2jpeg(fitsfilename,contrast=99.9,cmap='jet',chans=None,imchans=False,forceaverage=False,weightaverage=False,area=1.0):
     """Convert FITS files to jpegs using matplotlib.
 
     Inputs
@@ -84,6 +86,7 @@ def fits2jpeg(fitsfilename,contrast=99.9,cmap='jet',chans=None,imchans=False,for
     imchans - produce an individual jpeg for each channel in the input file
     forceaverage - produce an average of the range of channels in chans
     weightaverage - weight the averages
+    area - fraction of image (centered) to display
     """
 
     #Only work if the image exists
@@ -97,6 +100,11 @@ def fits2jpeg(fitsfilename,contrast=99.9,cmap='jet',chans=None,imchans=False,for
     allimagedata = datahdu[0].data[0]
     #make a masked array to remove nans
     allimagedata = np.ma.masked_array(allimagedata, np.isnan(allimagedata))
+    #Cut selected area
+    xpixels = int(0.5*allimagedata.shape[1]*(1-area))
+    ypixels = int(0.5*allimagedata.shape[2]*(1-area))
+    allimagedata=allimagedata[:,xpixels:allimagedata.shape[1]-xpixels,ypixels:allimagedata.shape[2]-ypixels]
+    #cut out desired area
     chan_range = chans
     if not chan_range: 
         imagedata=allimagedata
