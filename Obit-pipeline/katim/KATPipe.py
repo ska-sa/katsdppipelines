@@ -741,7 +741,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
                 # Statistics
                 zz=imstat(x, err, logfile=logFile)
                 # Make a Jpeg image
-                FITS2jpeg.fits2jpeg(outfile,chans=1,contrast=99.9,cmap='jet',area=0.7)
+                FITS2jpeg.fits2jpeg(outfile,chans=1,contrast=0.05,cmap='jet',area=0.7)
                 EVLAAddOutFile(outfile.replace('.fits','.jpeg'), target, 'Jpeg image of '+ target)
     # end writing loop
     
