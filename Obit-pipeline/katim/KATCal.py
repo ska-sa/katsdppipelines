@@ -1262,7 +1262,7 @@ def KATHann(inUV, Aname, Aclass, Adisk, Aseq, err, doDescm=True, \
     return outUV
     # end EVLAHann
 
-def EVLAImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
+def oldEVLAImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
           exclude=["AIPS HI","AIPS PL","AIPS SL"], include=["AIPS CC"],
           headHi=False, logfile=""):
     """
@@ -1328,10 +1328,82 @@ def EVLAImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
         # zap table
         outHistory.Zap(err)
     OErr.printErrMsg(err, "Error with history")
+    #sync with disk
+    inImage.Open(Image.READONLY,err)
+    inImage.Close(err)
+    outImage.Open(Image.READONLY, err)
+    outImage.Close(err)
     # Copy Tables
     Image.PCopyTables (inImage, outImage, exclude, include, err)
     del outImage
     # end EVLAImFITS
+
+def KATImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
+          exclude=["AIPS HI","AIPS PL","AIPS SL"], include=["AIPS CC"],
+          headHi=False, logfile=""):
+    """
+    Write AIPS image as FITS
+
+    Write a Image data set as a FITAB format file
+    History also copied
+
+    * inImage    = Image data to copy
+    * filename   = name of FITS file, any whitespace characters replaced with underscore
+    * outDisk    = FITS directory number
+    * err        = Python Obit Error/message stack
+    * fract      = Fraction of RMS to quantize
+    * quant      = quantization level in image units, has precedence over fract
+      None or <= 0 => use fract.
+    * exclude    = List of table types NOT to copy
+      NB: "AIPS HI" isn't really a table and gets copied anyway
+    * include    = List of table types to copy
+    * headHi     = if True move history to header, else leave in History table
+    """
+
+    mess =  "Write Image to FITS "+filename+" on disk "+str(outDisk)
+    printMess(mess, logfile)
+    #
+    # Checks
+    if not Image.PIsA(inImage):
+        raise TypeError,"inImage MUST be a Python Obit Image"
+    if not OErr.OErrIsA(err):
+        raise TypeError,"err MUST be an OErr"
+    #
+    # Deblank filename
+    fn = re.sub('\s','_',filename)
+    #
+    # First convert to AIPS (This might not be needed- but just to make sure)
+    # Set output
+    outImage = Image.newPAImage("FITS Image DATA", "TEMP", "TEMP", 1, 1, False, err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error creating FITS data")
+    # Copy
+    Image.PCopy (inImage, outImage, err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error copying FITS data to AIPS")
+    # Copy Tables
+    Image.PCopyTables (inImage, outImage, exclude, include, err)
+
+    # Add output directory to the environment so AIPS can see it
+    if os.path.exists(fn):
+        os.remove(fn)
+    pth,fnn=os.path.split(fn)
+    if not pth:
+        os.environ['FTD']=os.environ['PWD']
+    else:
+        os.environ['FTD']=pth
+    
+    #Now use FITTP to write out uv data properly so CASA can read it in.
+    fittp=AIPSTask.AIPSTask("fittp")
+    try:
+        fittp.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
+    except Exception, exception:
+        pass    
+    setname(outImage, fittp)
+    
+    fittp.dataout='FTD:'+fnn
+    fittp.g
+    os.unsetenv('FTD')
 
 def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
               exclude=["AIPS HI", "AIPS SL", "AIPS PL"], \
@@ -2118,7 +2190,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
         if exists > 0 and imageret == 0:       
             x = Image.newPAImage("out_model", aipsimname, oclass, parms["disk"], oseq, True, err)
             outfile = fileroot + '_'+source+'_model.fits'
-            xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
+            xf = KATImFITS (x, outfile, 0, err, logfile=logFile)
             EVLAAddOutFile(outfile, 'M'+source, 'Model image of '+ source)
         
             cal['CalDataType']='AIPS'
@@ -7828,7 +7900,7 @@ def EVLASrcMetadata(uv, err,  FreqID=1, Sources=None, \
     return Report
 # end EVLASrcMetadata
 
-def EVLAHTMLReport( projMetadata, srcMetadata, outfile="report.html",
+def KATHTMLReport( projMetadata, srcMetadata, outfile="report.html",
     logFile="" ):
     """
     Write an HTML report on the processed data set.  This includes information
@@ -7919,14 +7991,14 @@ table {
             return str
 
         s  = "<table>\n"
-        s += "<tr><th>Contour</th><th>Amp vs Baseline</th><th>Re vs Im</th>"
+        s += "<tr><th>Image</th><th>Amp vs Baseline</th><th>Re vs Im</th>"
         s += "<th>U vs V</th></tr>\n"
         s += "<tr>\n"
         if metadata['Source'] in manifest['source']:
             fileList = manifest['source'][ metadata['Source'] ]
             tList = range(4)
             for f in fileList:
-                if f['name'].find('cntr.jpg') != -1: tList[0] = f
+                if f['name'].find('IClean.jpeg') != -1: tList[0] = f
                 if f['name'].find('amp.jpg') != -1: tList[1] = f
                 if f['name'].find('ri.jpg') != -1: tList[2] = f
                 if f['name'].find('uv.jpg') != -1: tList[3] = f

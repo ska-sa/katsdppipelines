@@ -6,6 +6,7 @@ from AIPS import AIPSDisk
 from FITS import FITSDisk
 from PipeUtil import *
 from KATCal import *
+import FITS2jpeg
 import katpoint
 import katdal as katfile
 import subprocess
@@ -735,14 +736,13 @@ def K7ContPipeline(files, outputdir, **kwargs):
                     continue
                 x = Image.newPAImage("out", outname, oclass, disk, parms["seq"], True, err)
                 outfile = fileRoot+'_'+target+"."+oclass+".fits"
-                xf = EVLAImFITS (x, outfile, 0, err, logfile=logFile)
+                xf = KATImFITS(x, outfile, 0, err, logfile=logFile)
                 EVLAAddOutFile(outfile, target, 'Image of '+ target)
                 # Statistics
                 zz=imstat(x, err, logfile=logFile)
-
                 # Make a Jpeg image
-                
-
+                FITS2jpeg.fits2jpeg(outfile,chans=1,contrast=99.7,cmap='jet')
+                EVLAAddOutFile(outfile.replace('.fits','.jpeg'), target, 'Jpeg image of '+ target)
     # end writing loop
     
     # Save list of output files
@@ -823,7 +823,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     if parms["doHTML"]:
         mess = "INFO --> Write HTML report (doHTML)"
         printMess(mess, logFile)
-        EVLAHTMLReport( projMetadata, srcMetadata, \
+        KATHTMLReport( projMetadata, srcMetadata, \
                             outfile=fileRoot+"_report.html", \
                             logFile=logFile )
     

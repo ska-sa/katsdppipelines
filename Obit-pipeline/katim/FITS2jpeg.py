@@ -67,10 +67,11 @@ def writejpeg(data, filename, contrast=99.5, cmap='gray'):
     plt.axis([x.min(), x.max(), y.min(), y.max()])
     plt.axis('off')
     plt.savefig(filename+'.jpeg')
+    plt.close(im)
 
 
 
-def fits2jpeg(fitsfilename,contrast=99.5,cmap='gray',chans=None,imchans=False,forceaverage=False,weightaverage=False):
+def fits2jpeg(fitsfilename,contrast=99.9,cmap='jet',chans=None,imchans=False,forceaverage=False,weightaverage=False):
     """Convert FITS files to jpegs using matplotlib.
 
     Inputs
@@ -100,7 +101,7 @@ def fits2jpeg(fitsfilename,contrast=99.5,cmap='gray',chans=None,imchans=False,fo
     if not chan_range: 
         imagedata=allimagedata
         chan_range='1,'+str(imagedata.shape[0])
-    chan_range = chan_range.split(',')
+    chan_range = str(chan_range).split(',')
     # Get the desired subset of the fits file to converty to jpeg
     if len(chan_range)==1: imagedata = allimagedata[int(chan_range[0])-1:int(chan_range[0])]
     else: imagedata = allimagedata[int(chan_range[0])-1:int(chan_range[1])-1]    
@@ -122,4 +123,5 @@ def fits2jpeg(fitsfilename,contrast=99.5,cmap='gray',chans=None,imchans=False,fo
         avdata = np.average(imagedata,axis=0,weights=weightarray)
         #Write out the averaged image
         writejpeg(avdata,outname,contrast,cmap)
+    datahdu.close()
 
