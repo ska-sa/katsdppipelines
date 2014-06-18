@@ -85,10 +85,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     # Open the h5 file as a katfile object
     try:
         #open katfile and perform selection according to kwargs
-        if len(h5file) == 1:
-            katdata = katfile.open(h5file[0])
-        else:
-            katdata = katfile.open(h5file)
+        katdata = katfile.open(h5file)
         OK = True
     except Exception, exception:
         print exception
@@ -127,6 +124,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
 
     # General AIPS data parameters at script level
     dataClass = ("UVDa")[0:6]      # AIPS class of raw uv data
+    band      = katdata.spectral_windows[0].product #Correlator product
     project   = parms["project"][0:12]  # Project name (12 char or less, used as AIPS Name)
     outIClass = parms["outIClass"] # image AIPS class
     debug     = parms["debug"]
@@ -804,11 +802,11 @@ def K7ContPipeline(files, outputdir, **kwargs):
         EVLAAddOutFile(os.path.basename(picklefile), 'project', 'All source metadata' )
     
         # Get project metadata; save to pickle file
-        projMetadata = EVLAProjMetadata( uvc, AIPS_VERSION, err, \
+        projMetadata = KATProjMetadata( uvc, AIPS_VERSION, err, \
             PCals=parms["PCals"], ACals=parms["ACals"], \
             BPCals=parms["BPCals"], DCals=parms["DCals"], \
-            project = project, \
-            dataInUVF = parms["archRoot"], archFileID = 66666 )
+            project = project, band = band, \
+            dataInUVF = parms["archRoot"], archFileID = fileRoot )
         picklefile = fileRoot+".ProjReport.pickle"
         SaveObject(projMetadata, picklefile, True) 
         EVLAAddOutFile(os.path.basename(picklefile), 'project', 'Project metadata' )

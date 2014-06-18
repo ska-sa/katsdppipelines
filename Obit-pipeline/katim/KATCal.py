@@ -7552,8 +7552,8 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
 
     # Define plots: file => filename string, bparm => UVPLT
     plotTypes =  ( { 'file' : 'amp', 'bparm' : [3,1]   , 'desc': 'Amp vs. uv Dist'},
-                   { 'file' : 'uv' , 'bparm' : [7,6,2],  'desc': 'u vs. v '},
-                   { 'file' : 'ri' , 'bparm' : [10,9],   'desc': 'Re vs. Im'} )
+                   { 'file' : 'uv' , 'bparm' : [6,7,2],  'desc': 'v vs. u '},
+                   { 'file' : 'ri' , 'bparm' : [9,10],   'desc': 'Im vs. Re'} )
 
     # Loop over sources
     for (i,s) in enumerate(slist):
@@ -7618,7 +7618,7 @@ def EVLADiagPlots( uv, err, cleanUp=True, JPEG=True, sources=None, project='',
 
     # end EVLADiagPlot
 
-def EVLAProjMetadata( uv, AIPS_VERSION, err,
+def KATProjMetadata( uv, AIPS_VERSION, err,
     PCals=[], ACals=[], BPCals=[], DCals=[],
     project='project', session='session', band='band', dataInUVF='',
     archFileID='' ):
@@ -7628,7 +7628,7 @@ def EVLAProjMetadata( uv, AIPS_VERSION, err,
     ===============  ========================================================
     "project"        observation project name
     "session"        observation project session
-    "band"           receiver band code
+    "CorrMode"       correlator code
     "obsDate"        observation date
     "obsStart"       observation start time (MJD)
     "obsStop"        observation stop time (MJD)
@@ -7657,7 +7657,7 @@ def EVLAProjMetadata( uv, AIPS_VERSION, err,
     * DCals  = list of delay cal models
     * project = Observation project name
     * session = Observation project session
-    * band = receiver band code
+    * band = correlator mode code
     * dataInUVF = data set archive file name
     * archFileID = archive file ID
     """
@@ -7677,7 +7677,7 @@ def EVLAProjMetadata( uv, AIPS_VERSION, err,
     r = {}
     r["project"] = project
     r["session"] = session
-    r["band"] = band # Receiver band code
+    r["CorrMode"] = band # Correlator mode
     r["obsDate"] = uv.Desc.Dict["obsdat"] # observation date
     times = getStartStopTime( uv, err )
     r["obsStart"] = times[0]
@@ -7866,7 +7866,8 @@ def EVLASrcMetadata(uv, err,  FreqID=1, Sources=None, \
                 sdict["RAPnt"]   = hd["obsra"]
                 sdict["DecPnt"]  = hd["obsdec"]
                 sdict["Freq"]    = hd["crval"][hd["jlocf"]]
-                sdict["BW"]      = hd["cdelt"][hd["jlocf"]]
+
+                #sdict["BW"]      = np.abs(hd["cdelt"][hd["jlocf"]]) Remove this as it is meaningless for MF images
                 sdict["Stokes"]  = Stokes
             blc = [hd["inaxes"][0]/4,hd["inaxes"][1]/4]
             trc = [3*hd["inaxes"][0]/4,3*hd["inaxes"][1]/4]
@@ -7876,6 +7877,7 @@ def EVLASrcMetadata(uv, err,  FreqID=1, Sources=None, \
             else:
                 sdict[s+"Peak"] = stat["Min"]
             sdict[s+"RMS"]  = stat["RMSHist"]
+            print x.GetHighVer("AIPS CC")
             if x.GetHighVer("AIPS CC")>0:
                 sdict[s+"Sum"]  = EVLAGetSumCC(x, err, logfile=logfile, check=check, debug=debug)
             else:
@@ -7966,7 +7968,7 @@ table {
         # Create list of keys
         keys = [ 'ObsDate', 'RA', 'Dec', 'Exposure', 'numVis', 'haveImage' ]
         # if haveImage is True, these keys are also present
-        iKeys = [ 'RAPnt', 'DecPnt', 'Freq', 'BW', 'Size', 'Cells' ]
+        iKeys = [ 'RAPnt', 'DecPnt', 'Freq', 'Size', 'Cells' ]
         # These are present for each Stokes, w/ the Stokes character prepended
         sKeys = [ 'Sum', 'Peak', 'RMS', 'Beam' ]
         if metadata['haveImage'] == True:
