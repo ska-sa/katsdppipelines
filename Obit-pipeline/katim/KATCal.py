@@ -245,7 +245,7 @@ def KATInitContParms():
     parms["solAInt"]     = 1.0          # amp+phase self cal solution interval (min)
     parms["nTaper"]      = 0            # Number of additional imaging multiresolution tapers
     parms["Tapers"]      = [0.0]        # List of tapers in pixels
-    parms["do3D"]        = True         # Make ref. pixel tangent to celest. sphere for each facet
+    parms["do3D"]        = False         # Make ref. pixel tangent to celest. sphere for each facet
     parms["noNeg"]       = False        # F=Allow negative components in self cal model
     parms["BLFact"]      = 1.00         # Baseline dependent time averaging
     parms["BLchAvg"]     = False        # Baseline dependent frequency averaging
@@ -5083,7 +5083,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
     imager.avgIF       = avgIF
     imager.refAnt      = refAnt
     imager.minSNR      = minSNR
-    imager.do3D        = do3D
+    imager.do3D        = False
     imager.dispURL     = "None"
     imager.PBCor       = PBCor
     imager.antSize     = antSize
