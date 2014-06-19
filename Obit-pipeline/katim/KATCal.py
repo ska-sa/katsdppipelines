@@ -7993,8 +7993,8 @@ table {
             return str
 
         s  = "<table>\n"
-        s += "<tr><th>Image</th><th>Amp vs Baseline</th><th>Re vs Im</th>"
-        s += "<th>U vs V</th></tr>\n"
+        s += "<tr><th>Image</th><th>Amp vs Baseline</th><th>Im vs Re</th>"
+        s += "<th>V vs U</th></tr>\n"
         s += "<tr>\n"
         if metadata['Source'] in manifest['source']:
             fileList = manifest['source'][ metadata['Source'] ]
