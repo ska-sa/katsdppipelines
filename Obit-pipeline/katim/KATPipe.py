@@ -108,10 +108,10 @@ def K7ContPipeline(files, outputdir, **kwargs):
     # Need the correlator mode to get the right uvfits template
     corrmode = str(len(katdata.channels))[0]
     templatefile='KAT7'+corrmode+'KTemplate.uvtab'
+    print "#######",nam,cls,disk,seq,fitsdisk
     uv=OTObit.uvlod(ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+templatefile,0,nam,cls,disk,seq,err)
 
     obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0)
-
     # Print the uv data header to screen.
     uv.Header(err)
 

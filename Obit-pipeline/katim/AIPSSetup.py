@@ -10,7 +10,7 @@ import OErr, OSystem, AIPS, ObitTalkUtil
 # default AIPS_VERSION to cwd. Default AIPS_DISK is set to cwd and default FITS to
 # $OBIT_EXEC/share/data.
 
-def AIPSSetup(err,scratchdir=None):
+def AIPSSetup(err,scratchdir=None,overwrite=True):
     cwd          = './'
     home         = os.path.expanduser("~")
     # Is Obit installed and set up correctly? If not make data cwd/FITS.
@@ -50,14 +50,15 @@ def AIPSSetup(err,scratchdir=None):
     DA00         = config.get('KATPIPE','scratch_area')+'/da00'
     AIPS_DISK    = config.get('KATPIPE','scratch_area')+'/aipsdisk'
 
-    #Overwrite any previous AIPS disks.
-    if os.path.exists(DA00): shutil.rmtree(DA00)
-    if os.path.exists(AIPS_DISK): shutil.rmtree(AIPS_DISK)
+    if overwrite:
+        #Overwrite any previous AIPS disks.
+        if os.path.exists(DA00): shutil.rmtree(DA00)
+        if os.path.exists(AIPS_DISK): shutil.rmtree(AIPS_DISK)
 
-    # Create the aips disk and the AIPS environment for the disks.
-    AIPSLite.make_disk(disk_path=AIPS_DISK)
-    AIPSLite.filaip(force=True,data_dir=AIPS_DISK)
-    AIPSLite.make_da00(da00_path=DA00)
+        # Create the aips disk and the AIPS environment for the disks.
+        AIPSLite.make_disk(disk_path=AIPS_DISK)
+        AIPSLite.filaip(force=True,data_dir=AIPS_DISK)
+        AIPSLite.make_da00(da00_path=DA00)
 
     # Get the set up AIPS environment.
     AIPS_ROOT    = os.environ['AIPS_ROOT']

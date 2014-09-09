@@ -2079,6 +2079,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
 
     uvcop=AIPSTask.AIPSTask("uvcop")
     setname(uv, uvcop)
+    uvcop.userno = user
     uvcop.outname = "UV COPY"
     uvcop.outclass = "UVDATA"
     uvcop.outdisk = parms["disk"]
@@ -2089,7 +2090,7 @@ def KATGetCalModel(uv, parms, fileroot, err, logFile='', check=False, debug=Fals
     try:
         uvcop.g
     except Exception, exception:
-        print "Unable to Copy UV data"
+        print "Unable to Copy UV data (userno: %i)" % uvcop.userno
         return 1, parms
 
     # Get uv_alt
@@ -2517,7 +2518,7 @@ def KATCalAP(uv, target, ACals, err, \
     # Run SetJy
     setjy = ObitTask.ObitTask("SetJy")
     try:
-        setjy.__class__.userno   = OSystem.PGetAIPSuser()   # This sometimes gets lost
+        setjy.userno   = OSystem.PGetAIPSuser()   # This sometimes gets lost
     except Exception, exception:
         pass
     setjy.taskLog  = logfile
@@ -5112,6 +5113,7 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         imager.doComRes  = doComRes
     imager.noScrat     = noScrat
     imager.nThreads    = nThreads
+    debug = True
     if debug:
         imager.prtLv = 5
         imager.i
