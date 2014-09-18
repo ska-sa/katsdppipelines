@@ -513,6 +513,12 @@ def KATh5Select(katdata, err, **kwargs):
         OErr.printErr(err)
         raise KATUnimageableError("No Bandpass calibrator. Can't image this observation.")
 
+    # Only image things with sensible dump rates
+    if katdata.dump_period < 0.5:
+        OErr.PLog(err, OErr.Fatal, "Dump rate too small for imaging.")
+        OErr.printErr(err)
+        raise KATUnimageableError("Dump rate too small for imaging.")
+
     #Other errors
     if err.isErr:
         OErr.printErrMsg(err, "Error with h5 file")
@@ -5120,7 +5126,6 @@ def KATImageTargets(uv, err, Sources=None,  FreqID=1, seq=1, sclass="IClean", ba
         imager.doComRes  = doComRes
     imager.noScrat     = noScrat
     imager.nThreads    = nThreads
-    debug = True
     if debug:
         imager.prtLv = 5
         imager.i
