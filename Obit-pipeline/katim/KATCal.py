@@ -526,8 +526,8 @@ def KATInitTargParms(katdata,parms,err):
     #Get frequency Range
     #print parms["BChDrop"],startfreq,parms["EChDrop"],endfreq
     startfreq=katdata.channel_freqs[parms["BChDrop"]]/1e6
-    endfreq=katdata.channel_freqs[parms["EChDrop"]]/1e6
-
+    endfreq=katdata.channel_freqs[-parms["EChDrop"]]/1e6
+    #print startfreq,endfreq
     # Sources
     # Check if user has supplied them
     if len(parms["BPCal"])>0:
@@ -1404,6 +1404,9 @@ def KATImFITS(inImage, filename, outDisk, err, fract=None, quant=None, \
     fittp.dataout='FTD:'+fnn
     fittp.g
     os.unsetenv('FTD')
+    outImage.Zap(err)
+    del outImage
+
 
 def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
               exclude=["AIPS HI", "AIPS SL", "AIPS PL"], \
@@ -1470,7 +1473,11 @@ def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
     fittp.dataout='FTD:'+fnn
     fittp.g
     os.unsetenv('FTD')
-    return outUV
+    #zap the image
+    outUV.Zap(err)
+    del outUV
+    #return outUV
+
     # end KATUVFITS
 
 def EVLAUVFITSTab(inUV, filename, outDisk, err, \

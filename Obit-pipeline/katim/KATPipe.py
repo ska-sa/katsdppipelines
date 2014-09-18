@@ -695,7 +695,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
         if cno>0:
             uvt = UV.newPAUV("AIPS CAL UV DATA", Aname, avgClass, disk, parms["seq"], True, err)
             filename = fileRoot+"_Cal.uvtab"
-            fuv = KATUVFITS (uvt, filename, 0, err, exclude=["AIPS HI", "AIPS SL", "AIPS PL"], include=["AIPS AN", "AIPS FQ"], compress=parms["Compress"], logfile=logFile)
+            KATUVFITS (uv, filename, 0, err, exclude=["AIPS HI", "AIPS SL", "AIPS PL"], include=["AIPS AN", "AIPS FQ"], compress=parms["Compress"], logfile=logFile)
             EVLAAddOutFile(os.path.basename(filename), 'project', "Calibrated Averaged UV data" )
             # Save list of output files
             EVLASaveOutFiles(manifestfile)
@@ -707,7 +707,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
         if cno>0:
             uvt = UV.newPAUV("AIPS RAW UV DATA", Aname, dataClass[0:6], disk, parms["seq"], True, err)
             filename = fileRoot+"_CalTab.uvtab"
-            fuv = EVLAUVFITSTab (uvt, filename, 0, err, logfile=logFile)
+            EVLAUVFITSTab (uvt, filename, 0, err, logfile=logFile)
             EVLAAddOutFile(os.path.basename(filename), 'project', "Calibrated AIPS tables" )
             del uvt
             # Write History
