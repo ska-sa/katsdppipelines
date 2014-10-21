@@ -30,9 +30,9 @@ def AIPSSetup(err,scratchdir=None,overwrite=True):
         aips_version = os.environ['AIPS_VERSION'][-7:]
     except:
         aips_dir = './'
-        aips_version = '31DEC13'    # Should sort out where to change this if necessary!!
+        aips_version = '31DEC14'    # Should sort out where to change this if necessary!!
 
-    configdefaults   = {'aips_dir': aips_dir, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
+    configdefaults   = {'aips_dir': aips_dir, 'obit_dir': OBIT_EXEC, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
     config = ConfigParser.ConfigParser(configdefaults)
     config.add_section('KATPIPE')
     # Get the config file in the users home directory if it exists and overwrite the defaults
