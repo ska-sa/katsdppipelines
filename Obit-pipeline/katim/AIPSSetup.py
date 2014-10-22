@@ -79,7 +79,7 @@ def AIPSSetup(err,scratchdir=None,overwrite=True):
 
     # setup environment
     ObitTalkUtil.SetEnviron(AIPS_ROOT=AIPS_ROOT, AIPS_VERSION=AIPS_VERSION, \
-                                OBIT_EXEC=config.get('obit_dir'), DA00=DA00, ARCH=AIPSLite.arch(), \
+                                OBIT_EXEC=config.get('KATPIPE','obit_dir'), DA00=DA00, ARCH=AIPSLite.arch(), \
                                 aipsdirs=adirs, fitsdirs=fdirs)
 
     # List directories - removed for scripting
