@@ -354,6 +354,8 @@ def KATh5Condition(katdata, caldata, err):
         (2) Insert 'bpcal' tags for bandpass calibrators found in the 'caldata' catalogue
             and remove 'bpcal' tags for calibrators that are not.
         (3) Add calibrator model information for bandpass calibrators.
+        (4) If there is no bandpass calibrator in the observation- check for targets with a flux
+            model that can then be used as a bandpass calibrator.
 
     Parameters
     ----------
@@ -365,6 +367,7 @@ def KATh5Condition(katdata, caldata, err):
         Obit error message stack object
     """
     # Loop through targets
+    havebpcal=False
     for targ in katdata.catalogue.targets:
         #Replace spaces in the name with underscores
         targ.name=targ.name.replace(' ','_')[0:12]
@@ -376,7 +379,15 @@ def KATh5Condition(katdata, caldata, err):
             if 'bpcal' not in targ.tags: targ.tags.append('bpcal')
         else:                            # Not a bandpass calibrator
             if 'bpcal' in targ.tags: targ.tags.remove('bpcal')
-            
+        if 'bpcal' in targ.tags:
+            havebpcal=True
+    #Look for flux models only if we don't have a bandpass calibrator
+    if not havebpcal:
+        [targ.tags.append('bpcal') for targ in katdata.catalogue.targets if targ.flux_model]
+        msg = "WARNING: Not bpcal found in target tags! Adding target %s to list of bandpass calibrators. "%(targ.name)
+        OErr.PLog(err, OErr.Info, msg)
+        OErr.printErr(err)
+
 
 def KATh5Select(katdata, err, **kwargs):
     """This function will modify the katdata object.
@@ -479,7 +490,7 @@ def KATh5Select(katdata, err, **kwargs):
         raise KATUnimageableError("%s not supported for imaging." % str(type(katdata)))
         
     scriptname=os.path.basename(script)
-    if scriptname not in ['image.py','track.py','runobs.py','dyn_image.py']:
+    if scriptname not in ['image.py','track.py','runobs.py','dyn_image.py','beamform_dualpol.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
          OErr.printErr(err)
          raise KATUnimageableError("Imaging run with script: \'%s\' not imagable."%(scriptname))
@@ -2720,6 +2731,7 @@ def KATCalAP(uv, target, ACals, err, \
                     doIgnore = True
                     break
             if doIgnore:
+                OK= True  # If we have A cals then its ok!
                 mess = PCal["Source"]+" in ACal list"
                 printMess(mess, logfile)
                 continue
