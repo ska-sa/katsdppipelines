@@ -10,7 +10,7 @@ import OErr, OSystem, AIPS, ObitTalkUtil
 # default AIPS_VERSION to cwd. Default AIPS_DISK is set to cwd and default FITS to
 # $OBIT_EXEC/share/data.
 
-def AIPSSetup(err,scratchdir=None,overwrite=True):
+def AIPSSetup(err,configfile=None,scratchdir=None,overwrite=True):
     cwd          = './'
     home         = os.path.expanduser("~")
     # Is Obit installed and set up correctly? If not make data cwd/FITS.
@@ -35,8 +35,13 @@ def AIPSSetup(err,scratchdir=None,overwrite=True):
     configdefaults   = {'aips_dir': aips_dir, 'obit_dir': OBIT_EXEC, 'aips_version': aips_version, 'scratch_area': cwd, 'metadata_dir': OBIT_DATA}
     config = ConfigParser.ConfigParser(configdefaults)
     config.add_section('KATPIPE')
-    # Get the config file in the users home directory if it exists and overwrite the defaults
-    config.read(home + '/.katimrc')
+
+    if configfile:
+        #Get the specified config file
+        config.read(configfile)
+    else:
+        # Get the config file in the users home directory if it exists and overwrite the defaults
+        config.read(home + '/.katimrc')
 
     if scratchdir:
         config.set('KATPIPE' ,'scratch_area', scratchdir)

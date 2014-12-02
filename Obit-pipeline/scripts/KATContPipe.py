@@ -9,7 +9,8 @@ parser = OptionParser( usage=usage, description=description)
 parser.add_option("--outputdir", default='./', help="Specify the output data directory.")
 parser.add_option("--parms", dest='parmFile', help="Overwrite the default imaging parameters using a parameter file.")
 parser.add_option("--scratchdir", help="Specify the scratch directory.")
-parser.add_option("--targets", help="List of targets to load (You'll need calibrators in this list!!)")
+parser.add_option("--targets", help="List of targets to load (You'll need calibrators in this list!!).")
+parser.add_option("--config", dest='configFile', help="Location of .katimrc configuration file.")
 (options, katfilenames) = parser.parse_args()
 
 if len(katfilenames) == 0:
@@ -17,7 +18,7 @@ if len(katfilenames) == 0:
     sys.exit()
 
 kwargs = {}
-for k in ['parmFile', 'scratchdir', 'targets']:
+for k in ['parmFile', 'scratchdir', 'targets', 'configFile']:
 	if getattr(options,k) != None:
 		kwargs[k] =  getattr(options,k)
 try:

@@ -56,7 +56,7 @@ def K7ContPipeline(files, outputdir, **kwargs):
     OErr.PInit(err, 2, logFile)
     EVLAAddOutFile(os.path.basename(logFile), 'project', 'Pipeline log file')
 
-    ObitSys = AIPSSetup.AIPSSetup(err,kwargs.get('scratchdir'))
+    ObitSys = AIPSSetup.AIPSSetup(err,configfile=kwargs.get('configFile'),scratchdir=kwargs.get('scratchdir'))
 
     # Get the set up AIPS environment.
     AIPS_ROOT    = os.environ['AIPS_ROOT']
