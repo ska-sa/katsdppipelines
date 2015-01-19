@@ -371,6 +371,8 @@ def KATh5Condition(katdata, caldata, err):
     for targ in katdata.catalogue.targets:
         #Replace spaces in the name with underscores
         targ.name=targ.name.replace(' ','_')[0:12]
+        #Also remove ':' which AIPS has trouble with
+        targ.name=targ.name.replace(':','_')[0:12]
         #Get the nearest calibrator in caldata.
         fluxcal,offset=caldata.closest_to(targ)
         # Update the calibrator flux model
