@@ -515,6 +515,18 @@ def KATh5Select(katdata, err, **kwargs):
         OErr.printErr(err)
         raise KATUnimageableError("No targets in file to image.")
 
+    # The data file must have enough data to make a sensible image
+    if len(katdata.timestamps) < 50:
+        OErr.PLog(err, OErr.Fatal, "Too few dumps in file for imaging.")
+        OErr.printErr(err)
+        raise KATUnimageableError("Too few dumps in file for imaging.")
+
+    # More than 2 minutes of data- otherwise dont image
+    if katdata.timestamps[-1]-katdata.timestamps[0] < 120.:
+        OErr.PLog(err, OErr.Fatal, "Observation too short for imaging.")
+        OErr.printErr(err)
+        raise KATUnimageableError("Observation too short for imaging.")
+
     # Must have a bandpass calibrator
     BPOK=False
     for targ in katdata.target_indices:
@@ -5710,7 +5722,7 @@ def EVLAEditSNAmp(uv, SNver, err, \
     # Get statistics
     stats = EVLASNAmpStats(uv, snver, err, \
                            logfile=logfile, check=check, debug=debug)
-    if stats==None or err.isErr:
+    if stats==[None] or err.isErr:
         mess = "Problem with SN table statistics"
         printMess(mess, logfile)
         return
