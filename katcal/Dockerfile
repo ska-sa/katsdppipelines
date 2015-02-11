@@ -16,12 +16,12 @@ RUN apt-get -y update && apt-get -y install \
     python-h5py \
     python-matplotlib \
     python-numpy \
-    python-redis \
     python-scipy
 
 # Install Python packages not available or too old in Ubuntu
 RUN pip install --no-deps \
     pyephem==3.7.5.3 \
+    redis==2.10.3 \
     git+ssh://git@github.com/ska-sa/katpoint \
     git+ssh://git@github.com/ska-sa/katdal \
     git+ssh://git@github.com/ska-sa/katsdptelstate \
