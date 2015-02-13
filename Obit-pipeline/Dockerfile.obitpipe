@@ -1,0 +1,45 @@
+#Build a container for the obit pipeline
+#To run this container and then run the pipeline:
+#
+#	docker run -i -t --volumes-from <aips-container> --volumes-from <obit-container> -v <file_to_image>:/imager_workdir <pipeline_image>
+#
+# Where:
+# <aips-container> and <obit-container> are already running aips and obit containers with correct volumes mounted
+# <file-to-image> is the full path of the file that is being imaged (this should be in an otherwise empty-dir that pipeline
+#  	output can be written to.
+#
+# Once inside the container:
+# KATContPipe.py /imager_workdir/<h5 filename>
+#  
+FROM obitpipe_base:latest
+
+MAINTAINER Tom Mauch "tmauch@ska.ac.za"
+
+#Make sh=bash
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
+#pip installs
+RUN pip install --no-deps \
+	pyephem==3.7.5.3 \
+	git+https://katpull:katpull4git@github.com/ska-sa/katpoint.git@master#egg=katpoint \
+	git+https://katpull:katpull4git@github.com/ska-sa/katdal.git@master#egg=katdal
+
+#Install the pipeline
+WORKDIR /tmp
+COPY . /tmp/install/Obit-pipeline
+WORKDIR /tmp/install/Obit-pipeline
+RUN python setup.py clean && python setup.py install
+
+#Setup metadata location
+RUN echo '[KATPIPE]' > /home/kat/.katimrc && echo 'metadata_dir = /home/kat/FITS' >> /home/kat/.katimrc
+
+#Move the metadata to the correct location
+RUN mkdir /home/kat/FITS
+ADD FITS/* /home/kat/FITS/
+
+USER kat
+
+WORKDIR /home/kat
+
+#The user has to mount the relevant drives from obit and aips containers before the source below
+ENTRYPOINT source /usr/local/obit/setup.sh && source /usr/local/aips/LOGIN.SH && /bin/bash

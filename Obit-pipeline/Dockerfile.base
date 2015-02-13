@@ -1,0 +1,47 @@
+# This is the base image from which the others are built.
+# It contains all the repo installs as these need to be common
+# across all containers so that dependencies of various
+# packages stay met.
+# Should be built first with:
+# docker build -t 'obitpipe_base' . 
+FROM ubuntu:14.04
+
+MAINTAINER Tom Mauch "tmauch@ska.ac.za"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+#Use bash rather than sh for all RUN commands
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
+#Make a kat user
+RUN adduser --system --group kat
+
+#All apt-get repos sit here so that dependencies between containers
+#remain synced with eachother.
+RUN apt-get -y update && apt-get -y install \
+	wget \
+	cvs \
+	rsync \
+	subversion \
+	python-dev \
+	pkg-config \
+	libglib2.0-dev \
+	libcfitsio3-dev \
+	libfftw3-dev \
+	gawk \
+	libxmlrpc-core-c3-dev \
+	libxmlrpc-c++8-dev \
+	libcurl4-openssl-dev \
+	zlibc \
+	libgsl0-dev \
+	gfortran \
+	make \
+	python-numpy \
+	python-h5py \
+	python-scipy \
+	python-pip \
+	python-pyfits \
+	python-matplotlib \
+	git \
+	imagemagick
+

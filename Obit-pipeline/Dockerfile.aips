@@ -1,0 +1,44 @@
+# Docker file for aips installation
+# Creates a /usr/local/aips volume with AIPS install and /data/LOCALHOST_1 with a working aips disk.
+FROM obitpipe_base:latest
+
+MAINTAINER Tom Mauch "tmauch@ska.ac.za"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+#Use bash rather than sh for all RUN commands
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
+RUN mkdir /usr/local/aips
+
+#Make /usr/local/aips owned by aipsuser
+RUN chown kat /usr/local/aips && chgrp kat /usr/local/aips
+
+#Setup a data volume for aips data (needs to be created first so that permissions workaround works)
+#See docker issue:#2969
+RUN mkdir /data && chmod a+w /data
+
+#Go to aips dir
+WORKDIR /usr/local/aips
+
+#Be katuser
+USER kat
+
+#Download install script
+RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC15/install.pl
+
+#INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
+#the long list of '\n's here just cycles through the install menu defaults
+RUN aipscmd=$'\nkat\n\nDOCKIM\nY\n\n\n/data/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< "$aipscmd"
+
+#Make /data a volume
+VOLUME ["/data"]
+
+#Make aips installation a volume
+VOLUME ["/usr/local/aips"]
+
+#Move to homedir
+WORKDIR /home/kat
+
+#Source the aips environment on startup
+ENTRYPOINT source /usr/local/aips/LOGIN.SH && /bin/bash
