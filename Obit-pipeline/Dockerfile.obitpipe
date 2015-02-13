@@ -35,7 +35,7 @@ RUN echo '[KATPIPE]' > /home/kat/.katimrc && echo 'metadata_dir = /home/kat/FITS
 
 #Move the metadata to the correct location
 RUN mkdir /home/kat/FITS
-ADD FITS/* /home/kat/FITS/
+COPY FITS/* /home/kat/FITS/
 
 USER kat
 
