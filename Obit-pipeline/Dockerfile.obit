@@ -1,0 +1,28 @@
+#Docker file for Obit installation.
+#Creates a /usr/local/obit volume with a full installation of Obit.
+FROM obitpipe_base:latest
+
+MAINTAINER Tom Mauch "tmauch@ska.ac.za"
+
+#Make sh=bash
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
+#Get the Obit src
+RUN svn co https://svn.cv.nrao.edu/svn/ObitInstall/ObitSystem /usr/local/obit/ObitSystem
+
+#Get the obit install scripts
+RUN svn co --depth=files https://svn.cv.nrao.edu/svn/ObitInstall/ /usr/local/obit/
+
+#Go to Obit dir and run the setup script
+WORKDIR /usr/local/obit
+
+RUN ./InstallObit.sh -without THIRD
+
+#Make the obit install a volume
+VOLUME ["/usr/local/obit"]
+
+USER kat
+WORKDIR /home/kat
+
+#Set up the environment on initialising the container (assume aips is mounted)
+ENTRYPOINT source /usr/local/obit/setup.sh && source /usr/local/aips/LOGIN.SH && /bin/bash
