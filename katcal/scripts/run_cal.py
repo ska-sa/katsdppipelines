@@ -85,7 +85,7 @@ def run_threads(num_buffers=2, buffer_maxsize=1000e6, spead_port=8890, spead_ip=
     """ 
 
     # start TM and extract data shape parameters 
-    ts = TelescopeState(host=ts_ip,db=ts_db)
+    ts = TelescopeState(endpoint=ts_ip,db=ts_db)
     nchan = ts.nchan
     npol = 4
     nant = ts.nant
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     (options, args) = parse_args()
 
     # short weit to give me time to start up the simulated spead stream
-    time.sleep(5.)
+    # time.sleep(5.)
 
     run_threads(num_buffers=options.num_buffers, buffer_maxsize=options.buffer_maxsize, spead_port=options.spead_port, 
                spead_ip=options.spead_ip, ts_db=options.ts_db, ts_ip=options.ts_ip)
