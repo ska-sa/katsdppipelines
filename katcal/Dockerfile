@@ -22,6 +22,7 @@ RUN apt-get -y update && apt-get -y install \
 RUN pip install --no-deps \
     pyephem==3.7.5.3 \
     redis==2.10.3 \
+    netifaces==0.10.4 \
     git+ssh://git@github.com/ska-sa/katpoint \
     git+ssh://git@github.com/ska-sa/katdal \
     git+ssh://git@github.com/ska-sa/katsdptelstate \
