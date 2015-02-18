@@ -1,4 +1,4 @@
-FROM ubuntu:14.04
+FROM ubuntu:14.04runb 
 
 MAINTAINER Tom Mauch "tmauch@ska.ac.za"
 
@@ -38,6 +38,7 @@ RUN adduser --system katcal
 WORKDIR /home/katcal
 USER katcal
 
-EXPOSE 8890
+EXPOSE 7200
+EXPOSE 7202
 
-CMD ["run_cal.py"]
+#CMD ["run_cal.py"]
