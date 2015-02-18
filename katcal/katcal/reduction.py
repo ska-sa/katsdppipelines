@@ -9,7 +9,6 @@ import os
 
 from katcal import plotting
 from katcal import calprocs
-from katcal import parameters
 from katcal.simulator import SimData
 from katcal import report
 from katcal.scan import Scan
@@ -36,26 +35,6 @@ def rfi():
     """
     #print 'Some sort of RFI flagging?!'
     pass
-    
-def get_nearest_from_ts(ts,key,t,dt=15.0):
-    """
-    Given a time, extract the value of a key in the Telescope State closest to that time.
-    
-    Inputs:
-    =======
-    ts  : TelescopeState
-    key : string, key to be extracted from the ts
-    t   : time that value of the key is desired 
-    dt  : range of times over which to search for key value, bracketing time t
-    
-    Returns:
-    ========
-    Value of a key in the Telescope State closest to time t
-    
-    """    
-    key_list = np.array(ts.get_range(key,st=t-dt,et=t+dt))
-    time_diffs = [np.float(line[1]) - t for line in key_list]
-    return key_list[np.argmin(time_diffs)] 
 
 def get_solns_to_apply(s,ts,sol_list,target_name,pipeline_logger,time_range=[]):
     solns_to_apply = []
@@ -98,31 +77,29 @@ def pipeline(data, ts, thread_name):
     timing_file = open("timing.txt", "w")
 
     # ----------------------------------------------------------
-    # some general constants
-    #    will mostly be in the Telescope Model later?
-    #    or combination of TM and param file?
+    # extract some some commonly used constants from the TS
 
-    params = parameters.set_params()
-
-    #per_scan_plots = params['per_scan_plots']
-    #closing_plots = params['closing_plots']
-    REFANT = params['refant']
+    #per_scan_plots = ts.cal_per_scan_plots
+    #closing_plots = ts.cal_closing_plots
 
     # solution intervals
-    bp_solint = params['bp_solint'] #seconds
-    k_solint = params['k_solint'] #seconds
-    k_chan_sample = params['k_chan_sample']
-    g_solint = params['g_solint'] #seconds
-    dump_period = ts.dump_period
-
+    bp_solint = ts.cal_bp_solint #seconds
+    k_solint = ts.cal_k_solint #seconds
+    k_chan_sample = ts.cal_k_chan_sample
+    g_solint = ts.cal_g_solint #seconds
+    
+    dump_period = ts.l0_int_time
+    
+    antlist = ts.antenna_mask.split(',')
+    # refant index number in the antenna list
+    refant_ind = antlist.index(ts.cal_refant)
+    
+    # get names of activity and target TS keys, using TS reference antenna
+    target_key = '{0}_target'.format(ts.cal_refant,)
+    activity_key = '{0}_activity'.format(ts.cal_refant,)
+    
     # plots per scan
     #per_scan_plots = True
-
-    # ----------------------------------------------------------
-    # extract values we need frequently from the TM
-    #nant = ts.nant
-    #nbl = nant*(nant+1)/2
-    #nchan = ts.nchan
 
     # ----------------------------------------------------------
     # set initial values for fits
@@ -147,9 +124,9 @@ def pipeline(data, ts, thread_name):
 
         # extract scan info from the TS
         #  target string contains: 'target name, tags, RA, DEC'
-        target = get_nearest_from_ts(ts,'target',t0)[0]
-        scan_state = get_nearest_from_ts(ts,'scan_state',t0)[0]
-        taglist = get_nearest_from_ts(ts,'tag',t0)[0]        
+        target = ts.get_previous(target_key,t0,dt=10.)[0]
+        scan_state = ts.get_previous(activity_key,t0,dt=10.)[0]
+        taglist = target.split(',')[1].split()    
         # fudge for now to add delay cal tag to bpcals
         if 'bpcal' in taglist: taglist.append('delaycal')
         
@@ -158,7 +135,7 @@ def pipeline(data, ts, thread_name):
         pipeline_logger.info('Tags:   {0}'.format(taglist,))
         
         # set up scan
-        s = Scan(data, ti0, ti1, ts.dump_period, ts.antlist, ts.corr_products)
+        s = Scan(data, ti0, ti1, dump_period, antlist, ts.cbf_bls_ordering)
 
         # initial RFI flagging
         pipeline_logger.info('Preliminary flagging')
@@ -171,13 +148,13 @@ def pipeline(data, ts, thread_name):
             # preliminary G solution
             pipeline_logger.info('Solving for preliminary G on delay calibrator {0}'.format(target_name,))
             # solve and interpolate to scan timestamps
-            pre_g_soln = s.g_sol(k_solint,g0_h,REFANT)
+            pre_g_soln = s.g_sol(k_solint,g0_h,refant_ind)
             g_to_apply = s.interpolate(pre_g_soln)
             
             # ---------------------------------------
             # K solution
             pipeline_logger.info('Solving for K on delay calibrator {0}'.format(target_name,))
-            k_soln = s.k_sol(k_chan_sample,k0_h,bp0_h,REFANT,pre_apply=[g_to_apply])
+            k_soln = s.k_sol(k_chan_sample,k0_h,bp0_h,refant_ind,pre_apply=[g_to_apply])
             
             # ---------------------------------------
             # update TS
@@ -197,14 +174,14 @@ def pipeline(data, ts, thread_name):
             # Preliminary G solution
             pipeline_logger.info('Solving for preliminary G on bandpass calibrator {0}'.format(target.split(',')[0],))
             # solve and interpolate to scan timestamps
-            pre_g_soln = s.g_sol(bp_solint,g0_h,REFANT,pre_apply=solns_to_apply)
+            pre_g_soln = s.g_sol(bp_solint,g0_h,refant_ind,pre_apply=solns_to_apply)
             g_to_apply = s.interpolate(pre_g_soln)
             
             # ---------------------------------------
             # B solution
             pipeline_logger.info('Solving for B on bandpass calibrator {0}'.format(target.split(',')[0],))
             solns_to_apply.append(g_to_apply)
-            b_soln = s.b_sol(bp0_h,REFANT,pre_apply=solns_to_apply)
+            b_soln = s.b_sol(bp0_h,refant_ind,pre_apply=solns_to_apply)
 
             # ---------------------------------------
             # update TS
@@ -226,7 +203,7 @@ def pipeline(data, ts, thread_name):
             # set up solution interval: just solve for two intervals per G scan (ignore ts g_solint for now)
             dumps_per_solint = np.ceil((ti1-ti0)/2.0)
             g_solint = dumps_per_solint*dump_period            
-            g_soln = s.g_sol(g_solint,g0_h,REFANT,pre_apply=solns_to_apply)
+            g_soln = s.g_sol(g_solint,g0_h,refant_ind,pre_apply=solns_to_apply)
             
             # ---------------------------------------
             # update TS

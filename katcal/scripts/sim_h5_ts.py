@@ -3,29 +3,27 @@
 # H5 file to use for simulation
 #   simulation of data and Teselcope Model (TM)
 
-import optparse
-
 from katcal import parameters
 from katcal.simulator import SimData
 from katsdptelstate.telescope_state import TelescopeState
+from katsdptelstate import endpoint, ArgumentParser
 
-def get_args():
-    parser = optparse.OptionParser(usage="%prog [options] <filename.h5>", description="Simulate telescope state from H5 file.")
-    parser.add_option("--ts-db", default=1, type="int", help="Telescope state database number. Default: 1")
-    parser.add_option("--ts-ip", default="127.0.0.1", help="Telescope state ip address. Default: 127.0.0.1")
-    options, args = parser.parse_args()
-    if len(args) < 1 or not args[0].endswith(".h5"):
-        parser.error("Please provide an h5 filename as an argument.")
-    return args[0], options
+def parse_opts():
+    parser = ArgumentParser(description = 'Simulate Telescope State H5 file')    
+    parser.add_argument('--h5file', type=str, help='H5 file for simulated data')
+    parser.set_defaults(telstate='localhost')
+    return parser.parse_args()
 
-filename, options = get_args()
-simdata = SimData(filename)
+opts = parse_opts()
+ts = opts.telstate
 
-print "Create TS."
-ts = TelescopeState(endpoint=options.ts_ip,db=options.ts_db)
 print "Use parameters from parameter file to initialise TS."
 parameters.init_ts(ts)
-print "Add and override with TS data from simulator."
+
+print "Open H5 file using appropriate reference antenna for sensor reference."
+simdata = SimData(opts.h5file,ts.cal_refant)
+
+print "Add and override TS data from simulator."
 simdata.setup_ts(ts)
 print "Done."
 
