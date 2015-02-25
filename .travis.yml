@@ -7,6 +7,7 @@ python:
 
 before_install:
   # Check environment a la the numpy Travis script
+  - export KATCALDIR = $PWD/katcal
   - pwd
   - ls
   - uname -a
@@ -23,6 +24,9 @@ before_install:
   # install python packages (pypi and private repositories)
   - cd
   - ls
+  - pwd
+  - cd $KATCALDIR
+  - printenv | grep katsdpp
   - travis_wait pip install --no-deps -q -r katcal/requirements.txt 
 
 install:
