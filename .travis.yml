@@ -13,17 +13,13 @@ before_install:
   - ulimit -a
   - python -V
   # install deb package dependencies
-  #  for scipy:
-  - sudo apt-get install -qq gfortran libatlas-base-dev 
-  # install redis
+  - sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
+  # install redis (for tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis.tar.gz
   - tar -xzvf /tmp/redis.tar.gz
   - cd /tmp/redis && make 
-  # install pypi dependencies
-  - travis_wait pip install -q -r requirements.txt 
-  # clone private repositories
-  - git clone https://katpull:katpull4git@github.com/ska-sa/katdal.git
-  - pip install -q katdal/
+  # install python packages (pypi and private repositories)
+  - travis_wait pip install --no-deps -q -r katcal/requirements.txt 
 
 install:
   # Check if package is pip-installable while we are at it
@@ -33,4 +29,4 @@ before_script:
   - cd /tmp/redis && ./redis-server
 
 script:
-  - nosetests -v
+  - python -m unittest discover katcal
