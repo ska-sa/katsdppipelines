@@ -13,7 +13,7 @@ before_install:
   - ulimit -a
   - python -V
   # install deb package dependencies
-  - sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
+  - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
   # install redis (for tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
