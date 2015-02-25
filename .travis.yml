@@ -7,6 +7,8 @@ python:
 
 before_install:
   # Check environment a la the numpy Travis script
+  - pwd
+  - ls
   - uname -a
   - free -m
   - df -h
@@ -17,11 +19,10 @@ before_install:
   # install redis (for tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
-  - cd /tmp && ls
   - cd /tmp/redis-2.8.19 && make 
   # install python packages (pypi and private repositories)
-  - ls
-  - travis_wait cd ~ && pip install --no-deps -q -r katcal/requirements.txt 
+  - cd
+  - travis_wait pip install --no-deps -q -r katcal/requirements.txt 
 
 install:
   # Check if package is pip-installable while we are at it
