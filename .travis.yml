@@ -22,6 +22,7 @@ before_install:
   - cd /tmp/redis-2.8.19 && make 
   # install python packages (pypi and private repositories)
   - cd
+  - ls
   - travis_wait pip install --no-deps -q -r katcal/requirements.txt 
 
 install:
