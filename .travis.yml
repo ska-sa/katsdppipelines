@@ -7,7 +7,7 @@ python:
 
 before_install:
   # Check environment a la the numpy Travis script
-  - export KATCALDIR = $PWD/katcal
+  - export KATCALDIR=$PWD/katcal
   - pwd
   - ls
   - uname -a
