@@ -12,21 +12,21 @@ before_install:
   - df -h
   - ulimit -a
   - python -V
-  # install deb package dependencies
-  - sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
-  # install redis (for tests)
-  - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis.tar.gz
-  - tar -xzvf /tmp/redis.tar.gz
-  - cd /tmp/redis && make 
-  # install python packages (pypi and private repositories)
-  - travis_wait pip install --no-deps -q -r katcal/requirements.txt 
+  # install deb package dependencies for katcal
+  - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
+  # install redis (for katcal tests)
+  - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
+  - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
+  - cd /tmp/redis-2.8.19 && make 
+  # install python packages for katcal (pypi and private repositories)
+  - travis_wait pip install --no-deps -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
 
 install:
-  # Check if package is pip-installable while we are at it
-  - pip install .
+  # pip-install katcal
+  - cd $TRAVIS_BUILD_DIR/katcal && pip install .
 
 before_script:
-  - cd /tmp/redis && ./redis-server
+  - cd /tmp/redis-2.8.19 && ./src/redis-server &
 
 script:
-  - python -m unittest discover katcal
+  - cd $TRAVIS_BUILD_DIR && python -m unittest discover katcal

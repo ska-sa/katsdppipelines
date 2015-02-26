@@ -6,6 +6,7 @@ from katcal.reduction import pipeline
 from katsdptelstate.telescope_state import TelescopeState
 
 import logging
+import socket
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -56,6 +57,12 @@ class accumulator_thread(threading.Thread):
         """
         # Initialise SPEAD stream
         self.accumulator_logger.info('Initializing SPEAD receiver')
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if self.l0_endpoint.multicast_subscribe(sock):
+            logger.info("Subscribing to multicast address {0}".format(self.l0_endpoint.host))
+
         spead_stream = spead.TransportUDPrx(self.l0_endpoint.port)
 
         # Iincrement between buffers, filling and releasing iteratively
@@ -225,7 +232,7 @@ class pipeline_thread(threading.Thread):
             self.pipeline_logger.info('scan_accumulator_condition acquire by %s' %(self.name,))
             # run the pipeline 
             self.pipeline_logger.info('Pipeline run start on accumulated data')
-            run_pipeline(self.data,self.telstate,self.l1_endpoint,self.name)
+            self.run_pipeline()
             
             # release condition after pipeline run finished
             self.scan_accumulator_condition.release()
@@ -237,12 +244,13 @@ class pipeline_thread(threading.Thread):
     def stopped(self):
         return self._stop.isSet()
         
-def run_pipeline(data, ts, l1_endpoint, thread_name='Pipeline'):    
-    # run pipeline calibration
-    calibrated_data = pipeline(data,ts,thread_name=thread_name)
-    # if target data was calibated in the pipeline, send to L1 spead
-    if calibrated_data is not None:
-        data_to_SPEAD(calibrated_data,l1_endpoint)
+    def run_pipeline(self):    
+        # run pipeline calibration
+        calibrated_data = pipeline(self.data,self.telstate,thread_name=self.name)
+        # if target data was calibated in the pipeline, send to L1 spead
+        if calibrated_data is not None:
+            self.pipeline_logger.info('Transmit L1 data')
+            data_to_SPEAD(calibrated_data,self.l1_endpoint)
         
 # ---------------------------------------------------------------------------------------
 # SPEAD transmission
