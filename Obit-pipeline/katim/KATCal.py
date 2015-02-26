@@ -492,7 +492,7 @@ def KATh5Select(katdata, err, **kwargs):
         raise KATUnimageableError("%s not supported for imaging." % str(type(katdata)))
         
     scriptname=os.path.basename(script)
-    if scriptname not in ['image.py','track.py','runobs.py','dyn_image.py','beamform_dualpol.py']:
+    if scriptname not in ['image.py','track.py','runobs.py','dyn_image.py','beamform_dualpol.py','kiss_image.py']:
          OErr.PLog(err, OErr.Fatal, "Imaging run with script: \'%s\' not imagable."%(scriptname))
          OErr.printErr(err)
          raise KATUnimageableError("Imaging run with script: \'%s\' not imagable."%(scriptname))
