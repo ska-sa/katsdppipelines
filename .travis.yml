@@ -22,11 +22,11 @@ before_install:
   - travis_wait pip install --no-deps -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
 
 install:
-  # Check if package is pip-installable while we are at it
-  - cd $TRAVIS_BUILD_DIR && pip install .
+  # pip-install katcal
+  - cd $TRAVIS_BUILD_DIR/katcal && pip install .
 
 before_script:
   - cd /tmp/redis && ./redis-server
 
 script:
-  - python -m unittest discover katcal
+  - cd $TRAVIS_BUILD_DIR && python -m unittest discover katcal
