@@ -19,11 +19,11 @@ before_install:
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
   - cd /tmp/redis-2.8.19 && make 
   # install python packages for katcal (pypi and private repositories)
-  - travis_wait pip install --no-deps -q -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
+  - travis_wait pip install --no-deps -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
 
 install:
   # Check if package is pip-installable while we are at it
-  - pip install .
+  - cd $TRAVIS_BUILD_DIR && pip install .
 
 before_script:
   - cd /tmp/redis && ./redis-server
