@@ -15,8 +15,8 @@ before_install:
   # install deb package dependencies for katcal
   - travis_wait sudo apt-get install -q gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
   # check numpy and scipy versions
-  - python -c 'import scipy; print scipy.__version__'
   - python -c 'import numpy; print numpy.__version__'
+  - python -c 'import scipy; print scipy.__version__'
   # install redis (for katcal tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
