@@ -28,10 +28,10 @@ before_install:
   - cd /tmp/redis-2.8.19 && make 
   # install python packages for katcal
   #   firstly pypi dependencies
-  - pip install h5py
-  - pip install numpy
-  - pip install scipy
-  - pip install matplotlib
+  - travis_wait pip install h5py
+  - travis_wait pip install numpy
+  - travis_wait pip install scipy
+  - travis_wait pip install matplotlib
   #   secondly from git repositories
   - travis_wait pip install -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
   # check numpy and scipy versions
