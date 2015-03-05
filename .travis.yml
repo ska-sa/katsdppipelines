@@ -24,8 +24,6 @@ before_install:
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
   - cd /tmp/redis-2.8.19 && make 
-  # update pip (needed for h5py pip install)
-  - pip install -U pip setuptools
   # install python packages for katcal (pypi and private repositories)
   - travis_wait pip install --no-deps -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
   # check numpy and scipy versions
