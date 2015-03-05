@@ -25,7 +25,7 @@ before_install:
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
   - cd /tmp/redis-2.8.19 && make 
   # install python packages for katcal (pypi and private repositories)
-  - travis_wait pip install --no-deps -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
+  - travis_wait pip install -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
   # check numpy and scipy versions
   - python -c 'import numpy; print numpy.__version__'
   - python -c 'import scipy; print scipy.__version__'
