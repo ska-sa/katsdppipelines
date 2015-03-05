@@ -30,6 +30,7 @@ before_install:
   - travis_wait pip install -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
   # check numpy and scipy versions
   - python -c 'import numpy; print numpy.__version__'
+  # check
   - python -c 'import scipy; print scipy.__version__'
 
 install:
