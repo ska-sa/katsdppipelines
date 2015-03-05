@@ -5,6 +5,9 @@ language: python
 python:
   - 2.7
 
+virtualenv:
+  system_site_packages: true
+
 before_install:
   # Check environment a la the numpy Travis script
   - uname -a
@@ -12,27 +15,16 @@ before_install:
   - df -h
   - ulimit -a
   - python -V
-  # install deb package dependencies for:
-  #   scipy:
-  - travis_wait sudo apt-get install -q gfortran libatlas-base-dev
-  #   h5py:
-  - travis_wait sudo apt-get install -q libhdf5-serial-dev
-  #   katcal:
-  - travis_wait sudo apt-get install -q git-core
+  # install deb package dependencies for katcal
+  - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy
   # check numpy and scipy versions
-  #- python -c 'import numpy; print numpy.__version__'
-  #- python -c 'import scipy; print scipy.__version__'
+  - python -c 'import numpy; print numpy.__version__'
+  - python -c 'import scipy; print scipy.__version__'
   # install redis (for katcal tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
   - cd /tmp/redis-2.8.19 && make 
-  # install python packages for katcal
-  #   firstly pypi dependencies
-  - travis_wait pip install h5py
-  - travis_wait pip install numpy
-  - travis_wait pip install scipy
-  - travis_wait pip install matplotlib
-  #   secondly from git repositories
+  # install python packages for katcal (pypi and private repositories)
   - travis_wait pip install -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
   # check numpy and scipy versions
   - python -c 'import numpy; print numpy.__version__'
