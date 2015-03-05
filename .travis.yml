@@ -15,8 +15,10 @@ before_install:
   # install deb package dependencies for:
   #   scipy:
   - travis_wait sudo apt-get install -q gfortran libatlas-base-dev
+  #   h5py:
+  - travis_wait sudo apt-get install -q libhdf5-dev
   #   katcal:
-  - travis_wait sudo apt-get install -q gfortran git-core
+  - travis_wait sudo apt-get install -q git-core
   # check numpy and scipy versions
   #- python -c 'import numpy; print numpy.__version__'
   #- python -c 'import scipy; print scipy.__version__'
