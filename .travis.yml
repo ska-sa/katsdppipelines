@@ -16,7 +16,7 @@ before_install:
   #   scipy:
   - travis_wait sudo apt-get install -q gfortran libatlas-base-dev
   #   h5py:
-  - travis_wait sudo apt-get install -q libhdf5-dev
+  - travis_wait sudo apt-get install -q libhdf5-serial-dev
   #   katcal:
   - travis_wait sudo apt-get install -q git-core
   # check numpy and scipy versions
