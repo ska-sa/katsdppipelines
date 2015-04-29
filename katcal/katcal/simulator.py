@@ -55,7 +55,7 @@ class SimData(katdal.H5DataV2):
         """   
         # set simulated ts values from h5 file
         ts.add('antenna_mask', ','.join([ant.name for ant in self.ants]))
-        ts.add('l0_int_time', self.dump_period)
+        ts.add('sdp_l0_int_time', self.dump_period)
         ts.add('cbf_n_ants', len(self.ants))
         ts.add('cbf_n_chans', ts.cal_echan-ts.cal_bchan)
         ts.add('cbf_bls_ordering', self.corr_products)
@@ -80,7 +80,7 @@ class SimData(katdal.H5DataV2):
             #   slight differences in times of different sensors
             ts.add('{0}_target'.format(self.refant,),target.description,ts=self.timestamps[0]-random()*0.1)
             ts.add('{0}_activity'.format(self.refant,),scan_state,ts=self.timestamps[0]-random()*0.1)
-            print scan_state
+            print scan_state, target.description
             
             # transmit the data from this scan, timestamp by timestamp
             scan_data = self.vis[:]
