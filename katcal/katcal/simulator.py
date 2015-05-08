@@ -61,14 +61,16 @@ class SimData(katdal.H5DataV2):
         ts.add('cbf_sync_time', 0.0, immutable=True)
         antenna_mask = ','.join([ant.name for ant in self.ants])
         ts.add('antenna_mask', antenna_mask)
+        ts.add('experiment_id', self.experiment_id)
         ts.add('config', {'h5_simulator':True})
         
-    def h5toSPEAD(self,ts,l0_endpoint,wait_time=0.5,spead_rate=1e9):
+    def h5toSPEAD(self,ts,l0_endpoint,wait_time=0.5,spead_rate=1e9,max_scans=None):
         """
         Iterates through H5 file and transmits data as a spead stream.
         
         Parameters
         ----------
+
         ts   : Telescope State 
         port : port to send spead tream to
         
@@ -78,7 +80,12 @@ class SimData(katdal.H5DataV2):
         # rate limit transmission to work on Laura's laptop
         tx = spead.Transmitter(spead.TransportUDPtx(l0_endpoint.host,l0_endpoint.port,rate=spead_rate))
 
-        data_index = 0
+        num_scans = len(self.scan_indices)
+        # if the maximum number of scans to transmit has not been specified, set to total number of scans
+        if max_scans is None: 
+            max_scans = num_scans
+        else:
+            num_scans = max_scans
         
         for scan_ind, scan_state, target in self.scans(): 
             # update telescope state with scan information
@@ -86,6 +93,8 @@ class SimData(katdal.H5DataV2):
             #   slight differences in times of different sensors
             ts.add('{0}_target'.format(self.refant,),target.description,ts=self.timestamps[0]-random()*0.1)
             ts.add('{0}_activity'.format(self.refant,),scan_state,ts=self.timestamps[0]-random()*0.1)
+            print 'Scan', scan_ind+1, '/', num_scans, ' -- ', 
+            print 'timestamps:', len(self.timestamps), ' -- ',
             print scan_state, target.description
             
             # transmit the data from this scan, timestamp by timestamp
@@ -103,13 +112,11 @@ class SimData(katdal.H5DataV2):
 
                 # transmit timestamps, vis, flags, weights
                 transmit_item(tx, tx_time, tx_vis, tx_flags, tx_weights)
-                print data_index,
-                data_index += 1
                 # delay so receiver isn't overwhelmed
                 time.sleep(wait_time)
 
-            print
-            data_index = 0
+            if scan_ind+1 == max_scans:
+                break
                 
         end_transmit(tx)
                     
