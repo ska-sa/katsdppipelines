@@ -4,6 +4,7 @@ import katsdpimager.loader_core
 import casacore.tables
 import numpy as np
 import argparse
+import astropy.units as units
 
 class LoaderMS(katsdpimager.loader_core.LoaderBase):
     def __init__(self, filename, options):
@@ -16,6 +17,7 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
         self._main = casacore.tables.table(filename, ack=False)
         self._antenna = casacore.tables.table(filename + '::ANTENNA', ack=False)
         self._field = casacore.tables.table(filename + '::FIELD', ack=False)
+        self._spw = casacore.tables.table(filename + '::SPECTRAL_WINDOW', ack=False)
         self._data_col = args.data
         self._field_id = args.field
         if self._data_col not in self._main.colnames():
@@ -29,10 +31,12 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
         return filename.lower().endswith('.ms')
 
     def antenna_diameters(self):
-        return self._antenna.getcol('DISH_DIAMETER')
+        # TODO: process QuantumUnits
+        return self._antenna.getcol('DISH_DIAMETER') * units.m
 
     def antenna_positions(self):
-        return self._antenna.getcol('POSITION')
+        # TODO: process QuantumUnits
+        return self._antenna.getcol('POSITION') * units.m
 
     def phase_centre(self):
         keywords = self._field.getcolkeywords('PHASE_DIR')
@@ -47,7 +51,16 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
         value = self._field.getcell('PHASE_DIR', self._field_id)
         if tuple(value.shape) != (1, 2):
             raise ValueError('Unsupported shape for PHASE_DIR: {}'.format(value.shape))
-        return value[0, :]
+        return value[0, :] * units.rad
+
+    def frequency(self, channel):
+        if self._spw.nrows() != 1:
+            raise ValueError('Multiple spectral windows are not yet supported')
+        keywords = self._spw.getcolkeywords('CHAN_FREQ')
+        quantum_units = keywords.get('QuantumUnits')
+        if quantum_units is not None and quantum_units != ['Hz']:
+            raise ValueError('Unsupported QuantumUnits for CHAN_FREQ: {}'.format(quantum_units))
+        return self._spw.getcol('CHAN_FREQ')[0, channel] * units.Hz
 
     def data_iter(self, channel, max_rows=None):
         if max_rows is None:
@@ -71,3 +84,4 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
         self._main.close()
         self._antenna.close()
         self._field.close()
+        self._spw.close()
