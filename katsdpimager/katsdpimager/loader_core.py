@@ -80,16 +80,36 @@ class LoaderBase(object):
         """
         raise NotImplementedError('Abstract base class')
 
+    def polarizations(self):
+        """Return polarizations stored in the data.
+
+        Returns
+        -------
+        list
+            List of polarization constants from
+            :py:mod:`katsdpsigproc.parameters`.
+        """
+        raise NotImplementedError('Abstract base class')
+
     def data_iter(self, channel, max_rows=None):
         """Return an iterator that yields the data in chunks. Each chunk is a
         dictionary containing numpy arrays with the following keys:
 
-         - 'uvw': UVW coordinates (target - source), as a Quantity
+         - 'uvw': UVW coordinates (position1 - position2), as a Quantity
          - 'vis': visibilities
          - 'weights': imaging weights
+         - 'progress': progress made through the file, in some arbitrary units
+         - 'total': size of the file, in same units as 'progress'
+
+        .. note::
+
+           The sign convention for UVW matches the white book and AIPS, but is
+           opposite_ to that used in Measurement Sets.
+
+        .. _opposite: http://casa.nrao.edu/Memos/CoordConvention.pdf
 
         The arrays are indexed first by a 1D time/baseline coordinate. The second
-        index is x/y/z for 'uvw' and polarisation product for 'vis' and 'weights'.
+        index is x/y/z for 'uvw' and polarization product for 'vis' and 'weights'.
         Flags are not explicitly returned: they are either omitted entirely
         (if all pols are flagged) or indicated with a zero weight.
 
