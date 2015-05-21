@@ -9,6 +9,8 @@ from __future__ import division
 import astropy.units as units
 import math
 import numpy as np
+import katsdpimager.types
+
 
 def is_smooth(x):
     """Whether x is a good candidate for FFT. We heuristically require
@@ -58,7 +60,8 @@ class ImageParameters(object):
     pixels : int, optional
         Number of pixels in the image. If specified, `q_fov` is ignored.
     """
-    def __init__(self, q_fov, image_oversample, frequency, array, polarizations, dtype, pixel_size=None, pixels=None):
+    def __init__(self, q_fov, image_oversample, frequency, array, polarizations,
+                 dtype, pixel_size=None, pixels=None):
         self.wavelength = frequency.to(units.m, equivalencies=units.spectral())
         # Compute pixel size
         if pixel_size is None:
@@ -89,8 +92,8 @@ class ImageParameters(object):
                     recommended += 1
                 raise ValueError("Image size {} not supported - try {}".format(pixels, recommended))
         assert pixels % 2 == 0
-        self.dtype = np.dtype(dtype)
-        self.dtype_complex = np.promote_types(dtype, np.complex64)
+        self.real_dtype = np.dtype(dtype)
+        self.complex_dtype = katsdpimager.types.real_to_complex(dtype)
         self.pixels = pixels
         self.image_size = self.pixel_size * pixels
         self.cell_size = self.wavelength / self.image_size
@@ -116,3 +119,11 @@ class GridParameters(object):
     def __init__(self, antialias_size, oversample):
         self.antialias_size = antialias_size
         self.oversample = oversample
+
+
+class CleanParameters(object):
+    def __init__(self, minor, loop_gain, mode, psf_patch):
+        self.minor = minor
+        self.loop_gain = loop_gain
+        self.mode = mode
+        self.psf_patch = psf_patch
