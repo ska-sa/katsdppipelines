@@ -1,8 +1,8 @@
 import spead64_48 as spead
 import time
 
-from katcal.reduction import pipeline
-from katcal import calprocs
+from katsdpcal.reduction import pipeline
+from katsdpcal import calprocs
 from katsdptelstate.telescope_state import TelescopeState
 
 import socket
@@ -93,7 +93,8 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
 
                 # accumulate data scan by scan into buffer arrays
                 self.accumulator_logger.info('max buffer length %d' %(self.max_length,))
-                buffer_size = self.accumulate(spead_stream, self.buffers[current_buffer])
+                max_ind = self.accumulate(spead_stream, self.buffers[current_buffer])
+                self.accumulator_logger.info('Accumulated {0} timestamps'.format(max_ind+1,))
 
                 # awaken pipeline task that was waiting for condition lock
                 self.scan_accumulator_conditions[current_buffer].notify()
@@ -127,7 +128,7 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
             """
             Send stop packed to force shut down of SPEAD receiver
             """
-            print 'sending stop packet'
+            self.accumulator_logger.info('sending stop packet')
             tx = spead.Transmitter(spead.TransportUDPtx(self.l0_endpoint.host,self.l0_endpoint.port))
             tx.end()
 
@@ -144,7 +145,7 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                 current_buffer['weights'] = np.frombuffer(current_buffer['weights'], dtype=np.float32)
                 current_buffer['weights'].shape = self.buffer_shape
                 current_buffer['times'] = np.frombuffer(current_buffer['times'], dtype=np.float64)
-                current_buffer['track_start_indices'] = np.frombuffer(current_buffer['track_start_indices'], dtype=np.int32)
+                current_buffer['max_index'] = np.frombuffer(current_buffer['max_index'], dtype=np.int32)
 
         def set_ordering_parameters(self):
             # determine re-ordering necessary to convert from supplied bls ordering to desired bls ordering
@@ -173,7 +174,6 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
 
             start_flag = True
             array_index = -1
-            track_start_indices = []
 
             prev_activity = 'none'
             prev_tags = 'none'
@@ -185,38 +185,22 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
             obs_end_flag = True
 
             # receive SPEAD stream
-            print 'Got heaps: ',
             for heap in spead.iterheaps(spead_stream):
                 ig.update(heap)
-                print array_index,
                 array_index += 1
 
-                # get activity and target tag from TS
-                activity = self.telstate[activity_key]
-                target = self.telstate[target_key]
-
-                # accumulate list of track start time indices in the array
-                #   for use in the pipeline, to index each track easily
-                if 'track' in activity and not 'track' in prev_activity:
-                    track_start_indices.append(array_index)
-
-                # break if this scan is a slew that follows a track
-                #   unless previous scan was a target, in which case accumulate subsequent gain scan too
-                # ********** THIS BREAKING NEEDS TO BE THOUGHT THROUGH CAREFULLY **********
-                if ('slew' in activity and 'track' in prev_activity) and 'target' not in prev_tags:
-                    self.accumulator_logger.info('Accumulate break due to transition')
-                    obs_end_flag = False 
-                    break
-
+                # if this is the first scan of the observation, set up some values
                 if start_flag:
                     start_time = ig['timestamp'] + self.telstate.cbf_sync_time
                     start_flag = False
 
                     # when data starts to flow, set the baseline ordering parameters for re-ordering the data
                     self.set_ordering_parameters()
-                    # set simulator offset time for aligning simulated data and sensors
-                    #   value set to offset betwen start_time and first setting of activity value to TS
-                    self.telstate.add('sim_sync_time',self.telstate.get_range(activity_key)[0][1]-start_time)
+
+                # get activity and target tag from TS
+                data_ts = ig['timestamp'] + self.telstate.cbf_sync_time
+                activity = self.telstate.get_range(activity_key,et=data_ts,include_previous=True)[0][0]
+                target = self.telstate.get_range(target_key,et=data_ts,include_previous=True)[0][0]
 
                 # reshape data and put into relevent arrays
                 data_buffer['vis'][array_index,:,:,:] = ig['correlator_data'][:,self.ordering].reshape([self.nchan,self.npol,self.nbl])
@@ -226,7 +210,15 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                     data_buffer['weights'][array_index,:,:,:] = ig['weights'][:,self.ordering].reshape([self.nchan,self.npol,self.nbl])
                 else:
                     data_buffer['weights'][array_index,:,:,:] = np.empty([self.nchan,self.npol,self.nbl],dtype=np.float32)
-                data_buffer['times'][array_index] = ig['timestamp'] + self.telstate.cbf_sync_time + self.telstate.sim_sync_time
+                data_buffer['times'][array_index] = data_ts
+
+                # break if this scan is a slew that follows a track
+                #   unless previous scan was a target, in which case accumulate subsequent gain scan too
+                # ********** THIS BREAKING NEEDS TO BE THOUGHT THROUGH CAREFULLY **********
+                if ('slew' in activity and 'track' in prev_activity) and 'target' not in prev_tags:
+                    self.accumulator_logger.info('Accumulate break due to transition')
+                    obs_end_flag = False
+                    break
 
                 # this is a temporary mock up of a natural break in the data stream
                 # will ultimately be provided by some sort of sensor
@@ -245,20 +237,19 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                 # extract tags from target description string
                 prev_tags = target.split(',')[1]
 
-            track_start_indices.append(array_index)
-            track_start_indices.append(-1)
-            if 'multiprocessing' in str(control_method):
-                # multiprocessing case
-                data_buffer['track_start_indices'][0:len(track_start_indices)] = track_start_indices
-            else:
-                # threading case
-                data_buffer['track_start_indices'] = np.array(track_start_indices)
-
-            self.accumulator_logger.info('Accumulation ended')
-
-            if obs_end_flag: 
+            # if we exited the loop because it was the end of the SPEAD transmission
+            if obs_end_flag:
                 self.accumulator_logger.info('Observation ended')
                 self._obsend.set()
+
+            if 'multiprocessing' in str(control_method):
+                # multiprocessing case
+                data_buffer['max_index'][0] = array_index
+            else:
+                # threading case
+                data_buffer['max_index'] = np.array(array_index)
+
+            self.accumulator_logger.info('Accumulation ended')
 
             return array_index
 
@@ -268,22 +259,24 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
 # Pipeline
 # ---------------------------------------------------------------------------------------
 
-def init_pipeline_control(control_method, control_task, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, telstate):
+def init_pipeline_control(control_method, control_task, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, \
+        l1_rate,  telstate):
 
     class pipeline_control(control_task):
         """
         Task (Process or Thread) which runs pipeline
         """
 
-        def __init__(self, control_method, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, telstate):
+        def __init__(self, control_method, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, l1_rate, telstate):
             control_task.__init__(self)
             self.data = data
             self.scan_accumulator_condition = scan_accumulator_condition
             self.name = 'Pipeline_task_'+str(pipenum)
             self._stop = control_method.Event()
             self.telstate = telstate
-            self.l1_endpoint = l1_endpoint
+            self.tx = spead.Transmitter(spead.TransportUDPtx(l1_endpoint.host,l1_endpoint.port,rate=l1_rate))
             self.data_shape = data_shape
+            self.full_l1 = telstate.cal_full_l1
 
             # set up logging adapter for the task
             self.pipeline_logger = TaskLoggingAdapter(logger, {'connid': self.name})
@@ -303,20 +296,21 @@ def init_pipeline_control(control_method, control_task, data, data_shape, scan_a
                 self.pipeline_logger.info('scan_accumulator_condition release and wait by %s' %(self.name,))
                 self.scan_accumulator_condition.wait()
 
-                # after notify from accumulator, condition lock re-aquired
-                self.pipeline_logger.info('scan_accumulator_condition acquire by %s' %(self.name,))
-                # run the pipeline
-                self.pipeline_logger.info('Pipeline run start on accumulated data')
+                if not self._stop.is_set():
+                    # after notify from accumulator, condition lock re-aquired
+                    self.pipeline_logger.info('scan_accumulator_condition acquire by %s' %(self.name,))
+                    # run the pipeline
+                    self.pipeline_logger.info('Pipeline run start on accumulated data')
 
-                # if we are usig multiprocessing, view ctypes array in numpy format
-                if 'multiprocessing' in str(control_method): self.data_to_numpy()
+                    # if we are usig multiprocessing, view ctypes array in numpy format
+                    if 'multiprocessing' in str(control_method): self.data_to_numpy()
 
-                # run the pipeline
-                self.run_pipeline()
+                    # run the pipeline
+                    self.run_pipeline()
 
-                # release condition after pipeline run finished
-                self.scan_accumulator_condition.release()
-                self.pipeline_logger.info('scan_accumulator_condition release by %s' %(self.name,))
+                    # release condition after pipeline run finished
+                    self.scan_accumulator_condition.release()
+                    self.pipeline_logger.info('scan_accumulator_condition release by %s' %(self.name,))
 
         def stop(self):
             self._stop.set()
@@ -339,83 +333,72 @@ def init_pipeline_control(control_method, control_task, data, data_shape, scan_a
             self.data['weights'].shape = self.data_shape
 
             self.data['times'] = np.ctypeslib.as_array(self.data['times'])
-            self.data['track_start_indices'] = np.ctypeslib.as_array(self.data['track_start_indices'])
+            self.data['max_index'] = np.ctypeslib.as_array(self.data['max_index'])
 
         def run_pipeline(self):
             # run pipeline calibration
-            calibrated_data = pipeline(self.data,self.telstate,task_name=self.name)
-            # if target data was calibated in the pipeline, send to L1 spead
-            if calibrated_data is not None:
+            target_scans = pipeline(self.data,self.telstate,task_name=self.name)
+            # send data to L1 spead if necessary
+            if self.full_l1 or target_scans != ([],[]):
                 self.pipeline_logger.info('Transmit L1 data')
-                data_to_SPEAD(calibrated_data,self.l1_endpoint)
+                self.data_to_SPEAD(target_scans)
+                self.pipeline_logger.info('End transmit of L1 data')
 
-    return pipeline_control(control_method, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, telstate)
+        def data_to_SPEAD(self, target_scans):
+            """
+            Sends data to SPEAD stream
+
+            Inputs:
+            target_scans : start and stop index lists for target scans in the data buffer, lists
+            """
+            if self.full_l1:
+                # for streaming all of the data (not target only), 
+                # use the highest index in the buffer that is filled with data
+                target_starts = [0]
+                target_stops = self.data['max_index']
+            else: 
+                # if only transmitting target data, use target scan indices from the reduction
+                target_starts, target_stops = target_scans
+
+            # transmit data
+            for ti0, ti1 in zip(target_starts, target_stops):
+                for i in range(ti0,ti1+1): # time axis
+
+                    tx_vis = self.data['vis'][i]
+                    tx_flags = self.data['flags'][i]
+                    # for now, just transmit flags as placeholder for weights
+                    tx_weights = self.data['flags'][i]
+                    tx_time = self.data['times'][i]
+
+                    # transmit timestamps, vis, flags and weights
+                    ig = spead.ItemGroup()
+                    ig.add_item(name='timestamp', description='Timestamp',
+                        shape=[], fmt=spead.mkfmt(('f',64)),
+                        init_val=tx_time)
+                    ig.add_item(name='correlator_data', description='Full visibility array',
+                        init_val=tx_vis)
+                    ig.add_item(name='flags', description='Flag array',
+                        init_val=tx_flags)
+                    ig.add_item(name='weights', description='Weight array',
+                        init_val=tx_weights)
+                    self.tx.send_heap(ig.get_heap())
+
+    return pipeline_control(control_method, data, data_shape, scan_accumulator_condition, pipenum, l1_endpoint, l1_rate, telstate)
 
 # ---------------------------------------------------------------------------------------
-# SPEAD transmission
+# SPEAD helper functions
 # ---------------------------------------------------------------------------------------
 
-def data_to_SPEAD(data,spead_endpoint):
-    """
-    Sends data to SPEAD stream
-
-    data:
-       list of: vis, flags, weights, times
-    """
-
-    tx = spead.Transmitter(spead.TransportUDPtx(spead_endpoint.host,spead_endpoint.port))
-
-    # transmit data
-    for i in range(len(data[-1])): # time axis
-
-        tx_vis = data[0][i]
-        tx_flags = data[1][i]
-        tx_weights = data[2][i]
-        tx_time = data[3][i]
-
-        # transmit timestamps, vis, flags and weights
-        transmit_item(tx, tx_time, tx_vis, tx_flags, tx_weights)
-        # delay so receiver isn't overwhelmed
-        time.sleep(0.05)
-
-    end_transmit(tx)
-
-def end_transmit(tx):
+def end_transmit(spead_endpoint):
     """
     Send stop packet to spead stream tx
 
     Parameters
     ----------
-    tx       : spead stream
+    spead_endpoint : endpoint to transmit to
     """
+    tx = spead.Transmitter(spead.TransportUDPtx(spead_endpoint.host,spead_endpoint.port))
     tx.end()
 
-def transmit_item(tx, tx_time, tx_vis, tx_flags, tx_weights):
-    """
-    Send spead packet containing time, visibility, flags and array state
 
-    Parameters
-    ----------
-    tx         : spead stream
-    tx_time    : timestamp, float
-    tx_vis     : visibilities, complex array
-    tx_flags   : flags, int array
-    tx_weights : weights, float array
-    """
-    ig = spead.ItemGroup()
-
-    ig.add_item(name='timestamp', description='Timestamp',
-        shape=[], fmt=spead.mkfmt(('f',64)),
-        init_val=tx_time)
-
-    ig.add_item(name='correlator_data', description='Full visibility array',
-        init_val=tx_vis)
-
-    ig.add_item(name='flags', description='Flag array',
-        init_val=tx_flags)
-
-    ig.add_item(name='weights', description='Weight array',
-        init_val=tx_weights)
-
-    tx.send_heap(ig.get_heap())
 

@@ -3,19 +3,19 @@ import numpy as np
 import time
 import os
 
-from katcal.simulator import SimData
-from katcal import parameters
+from katsdpcal.simulator import SimData
+from katsdpcal import parameters
 
 from katsdptelstate.telescope_state import TelescopeState
 from katsdptelstate import endpoint, ArgumentParser
 
-from katcal.control import init_accumulator_control, init_pipeline_control
+from katsdpcal.control import init_accumulator_control, init_pipeline_control
+from katsdpcal.control import end_transmit
 
-from katcal.report import make_cal_report
+from katsdpcal.report import make_cal_report
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def print_dict(dictionary, ident = '', braces=1):
     """ Recursively prints nested dictionaries."""
@@ -36,19 +36,54 @@ def comma_list(type_):
     return convert
 
 def parse_opts():
-    parser = ArgumentParser(description = 'Set up and wait for a spead stream to run the pipeline.')
+    parser = ArgumentParser(description = 'Set up and wait for spead stream to run the pipeline.')
     parser.add_argument('--num-buffers', type=int, default=2, help='Specify the number of data buffers to use. default: 2')
     parser.add_argument('--buffer-maxsize', type=float, default=1000e6, help='The amount of memory (in bytes?) to allocate to each buffer. default: 1e9')
     # note - the following lines extract various parameters from the MC config
     parser.add_argument('--cbf-channels', type=int, help='The number of frequency channels in the visibility data. Default from MC config')
     parser.add_argument('--antenna-mask', type=comma_list(str), help='List of antennas in the L0 data stream. Default from MC config')
     # also need bls ordering
-    parser.add_argument('--l0-spectral-spead', type=endpoint.endpoint_list_parser(7200, single_port=True), default=':7200', help='endpoints to listen for L0 SPEAD stream (including multicast IPs). [<ip>[+<count>]][:port]. [default=%(default)s]', metavar='ENDPOINT')
+    parser.add_argument('--l0-spectral-spead', type=endpoint.endpoint_list_parser(7200, single_port=True), default=':7200', help='endpoints to listen for L0 spead stream (including multicast IPs). [<ip>[+<count>]][:port]. [default=%(default)s]', metavar='ENDPOINT')
     parser.add_argument('--l1-spectral-spead', type=endpoint.endpoint_parser(7202), default='127.0.0.1:7202', help='destination for spectral L1 output. [default=%(default)s]', metavar='ENDPOINT')
+    parser.add_argument('--l1-rate', type=float, default=5e7, help='L1 spead transmission rate. For laptops, recommend rate of 5e7. Default: 5e7')
+    parser.add_argument('--full-l1', action='store_true', help='Send full data set to L1 [default: Only send target data to L1')
+    parser.set_defaults(full_l1=False)
     parser.add_argument('--threading', action='store_true', help='Use threading to control pipeline and accumulator [default: False (to use multiprocessing)]')
     parser.set_defaults(threading=False)
+    parser.add_argument('--report-path', type=str, default=os.path.abspath('.'), help='Path under which to save pipeline report. [default: current directory]')
+    parser.add_argument('--log-path', type=str, default=os.path.abspath('.'), help='Path under which to save pipeline logs. [default: current directory]')
     #parser.set_defaults(telstate='localhost')
     return parser.parse_args()
+
+def setup_logger(log_path):
+    """
+    Set up the pipeline logger.
+    The logger writes to a pipeline.log file and to stdout.
+
+    Inputs
+    ======
+    log_path : str
+        path in which log file will be written
+    """
+    if not log_path: log_path = '.'
+    log_path = os.path.abspath(log_path)
+
+    # logging to file
+    logging.basicConfig(filename='{0}/pipeline.log'.format(log_path,),
+                        format='%(asctime)s %(name)-24s %(levelname)-8s %(message)s',
+                        datefmt='%d-%m-%y %H:%M',)
+    logger.setLevel(logging.INFO)
+
+    # logging to stdout
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    # set format for console use
+    formatter = logging.Formatter('%(asctime)s %(name)-24s %(levelname)-8s %(message)s')
+    formatter.datefmt='%d-%m %H:%M'
+    # tell the handler to use this format
+    console.setFormatter(formatter)
+    # add the handler to the root logger
+    logging.getLogger('').addHandler(console)
 
 def all_alive(process_list):
     """
@@ -101,8 +136,7 @@ def create_buffer_arrays_multiprocessing(buffer_shape):
     data['flags'] = control_method.RawArray(c_ubyte, buffer_size)
     data['weights'] = control_method.RawArray(c_float, buffer_size)
     data['times'] = control_method.RawArray(c_double, array_length)
-    # assume max 1000 scans!
-    data['track_start_indices'] =  control_method.sharedctypes.RawArray(c_int, 1000)
+    data['max_index'] = control_method.sharedctypes.RawArray(c_int, 1)
     return data
 
 def create_buffer_arrays_threading(buffer_shape):
@@ -115,12 +149,12 @@ def create_buffer_arrays_threading(buffer_shape):
     data['flags'] = np.empty(buffer_shape,dtype=np.uint8)
     data['weights'] = np.empty(buffer_shape,dtype=np.float64)
     data['times'] = np.empty(buffer_shape[0],dtype=np.float)
-    data['track_start_indices'] = []
+    data['max_index'] = np.empty([0.0], dtype=np.int32)
     return data
 
 def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=1000e6,
-           l0_endpoint=':7200', l1_endpoint='127.0.0.1:7202',
-           mproc=True):
+           l0_endpoint=':7200', l1_endpoint='127.0.0.1:7202', l1_rate=5.0e7, full_l1=False,
+           mproc=True,report_path=''):
     """
     Start the pipeline using 'num_buffers' buffers, each of size 'buffer_maxsize'.
     This will instantiate num_buffers + 1 threads; a thread for each pipeline and an
@@ -131,6 +165,10 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=100
     ======
     ts: TelescopeState
         The telescope state, default: 'localhost' database 0
+    cbf_n_chans: int
+        The number of channels in the data stream
+    antenna_mask: list of strings
+        List of antennas present in the data stream
     num_buffers: int
         The number of buffers to use- this will create a pipeline thread for each buffer
         and an extra accumulator thread to read the spead stream.
@@ -141,8 +179,14 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=100
         Endpoint to listen to for L0 stream, default: ':7200'
     l1_endpoint: endpoint
         Destination endpoint for L1 stream, default: '127.0.0.1:7202'
+    l1_rate : float
+        Rate for L1 stream transmission, default 5e7
+    full_l1 : bool
+        True to transmit all of the data to L1, False to only transmit target data.
     mproc: bool
         True for control via multiprocessing, False for control via threading
+    report_path : string
+        Path under which to save pipeline report
     """
 
     # debug print outs
@@ -163,6 +207,9 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=100
         nchan = cbf_n_chans
     except:
         raise RuntimeError("No cbf_n_chans set.")
+
+    # save L1 transmit preference to TS
+    ts.add('cal_full_l1', full_l1, immutable=True)
 
     npol = 4
     nant = len(antenna_mask)
@@ -190,18 +237,12 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=100
 
     # Set up the accumulator
     accumulator = init_accumulator_control(control_method, control_task, buffers, buffer_shape, scan_accumulator_conditions, l0_endpoint, ts)
-
-    #accumulator = accumulator_control(multiprocessing.Process, buffers, buffer_shape, scan_accumulator_conditions, l0_endpoint, ts)
-
     # Set up the pipelines (one per buffer)
-    #pipelines = [pipeline_control(buffers[i], buffer_shape, scan_accumulator_conditions[i], i, l1_endpoint, ts) for i in range(num_buffers)]
-
-    pipelines = [init_pipeline_control(control_method, control_task, buffers[i], buffer_shape, scan_accumulator_conditions[i], i, l1_endpoint, ts) for i in range(num_buffers)]
+    pipelines = [init_pipeline_control(control_method, control_task, buffers[i], buffer_shape, scan_accumulator_conditions[i], i, \
+        l1_endpoint, l1_rate, ts) for i in range(num_buffers)]
 
     # Start the pipeline threads
     map(lambda x: x.start(), pipelines)
-    # might need delay here for pipeline threads to aquire conditions then wait?
-    #time.sleep(5.)
     # Start the accumulator thread
     accumulator.start()
 
@@ -222,27 +263,38 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=100
  
     # Stop pipelines first so they recieve correct signal before accumulator acquires the condition
     map(lambda x: x.stop(), pipelines)
+    logger.info('Pipelines stopped')
     # then stop accumulator (releasing conditions)
     accumulator.stop()
+    logger.info('Accumulator stopped')
 
     # join tasks
     accumulator.join()
-    logger.info('Accumulator Stopped')
+    logger.info('Accumulator task closed')
     # wait till all pipeline runs finish then join
     while any_alive(pipelines):
         map(lambda x: x.join(), pipelines)
         time.sleep(1.0)
-    logger.info('Pipelines Stopped')
+    logger.info('Pipeline tasks closed')
+
+    # send L1 stop transmission
+    #   wait for a couple of secs before ending transmission
+    time.sleep(2.0)
+    end_transmit(l1_endpoint)
+    logger.info('L1 stream ended')
 
     # create pipeline report (very basic at the moment)
-    make_cal_report(ts)
-    logger.info('Report compiled')
-
+    make_cal_report(ts,report_path)
+    logger.info('Report compiled, in directory {0}/{1}'.format(report_path,ts.experiment_id))
 
 if __name__ == '__main__':
 
     opts = parse_opts()
 
+    # set up logging
+    setup_logger(opts.log_path)
+
+    # threading or multiprocessing imports
     if opts.threading is False:
         import multiprocessing as control_method
         from multiprocessing import Process as control_task
@@ -251,11 +303,9 @@ if __name__ == '__main__':
         import threading as control_method
         from threading import Thread as control_task
 
-    # short weit to give me time to start up the simulated spead stream
-    # time.sleep(5.)
-
     run_threads(opts.telstate,
            cbf_n_chans=opts.cbf_channels, antenna_mask=opts.antenna_mask,
            num_buffers=opts.num_buffers, buffer_maxsize=opts.buffer_maxsize,
            l0_endpoint=opts.l0_spectral_spead[0], l1_endpoint=opts.l1_spectral_spead,
-           mproc=not(opts.threading))
+           l1_rate=opts.l1_rate, full_l1=opts.full_l1, mproc=not(opts.threading),
+           report_path=opts.report_path)
