@@ -16,24 +16,24 @@ before_install:
   - df -h
   - ulimit -a
   - python -V
-  # install deb package dependencies for katcal
+  # install deb package dependencies for katsdpcal
   - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy tmux
   # check numpy and scipy versions
   - python -c 'import numpy; print numpy.__version__'
   - python -c 'import scipy; print scipy.__version__'
-  # install redis (for katcal tests)
+  # install redis (for katsdpcal tests)
   - wget http://download.redis.io/releases/redis-2.8.19.tar.gz -O /tmp/redis-2.8.19.tar.gz
   - cd /tmp && tar -xzvf redis-2.8.19.tar.gz
   - cd /tmp/redis-2.8.19 && make 
-  # install python packages for katcal (pypi and private repositories)
-  - travis_wait pip install -r $TRAVIS_BUILD_DIR/katcal/requirements.txt 
+  # install python packages for katsdpcal (pypi and private repositories)
+  - travis_wait pip install -r $TRAVIS_BUILD_DIR/katsdpcal/requirements.txt 
 
 install:
-  # pip-install katcal
-  - cd $TRAVIS_BUILD_DIR/katcal && pip install .
+  # pip-install katsdpcal
+  - cd $TRAVIS_BUILD_DIR/katsdpcal && pip install .
 
 before_script:
   - cd /tmp/redis-2.8.19 && ./src/redis-server &
 
 script:
-  - cd $TRAVIS_BUILD_DIR && python -m unittest discover katcal
+  - cd $TRAVIS_BUILD_DIR && python -m unittest discover katsdpcal
