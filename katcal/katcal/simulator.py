@@ -57,6 +57,7 @@ class SimData(katdal.H5DataV2):
         ts.add('sdp_l0_int_time', self.dump_period)
         ts.add('cbf_n_ants', len(self.ants))
         ts.add('cbf_n_chans', ts.cal_echan-ts.cal_bchan)
+        ts.add('cbf_channel_freqs', self.channel_freqs[ts.cal_bchan:ts.cal_echan])
         ts.add('cbf_bls_ordering', self.corr_products)
         ts.add('cbf_sync_time', 0.0, immutable=True)
         antenna_mask = ','.join([ant.name for ant in self.ants])
@@ -64,7 +65,7 @@ class SimData(katdal.H5DataV2):
         ts.add('experiment_id', self.experiment_id)
         ts.add('config', {'h5_simulator':True})
         
-    def h5toSPEAD(self,ts,l0_endpoint,wait_time=0.5,spead_rate=1e9,max_scans=None):
+    def h5toSPEAD(self,ts,l0_endpoint,spead_rate=1e9,max_scans=None):
         """
         Iterates through H5 file and transmits data as a spead stream.
         
@@ -86,6 +87,8 @@ class SimData(katdal.H5DataV2):
             max_scans = num_scans
         else:
             num_scans = max_scans
+
+        total_ts, track_ts, slew_ts = 0, 0, 0
         
         for scan_ind, scan_state, target in self.scans(): 
             # update telescope state with scan information
@@ -94,8 +97,14 @@ class SimData(katdal.H5DataV2):
             ts.add('{0}_target'.format(self.refant,),target.description,ts=self.timestamps[0]-random()*0.1)
             ts.add('{0}_activity'.format(self.refant,),scan_state,ts=self.timestamps[0]-random()*0.1)
             print 'Scan', scan_ind+1, '/', num_scans, ' -- ', 
-            print 'timestamps:', len(self.timestamps), ' -- ',
+            n_ts = len(self.timestamps)
+            print 'timestamps:', n_ts, ' -- ',
             print scan_state, target.description
+
+            # keep track if number of timestamps
+            total_ts += n_ts
+            if scan_state == 'track': track_ts += n_ts
+            if scan_state == 'slew': slew_ts += n_ts
             
             # transmit the data from this scan, timestamp by timestamp
             scan_data = self.vis[:]
@@ -112,11 +121,13 @@ class SimData(katdal.H5DataV2):
 
                 # transmit timestamps, vis, flags, weights
                 transmit_item(tx, tx_time, tx_vis, tx_flags, tx_weights)
-                # delay so receiver isn't overwhelmed
-                time.sleep(wait_time)
 
             if scan_ind+1 == max_scans:
                 break
+
+        print 'Track timestamps:', track_ts
+        print 'Slew timestamps: ', slew_ts
+        print 'Total timestamps:', total_ts
                 
         end_transmit(tx)
                     

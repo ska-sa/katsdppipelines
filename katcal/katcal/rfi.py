@@ -1,3 +1,66 @@
+"""
+RFI flagging module for MeerKAT calibration pipeline
+====================================================
+
+RFI flagger routines for use in the MeerKAT calibration pipeline.
+"""
+
+#--------------------------------------------------------------------------------------------------
+#--- Below added by Laura
+#--------------------------------------------------------------------------------------------------
+
+import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
+
+def no_transform(data):
+  return(data)
+
+def threshold_flagging(data,flags,threshold,transform=None):
+  if transform is None: transform = no_transform
+  # get flags in bool format to use as a mask
+  fg = flags.view(np.bool)
+
+  mean_data = np.average(transform(data[~fg]))
+  std_data = np.std(transform(data[~fg]))
+
+  # flag based on the mean and stddev, unless there is no data in the block
+  if mean_data:  
+      # this is not efficient - calculates the abs offset even for masked values
+      # fix later
+      flags[np.abs(transform(data)-mean_data)>threshold*std_data] = 1.0
+
+def threshold_avg_flagging(data,flags,thresholds,blocks=None,transform=None):
+
+    thresholds = np.atleast_1d(thresholds)
+    blocks = np.atleast_2d(blocks)
+
+    # first flagging iteration
+    threshold_flagging(data,flags,thresholds[0],transform=transform)
+
+    for i,t in enumerate(thresholds[1:]):
+        # average in blocks
+        sx, sy = data.shape[0:2]
+        # averaging blocks for time and channel
+        tblock, cblock = blocks[i]
+
+        data_av = np.add.reduceat(data*~flags.view(np.bool),range(0,sx,tblock),axis=0)
+        av_flags = np.add.reduceat(flags,range(0,sx,tblock),axis=0,dtype=flags.dtype)
+        data_av = np.add.reduceat(data_av*~av_flags.view(np.bool),range(0,sy,cblock),axis=1)
+        av_flags = np.add.reduceat(av_flags,range(0,sy,cblock),axis=1,dtype=av_flags.dtype)
+
+        # threshold averaged data
+        threshold_flagging(data_av,av_flags,t,transform=np.abs)
+
+        # spread flags back out to original size
+        flags_spread = av_flags.repeat(tblock,axis=0)[0:sx,:]
+        flags = flags_spread.repeat(cblock,axis=1)[:,0:sy]
+
+#--------------------------------------------------------------------------------------------------
+#--- Below original module from Tom
+#--------------------------------------------------------------------------------------------------
+
 # Library to contain RFI flagging routines for the pipeline
 # and other 2-d RFI related functions.
 import katdal

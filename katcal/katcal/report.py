@@ -179,7 +179,7 @@ def make_cal_report(ts):
     try:
         os.mkdir(project_name)
     except OSError:
-        project_name = project_name+'_0'
+        shutil.rmtree(project_name)
         os.mkdir(project_name)
 
     os.chdir(project_name)
@@ -223,13 +223,16 @@ def make_cal_report(ts):
 
     if cal_product in ts.keys():
         cal_rst.write_heading_1('Calibration product {0:s}'.format(cal,))
-        cal_rst.writeln('Delay calibration solutions')
+        cal_rst.writeln('Delay calibration solutions ([ns])')
         cal_rst.writeln()
 
         product = ts.get_range(cal_product,st=0,return_format='recarray')
         vals = product['value']
         # K shape is n_time, n_pol, n_ant
         times = product['time']
+
+        # convert delays to nano seconds
+        vals = 1e9*vals
 
         cal_rst.writeln('**POL 0**')
         write_table_timerow(cal_rst,antenna_mask,times,vals[:,0,:])
@@ -272,9 +275,9 @@ def make_cal_report(ts):
         times = product['time']
 
         cal_rst.writeln('**POL 0**')
-        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,0,:]),name='G_P0_'+str(ti))
+        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,0,:]),name='G_P0')
         cal_rst.writeln('**POL 1**')
-        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,1,:]),name='G_P1_'+str(ti))
+        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,1,:]),name='G_P1')
 
     # --------------------------------------------------------------------
     # close off report
