@@ -12,15 +12,16 @@ from katcal.calprocs import CalSolution
 
 class Scan(object):
 
-    def __init__(self, data, ti0, ti1, dump_period, nant, bls_lookup):
+    def __init__(self, data, ti0, ti1, dump_period, nant, bls_lookup, target):
 
         # get references to this time chunk of data
         # -- just using first polarisation for now
         # data format is:   (time x channels x pol x bl)
-        self.vis = data['vis'][ti0:ti1,:,0:2,:]
-        self.flags = data['flags'][ti0:ti1,:,0:2,:]
+        self.vis = data['vis'][ti0:ti1+1,:,0:2,:]
+        self.flags = data['flags'][ti0:ti1+1,:,0:2,:]
         self.weights = np.ones_like(self.flags,dtype=np.float)
-        self.times = data['times'][ti0:ti1]
+        self.times = data['times'][ti0:ti1+1]
+        self.target = target
 
         # intermediate product visibility - use sparingly!
         self.modvis = None
