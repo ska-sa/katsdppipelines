@@ -15,14 +15,18 @@ typedef atomic_accum_${real_type}2 atomic_accum_Complex;
 #define CONVOLVE_KERNEL_OVERSAMPLE_SHIFT ${int.bit_length(convolve_kernel_oversample) - 1}
 #define CONVOLVE_KERNEL_SLICE_STRIDE ${convolve_kernel_slice_stride}
 #define CONVOLVE_KERNEL_ROW_STRIDE ${convolve_kernel_row_stride}
+#define CONVOLVE_KERNEL_W_STRIDE ${convolve_kernel_w_stride}
+#define CONVOLVE_KERNEL_W_SCALE ${convolve_kernel_w_scale}f
+#define CONVOLVE_KERNEL_MAX_W ${convolve_kernel_max_w}f
 #define make_Complex make_${real_type}2
 #define atomic_accum_Complex_add atomic_accum_${real_type}2_add
 
-DEVICE_FN Complex Complex_mad(float2 a, float2 b, Complex c)
+/// Computes a * conj(b) + c
+DEVICE_FN Complex Complex_madc(float2 a, float2 b, Complex c)
 {
     Complex out;
-    out.x = fma(a.x, b.x, fma(-a.y, b.y, c.x));
-    out.y = fma(a.x, b.y, fma(a.y, b.x, c.y));
+    out.x = fma(a.x, b.x, fma(a.y, b.y, c.x));
+    out.y = fma(a.x, -b.y, fma(a.y, b.x, c.y));
     return out;
 }
 
@@ -87,12 +91,21 @@ void grid(
     for (; batch_start < batch_end; batch_start += BATCH_SIZE)
     {
         // Load batch
-        int batch_size = min(nvis - batch_end, BATCH_SIZE);
+        int batch_size = min(batch_end - batch_start, BATCH_SIZE);
         if (lid < batch_size)
         {
             int vis_id = batch_start + lid;
             float sample_u = uvw[vis_id * 3];
             float sample_v = uvw[vis_id * 3 + 1];
+            float sample_w = uvw[vis_id * 3 + 2];
+            bool flipped = false;
+            if (sample_w < 0) // TODO: eliminate this once uvw are preprocessed
+            {
+                sample_u = -sample_u;
+                sample_v = -sample_v;
+                sample_w = -sample_w;
+                flipped = true;
+            }
             // TODO: make portable __float2int_rd
             int fine_u = __float2int_rd(sample_u * uv_scale + uv_bias);
             int fine_v = __float2int_rd(sample_v * uv_scale + uv_bias);
@@ -108,10 +121,14 @@ void grid(
                 // TODO: could improve this using float4s where appropriate
                 int idx = vis_id * NPOLS + p;
                 batch_vis[p][lid] = vis[idx];
+                if (flipped)
+                    batch_vis[p][lid].y = -batch_vis[p][lid].y;
             }
             batch_min_uv[lid] = make_int2(min_u, min_v);
             int slice = sub_v * CONVOLVE_KERNEL_OVERSAMPLE + sub_u;
-            batch_offset[lid] = slice * CONVOLVE_KERNEL_SLICE_STRIDE
+            int w_plane = __float2int_rn(min(sample_w, CONVOLVE_KERNEL_MAX_W) * CONVOLVE_KERNEL_W_SCALE);
+            batch_offset[lid] = w_plane * CONVOLVE_KERNEL_W_STRIDE
+                + slice * CONVOLVE_KERNEL_SLICE_STRIDE
                 - (min_v * CONVOLVE_KERNEL_ROW_STRIDE + min_u);
         }
 
@@ -143,7 +160,11 @@ void grid(
                     int offset = v * CONVOLVE_KERNEL_ROW_STRIDE + u + base_offset;
                     float2 weight = convolve_kernel[offset];
                     for (int p = 0; p < NPOLS; p++)
-                        sums[y][x][p] = Complex_mad(weight, sample_vis[p], sums[y][x][p]);
+                    {
+                        // The weight is conjugated because the w kernel is
+                        // for prediction rather than imaging.
+                        sums[y][x][p] = Complex_madc(sample_vis[p], weight, sums[y][x][p]);
+                    }
                 }
         }
 
@@ -151,4 +172,9 @@ void grid(
         // one while still in progress
         BARRIER();
     }
+
+    // Write back final internal values
+    for (int y = 0; y < MULTI_Y; y++)
+        for (int x = 0; x < MULTI_X; x++)
+            writeback(out, out_stride, cur_uv[y][x].x, cur_uv[y][x].y, sums[y][x]);
 }

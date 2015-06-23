@@ -60,7 +60,10 @@ def get_parser():
     group.add_argument('--precision', choices=['single', 'double'], default='single', help='Internal floating-point precision [%(default)s]')
     group = parser.add_argument_group('Gridding options')
     group.add_argument('--grid-oversample', type=int, default=8, help='Oversampling factor for convolution kernels [%(default)s]')
-    group.add_argument('--aa-size', type=int, default=7, help='Support of anti-aliasing kernel [%(default)s]')
+    group.add_argument('--kernel-image-oversample', type=int, default=4, help='Oversampling factor for kernel generation [%(default)s]')
+    group.add_argument('--w-planes', type=int, default=128, help='Number of W planes [%(default)s]'),
+    group.add_argument('--max-w', type=parse_quantity, help='Largest w, as either distance or wavelengths [longest baseline]')
+    group.add_argument('--aa-size', type=float, default=7, help='Support of anti-aliasing kernel [%(default)s]')
     group = parser.add_argument_group('Cleaning options')
     # TODO: compute from some heuristic if not specified, instead of a hard-coded default
     group.add_argument('--psf-patch', type=int, default=100, help='Pixels in beam patch for cleaning [%(default)s]')
@@ -74,6 +77,8 @@ def get_parser():
     group.add_argument('--write-psf', metavar='FILE', help='Write image of PSF to FITS file')
     group.add_argument('--write-grid', metavar='FILE', help='Write UV grid to FITS file')
     group.add_argument('--write-dirty', metavar='FILE', help='Write dirty image to FITS file')
+    group.add_argument('--write-model', metavar='FILE', help='Write model image to FITS file')
+    group.add_argument('--write-residuals', metavar='FILE', help='Write image residuals to FITS file')
     group.add_argument('--vis-limit', type=int, metavar='N', help='Use only the first N visibilities')
     return parser
 
@@ -188,7 +193,13 @@ def main():
             dataset.frequency(args.channel), array_p, output_polarizations,
             (np.float32 if args.precision == 'single' else np.float64),
             args.pixel_size, args.pixels)
-        grid_p = parameters.GridParameters(args.aa_size, args.grid_oversample)
+        if args.max_w is None:
+            args.max_w = array_p.longest_baseline
+        elif args.max_w.unit.physical_type == 'dimensionless':
+            args.max_w = args.max_w * image_p.wavelength
+        grid_p = parameters.GridParameters(
+            args.aa_size, args.grid_oversample, args.kernel_image_oversample,
+            args.w_planes, args.max_w)
         if args.clean_mode == 'I':
             clean_mode = clean.CLEAN_I
         elif args.clean_mode == 'IQUV':
@@ -214,8 +225,8 @@ def main():
         else:
             allocator = accel.SVMAllocator(context)
             # Gridder
-            gridder_template = grid.GridderTemplate(context, grid_p, len(output_polarizations), image_p.complex_dtype)
-            gridder = gridder_template.instantiate(queue, image_p, array_p, args.vis_block, allocator)
+            gridder_template = grid.GridderTemplate(context, image_p, grid_p)
+            gridder = gridder_template.instantiate(queue, array_p, args.vis_block, allocator)
             gridder.ensure_all_bound()
             grid_data = gridder.buffer('grid')
             # Grid to image
@@ -252,7 +263,10 @@ def main():
         image *= scale
         if args.write_grid is not None:
             with step('Write grid'):
-                io.write_fits_grid(grid_data, image_p, args.write_grid)
+                if args.host:
+                    io.write_fits_grid(grid_data, image_p, args.write_grid)
+                else:
+                    io.write_fits_grid(np.fft.fftshift(grid_data), image_p, args.write_grid)
         if args.write_dirty is not None:
             with step('Write dirty image'):
                 io.write_fits_image(dataset, image, image_p, args.write_dirty)
@@ -266,7 +280,13 @@ def main():
         progress.finish()
         if queue:
             queue.finish()
-        # TODO: restoring beam?
+        # TODO: restoring beam
+        if args.write_model is not None:
+            with step('Write model'):
+                io.write_fits_image(dataset, model, image_p, args.write_model)
+        if args.write_residuals is not None:
+            with step('Write residuals'):
+                io.write_fits_image(dataset, image, image_p, args.write_residuals)
         # Add residuals back in
         model += image
         with step('Write clean image'):
