@@ -10,6 +10,7 @@ import astropy.units as units
 import math
 import numpy as np
 import katsdpimager.types
+import clean
 
 
 def is_smooth(x):
@@ -108,12 +109,14 @@ FOV: {:.3f}
 Cell size: {:.3f}
 Wavelength: {:.3f}
 Polarizations: {}
+Precision: {} bit
 """.format(
             np.arcsin(self.pixel_size).to(units.arcsec),
             self.pixels,
             np.arcsin(self.pixel_size * self.pixels).to(units.deg),
             self.cell_size, self.wavelength,
-            ','.join([polarization.STOKES_NAMES[i] for i in self.polarizations]))
+            ','.join([polarization.STOKES_NAMES[i] for i in self.polarizations]),
+            32 if self.real_dtype == np.float32 else 64)
 
 
 def w_kernel_width(image_parameters, w, eps_w, antialias_width=0):
@@ -141,6 +144,24 @@ def w_kernel_width(image_parameters, w, eps_w, antialias_width=0):
         + wl**1.5 * fov / (2 * math.pi * eps_w))
     return np.sqrt(wk2 + antialias_width**2)
 
+def w_slices(image_parameters, max_w, eps_w, kernel_width, antialias_width=0):
+    lo = 0
+    hi = 1
+    # Each slice is corrected to its center, so maximum W deviation from the
+    # slice center is only half the slice thickness.
+    max_w = max_w * 0.5
+    # Find a number of slices that is definitely big enough
+    while w_kernel_width(image_parameters, max_w / hi, eps_w, antialias_width) > kernel_width:
+        hi *= 2
+    # Binary search
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if w_kernel_width(image_parameters, max_w / mid, eps_w, antialias_width) < kernel_width:
+            hi = mid
+        else:
+            lo = mid
+    return hi
+
 
 class GridParameters(object):
     """Parameters affecting gridding algorithm.
@@ -153,23 +174,36 @@ class GridParameters(object):
         Number of UV sub-cells per cell, for sampling kernels
     image_oversample : int
         Oversampling in image plane during kernel generation
+    w_slices : int
+        Number of slices for w-stacking
     w_planes : int
-        Number of samples to take in w
+        Number of samples to take in w within each slice
     max_w : Quantity
         Maximum absolute w value, as a distance quantity
     kernel_width : int, optional
         Number of UV cells corresponding to the combined W+antialias kernel.
     """
-    def __init__(self, antialias_width, oversample, image_oversample, w_planes,
-                 max_w, kernel_width):
-        assert w_planes >= 2, 'At least 2 W planes are required'
-        assert max_w.unit.physical_type == 'length'
+    def __init__(self, antialias_width, oversample, image_oversample,
+                 w_slices, w_planes, max_w, kernel_width):
+        if max_w.unit.physical_type != 'length':
+            raise TypeError('max W must be specified as a length')
         self.antialias_width = antialias_width
         self.oversample = oversample
         self.image_oversample = image_oversample
+        self.w_slices = w_slices
         self.w_planes = w_planes
         self.max_w = max_w
         self.kernel_width = kernel_width
+
+    def __str__(self):
+        return """\
+Grid oversampling: {self.oversample}
+Image oversample: {self.image_oversample}
+W slices: {self.w_slices}
+W planes per slice: {self.w_planes}
+Maximum W: {self.max_w:.3f}
+Antialiasing support: {self.antialias_width} cells
+Kernel support: {self.kernel_width} cells""".format(self=self)
 
 
 class CleanParameters(object):
@@ -178,3 +212,11 @@ class CleanParameters(object):
         self.loop_gain = loop_gain
         self.mode = mode
         self.psf_patch = psf_patch
+
+    def __str__(self):
+        return """\
+Loop gain: {self.loop_gain}
+Minor cycles: {self.minor}
+PSF patch size: {self.psf_patch}
+Peak function: {mode}""".format(
+            self=self, mode='I' if self.mode == clean.CLEAN_I else 'I^2+Q^2+U^2+V^2')

@@ -33,7 +33,8 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.todo',
     'sphinx.ext.mathjax',
-    'sphinx.ext.napoleon'
+    'sphinxcontrib.napoleon',
+    'sphinxcontrib.tikz'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
