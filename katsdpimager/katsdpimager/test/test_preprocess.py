@@ -16,6 +16,7 @@ import katsdpimager.preprocess as preprocess
 def _empty_recarray(dtype):
     return np.rec.array(None, dtype=dtype, shape=(0,))
 
+
 class BaseTestVisibilityCollector(object):
     def setup(self):
         self.image_parameters = []
@@ -54,7 +55,7 @@ class BaseTestVisibilityCollector(object):
                         actual = np.rec.recarray(0, collector.store_dtype)
                     # np.testing functions don't seem to handle structured arrays
                     # well, so test one field at a time.
-                    np.testing.assert_array_equal(actual.uv, slice_data.uv, "block_size={}".format(block_size))
+                    np.testing.assert_array_equal(actual.uv, slice_data.uv)
                     np.testing.assert_array_equal(actual.sub_uv, slice_data.sub_uv)
                     np.testing.assert_allclose(actual.weights, slice_data.weights)
                     np.testing.assert_allclose(actual.vis, slice_data.vis, rtol=1e-5)
@@ -93,7 +94,7 @@ class BaseTestVisibilityCollector(object):
         with closing(self.factory(self.image_parameters, self.grid_parameters, 64)) as collector:
             collector.add(0, uvw, weights, baselines, vis)
         self.check(collector, [[np.rec.fromarrays([
-            [[1089, 1011], [951, 908]],
+            [[1120, 1042], [982, 939]],
             [[6, 3], [3, 1]],
             [[2.4, 1.8, 2.5, 1.4], [0.5, 0.6, 0.7, 0.8]],
             [[1.97 + 0.75j, 6.78 + 11.88j, 11.7 - 2.04j, 4.76 + 7.84j],
@@ -116,6 +117,7 @@ def test_is_prime():
 class TestVisibilityCollectorMem(BaseTestVisibilityCollector):
     def factory(self, *args, **kwargs):
         return preprocess.VisibilityCollectorMem(*args, **kwargs)
+
 
 class TestVisibilityCollectorHDF5(BaseTestVisibilityCollector):
     def setup(self):
