@@ -20,7 +20,7 @@ before_install:
   - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy tmux
   # install python-casacore deb package
   - travis_wait sudo apt-get install -qq software-properties-common
-  - travis_wait sudo add-apt-repository ppa:ska-sa/beta
+  - travis_wait sudo add-apt-repository -y ppa:ska-sa/beta
   - travis_wait sudo apt-get update
   - travis_wait sudo apt-get install python-casacore
   # check numpy and scipy versions
