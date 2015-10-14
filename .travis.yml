@@ -12,6 +12,7 @@ virtualenv:
 before_install:
   # Check environment a la the numpy Travis script
   - uname -a
+  - lsb_release -a
   - free -m
   - df -h
   - ulimit -a
