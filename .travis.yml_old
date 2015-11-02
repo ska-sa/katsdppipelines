@@ -12,12 +12,21 @@ virtualenv:
 before_install:
   # Check environment a la the numpy Travis script
   - uname -a
+  - lsb_release -a
   - free -m
   - df -h
   - ulimit -a
   - python -V
   # install deb package dependencies for katsdpcal
   - travis_wait sudo apt-get install -qq gfortran libatlas-base-dev python python-pip git-core python-h5py python-matplotlib python-numpy python-scipy tmux
+  # install python-casacore deb package
+  - travis_wait sudo apt-get install -qq software-properties-common
+  - sudo add-apt-repository ppa:radio-astro/main
+  - travis_wait sudo apt-get update
+  #- travis_wait sudo apt-get install libcasacore2 python-casacore
+  - travis_wait sudo apt-get install libcasacore2-dev python-setuptools libboost-python-dev libcfitsio3-dev
+  - sudo python ./setup.py install
+  - travis_wait sudo pip install python-casacore
   # check numpy and scipy versions
   - python -c 'import numpy; print numpy.__version__'
   - python -c 'import scipy; print scipy.__version__'
