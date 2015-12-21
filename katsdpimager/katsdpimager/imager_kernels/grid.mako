@@ -12,13 +12,8 @@ typedef atomic_accum_${real_type}2 atomic_accum_Complex;
 #define MULTI_Y ${multi_y}
 #define BIN_X ${bin_x}
 #define BIN_Y ${bin_y}
-#define CONVOLVE_KERNEL_OVERSAMPLE ${convolve_kernel_oversample}
-#define CONVOLVE_KERNEL_OVERSAMPLE_MASK ${convolve_kernel_oversample - 1}
-#define CONVOLVE_KERNEL_OVERSAMPLE_SHIFT ${int.bit_length(convolve_kernel_oversample) - 1}
 #define CONVOLVE_KERNEL_SLICE_STRIDE ${convolve_kernel_slice_stride}
 #define CONVOLVE_KERNEL_W_STRIDE ${convolve_kernel_w_stride}
-#define CONVOLVE_KERNEL_W_SCALE ${convolve_kernel_w_scale}f
-#define CONVOLVE_KERNEL_MAX_W ${convolve_kernel_max_w}f
 #define make_Complex make_${real_type}2
 #define atomic_accum_Complex_add atomic_accum_${real_type}2_add
 
@@ -90,16 +85,8 @@ void grid(
     // In-register sums
     Complex sums[MULTI_Y][MULTI_X][NPOLS];
     // Last-known UV coordinates
-    int cur_u0 = 0;
+    int cur_u0 = -1; // used as sentinel for first element in batch
     int cur_v0 = 0;
-
-    // Zero-initialize things
-    for (int y = 0; y < MULTI_Y; y++)
-        for (int x = 0; x < MULTI_X; x++)
-        {
-            for (int p = 0; p < NPOLS; p++)
-                sums[y][x][p] = make_Complex(0.0f, 0.0f);
-        }
 
     int u_phase = get_group_id(0) * TILE_X + get_local_id(0) * MULTI_X;
     int v_phase = get_group_id(1) * TILE_Y + get_local_id(1) * MULTI_Y;
@@ -129,35 +116,54 @@ void grid(
                 offset_w + sample_uv.z * CONVOLVE_KERNEL_SLICE_STRIDE - min_uv.x,
                 offset_w + sample_uv.w * CONVOLVE_KERNEL_SLICE_STRIDE - min_uv.y);
         }
+        else
+        {
+            batch_min_uv[lid] = make_int2(0, 0);
+            batch_offset[lid] = make_int2(0, 0);
+            for (int p = 0; p < NPOLS; p++)
+                batch_vis[p][lid] = make_float2(0.0f, 0.0f);
+        }
 
         BARRIER();
 
         // Process batch
-        for (int vis_id = 0; vis_id < batch_size; vis_id++)
+#pragma unroll 2
+        for (int vis_id = 0; vis_id < BATCH_SIZE; vis_id++)
         {
             float2 sample_vis[NPOLS];
+            float2 weight_u[MULTI_X];
+            float2 weight_v[MULTI_Y];
             for (int p = 0; p < NPOLS; p++)
                 sample_vis[p] = batch_vis[p][vis_id];
             int2 min_uv = batch_min_uv[vis_id];
             int2 base_offset = batch_offset[vis_id];
             int u0 = wrap(min_uv.x, BIN_X, u_phase);
             int v0 = wrap(min_uv.y, BIN_Y, v_phase);
-            if (u0 != cur_u0 || v0 != cur_v0)
-            {
-                writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
-                for (int y = 0; y < MULTI_Y; y++)
-                    for (int x = 0; x < MULTI_X; x++)
-                        for (int p = 0; p < NPOLS; p++)
-                            sums[y][x][p] = make_Complex(0.0f, 0.0f);
-                cur_u0 = u0;
-                cur_v0 = v0;
-            }
-            float2 weight_u[MULTI_X];
-            float2 weight_v[MULTI_Y];
             for (int x = 0; x < MULTI_X; x++)
                 weight_u[x] = convolve_kernel[u0 + base_offset.x + x];
             for (int y = 0; y < MULTI_Y; y++)
                 weight_v[y] = convolve_kernel[v0 + base_offset.y + y];
+            if (u0 != cur_u0 || v0 != cur_v0)
+            {
+                if (cur_u0 >= 0)
+                    writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
+                cur_u0 = u0;
+                cur_v0 = v0;
+#ifdef __CUDA_ARCH__
+                /* CUDA 7 and 7.5 make an unfortunate de-optimisation choice:
+                 * sums gets copied, then the original is zeroed, then the
+                 * copies are atomically added to global memory. This adds an
+                 * extra MULTI_X * MULTI_Y * N_POLS * 2 registers. Putting this
+                 * empty asm statement here seems to prevent the
+                 * de-optimisation.
+                 */
+                asm("");
+#endif
+                for (int y = 0; y < MULTI_Y; y++)
+                    for (int x = 0; x < MULTI_X; x++)
+                        for (int p = 0; p < NPOLS; p++)
+                            sums[y][x][p] = make_Complex(0.0f, 0.0f);
+            }
             for (int y = 0; y < MULTI_Y; y++)
                 for (int x = 0; x < MULTI_X; x++)
                 {
@@ -177,5 +183,6 @@ void grid(
     }
 
     // Write back final internal values
-    writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
+    if (cur_u0 >= 0)
+        writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
 }
