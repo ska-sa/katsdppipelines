@@ -139,7 +139,7 @@ def kaiser_bessel(x, width, beta):
     param = 1 - (2 * x / width)**2
     # The np.maximum is to protect against runtime warnings for taking
     # sqrt of negative values. The actual values in this situation are
-    # irrelvent due to the np.select call.
+    # irrelevent due to the np.select call.
     values = np.i0(beta * np.sqrt(np.maximum(0, param))) / np.i0(beta)
     return np.select([param >= 0], [values])
 
@@ -456,7 +456,7 @@ def _autotune_uv(context, pixels, bin_size, oversample):
         # step is either (1, slope), (-1, slope), (slope, 1) or (slope, -1)
         step = np.array([dx / scale, dy / scale])
         indices = np.arange(track_length) - track_length / 2
-        sub_uv = np.outer(indices, step) + oversample * pixels / 2
+        sub_uv = np.outer(indices, step)
         sub_uv = np.round(sub_uv).astype(np.int32)
         out[i, :, 0:2] = sub_uv // oversample
         out[i, :, 2:4] = sub_uv % oversample
@@ -596,7 +596,7 @@ class GridderTemplate(object):
                 context, "imager_kernels/grid.mako", parameters,
                 extra_dirs=[pkg_resources.resource_filename(__name__, '')])
             kernel = program.get_kernel('grid')
-            uv_bias = (bin_size - 1) // 2
+            uv_bias = (bin_size - 1) // 2 - grid.shape[-1] // 2
 
             def fn():
                 Gridder.static_run(
@@ -657,15 +657,16 @@ class GridDegrid(accel.Operation):
         # Check that longest baseline won't cause an out-of-bounds access
         max_uv_src = float(array_parameters.longest_baseline / template.image_parameters.cell_size)
         convolve_kernel_size = template.convolve_kernel.padded_data.shape[-1]
-        max_uv = max_uv_src + convolve_kernel_size / 2
-        if max_uv >= template.image_parameters.pixels // 2 - 1 - 1e-3:
+        # I don't think the + 1 is actually needed, but it's a safety factor in
+        # case I've made an off-by-one error in the maths.
+        grid_pixels = 2 * (int(max_uv_src) + convolve_kernel_size // 2 + 1)
+        if grid_pixels > template.image_parameters.pixels:
             raise ValueError('image_oversample is too small to capture all visibilities in the UV plane')
         self.template = template
         self.max_vis = max_vis
         num_polarizations = len(template.image_parameters.polarizations)
-        pixels = template.image_parameters.pixels
         self.slots['grid'] = accel.IOSlot(
-            (num_polarizations, pixels, pixels),
+            (num_polarizations, grid_pixels, grid_pixels),
             template.image_parameters.complex_dtype)
         self.slots['uv'] = accel.IOSlot(
             (max_vis, accel.Dimension(4, exact=True)), np.int16)
@@ -773,7 +774,8 @@ class Gridder(GridDegrid):
 
     def _run(self):
         kernel_width = self.template.grid_parameters.kernel_width
-        uv_bias = (kernel_width - 1) // 2 + self.template.convolve_kernel.pad
+        uv_bias = ((kernel_width - 1) // 2 + self.template.convolve_kernel.pad
+                   - self.slots['grid'].shape[-1] // 2)
         self.static_run(
             self.command_queue, self._kernel,
             self.template.wgs_x, self.template.wgs_y,
@@ -872,7 +874,7 @@ class DegridderTemplate(object):
                 context, "imager_kernels/degrid.mako", parameters,
                 extra_dirs=[pkg_resources.resource_filename(__name__, '')])
             kernel = program.get_kernel('degrid')
-            uv_bias = (bin_size - 1) // 2
+            uv_bias = (bin_size - 1) // 2 - grid.shape[-1] // 2
 
             def fn():
                 Degridder.static_run(
@@ -945,7 +947,8 @@ class Degridder(GridDegrid):
 
     def _run(self):
         kernel_width = self.template.grid_parameters.kernel_width
-        uv_bias = (kernel_width - 1) // 2 + self.template.convolve_kernel.pad
+        uv_bias = ((kernel_width - 1) // 2 + self.template.convolve_kernel.pad
+                   - self.slots['grid'].shape[-1] // 2)
         self.static_run(
             self.command_queue, self._kernel,
             self.template.wgs_x, self.template.wgs_y, self.template.wgs_z,
@@ -965,7 +968,7 @@ def _grid(kernel, values, uv, sub_uv, w_plane, vis, sample):
     Numba can JIT it.
     """
     ksize = kernel.shape[2]
-    uv_bias = (ksize - 1) // 2
+    uv_bias = (ksize - 1) // 2 - values.shape[2] // 2
     for row in range(uv.shape[0]):
         u0 = uv[row, 0] - uv_bias
         v0 = uv[row, 1] - uv_bias
@@ -1016,7 +1019,7 @@ class GridderHost(object):
 @numba.jit(nopython=True)
 def _degrid(kernel, values, uv, sub_uv, w_plane, vis, sample):
     ksize = kernel.shape[2]
-    uv_bias = (ksize - 1) // 2
+    uv_bias = (ksize - 1) // 2 - values.shape[2] // 2
     for row in range(uv.shape[0]):
         u0 = uv[row, 0] - uv_bias
         v0 = uv[row, 1] - uv_bias
