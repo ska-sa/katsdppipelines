@@ -47,7 +47,7 @@ def init_ts(ts, param_dict, clear=False):
 
 def ts_from_file(ts, filename):
     """
-    Initialises up the telescope state from parameter file
+    Initialises the telescope state from parameter file
 
     Inputs
     ======
@@ -98,15 +98,14 @@ def setup_ts(ts):
     cal_refant            - reference antenna
     """  
 
+    # ensure that antenna_mask is list of strings, not single csv string
+    if isinstance(ts.antenna_mask, str):
+        antlist = [ant.strip() for ant in ts.antenna_mask.split(',')]
+        ts.delete('antenna_mask')
+        ts.add('antenna_mask',antlist,immutable=True)
     # cal_antlist
     #   this should not be pre-set (determine from antenna_mask, which is pre-set)
-    antlist = [ant.strip() for ant in ts.antenna_mask.split(',')] if isinstance(ts.antenna_mask, str) else ts.antenna_mask
-    ts.add('cal_antlist',antlist,immutable=True)
-
-    # cal_antlist_description
-    #    list of antenna descriptions
-    description_list = [ts['{0}_description'.format(ant,)] for ant in antlist]
-    ts.add('cal_antlist_description',description_list,immutable=True)
+    ts.add('cal_antlist',ts.antenna_mask,immutable=True)
 
     # cal_preferred_refants
     if 'cal_preferred_refants' not in ts:

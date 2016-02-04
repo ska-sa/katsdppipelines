@@ -162,11 +162,23 @@ def pipeline(data, ts, task_name='pipeline'):
     g_solint = ts.cal_g_solint #seconds
 
     dump_period = ts.sdp_l0_int_time
-    n_ants = len(ts.antenna_mask.split(','))
 
-    antlist = ts.antenna_mask.split(',')
+    antlist = ts.cal_antlist
+    n_ants = len(antlist)
+    n_chans = ts.cbf_n_chans
     # refant index number in the antenna list
     refant_ind = antlist.index(ts.cal_refant)
+
+    # set up parameters that are static during an observation, but only available when the first data starts to flow
+    # list of antenna descriptions
+    if not ts.has_key('cal_antlist_description'):
+        description_list = [ts['{0}_observer'.format(ant,)] for ant in antlist]
+        ts.add('cal_antlist_description',description_list,immutable=True)
+    # channel frequencies
+    if not ts.has_key('cal_channel_freqs'):
+        sideband = 1
+        channel_freqs = ts.cbf_center_freq + sideband*(ts.cbf_bandwidth/n_chans)*(np.arange(n_chans) - n_chans / 2)
+        ts.add('cal_channel_freqs',channel_freqs,immutable=True)
 
     # get names of activity and target TS keys, using TS reference antenna
     target_key = '{0}_target'.format(ts.cal_refant,)
@@ -213,15 +225,9 @@ def pipeline(data, ts, task_name='pipeline'):
         pipeline_logger.info('Target: {0}'.format(target_name,))
         pipeline_logger.info('Tags:   {0}'.format(taglist,))
 
-        # update source list
-        try:
-            target_list = ts.get_range('cal_info_sources',st=0,return_format='recarray')['value']
-        except KeyError:
-            target_list = []
-        if not target in target_list: ts.add('cal_info_sources',target)
-
         # set up scan
-        s = Scan(data, scan_slice, dump_period, n_ants, ts.cal_bls_lookup, target_name, chans=ts.cbf_channel_freqs)
+
+        s = Scan(data, scan_slice, dump_period, n_ants, ts.cal_bls_lookup, target_name, chans=ts.cal_channel_freqs)
 
         # initial RFI flagging
         pipeline_logger.info('Preliminary flagging')
