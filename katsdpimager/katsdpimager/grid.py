@@ -20,7 +20,7 @@ the kernel. Every grid point into this box will be updated for this
 visibility, and hence the kernel function needs zero padding (on all sides) of
 the same amount as the bin padding.
 
-.. tikz:: Mapping of workitems and workgroups to group points. One workgroup
+.. tikz:: Mapping of workitems and workgroups to grid points. One workgroup
    contributes to all the green cells. One workitem contributes to all the
    cells marked with a red dot. Here blocks are 2×2, tiles are 4×4 and bins
    are 8×8. The dashed lines show a kernel footprint, and the blue box shows
@@ -399,17 +399,25 @@ class ConvolutionKernel(object):
 
 
 class ConvolutionKernelDevice(ConvolutionKernel):
-    """A :class:`ConvolutionKernel` that stores data in a device SVM array."""
-    def __init__(self, context, image_parameters, grid_parameters, pad=0):
-        out = accel.SVMArray(
-            context,
+    """A :class:`ConvolutionKernel` that stores data in a device array."""
+    def __init__(self, context, image_parameters, grid_parameters, pad=0, allocator=None):
+        if allocator is None:
+            allocator = accel.DeviceAllocator(context)
+        out = allocator.allocate(
             (grid_parameters.w_planes,
              grid_parameters.oversample,
              grid_parameters.kernel_width + 2 * pad),
             np.complex64)
-        out.fill(0)
+        if isinstance(out, accel.SVMArray):
+            host = out
+        else:
+            host = out.empty_like()
+        host.fill(0)
         super(ConvolutionKernelDevice, self).__init__(
-            image_parameters, grid_parameters, out[:, :, pad:grid_parameters.kernel_width + pad])
+            image_parameters, grid_parameters, host[:, :, pad:grid_parameters.kernel_width + pad])
+        if not isinstance(out, accel.SVMArray):
+            queue = context.create_command_queue()
+            out.set(queue, host)
         self.padded_data = out
         self.pad = pad
 
@@ -510,7 +518,7 @@ def _autotune_arrays(command_queue, oversample, real_dtype, num_polarizations, b
 
 
 class GridderTemplate(object):
-    autotune_version = 4
+    autotune_version = 5
 
     def __init__(self, context, image_parameters, grid_parameters, tuning=None):
         if tuning is None:
