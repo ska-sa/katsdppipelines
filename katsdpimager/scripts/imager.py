@@ -13,7 +13,7 @@ import atexit
 import os
 import katsdpsigproc.accel as accel
 from katsdpimager import \
-    loader, parameters, polarization, preprocess, io, clean, imaging, progress, beam, numba
+    loader, parameters, polarization, preprocess, io, clean, weight, imaging, progress, beam, numba
 from contextlib import closing, contextmanager
 
 
@@ -63,6 +63,9 @@ def get_parser():
     group.add_argument('--pixels', type=int, help='Number of pixels in image [computed from array]')
     group.add_argument('--stokes', type=parse_stokes, default='I', help='Stokes parameters to image e.g. IQUV for full-Stokes [%(default)s]')
     group.add_argument('--precision', choices=['single', 'double'], default='single', help='Internal floating-point precision [%(default)s]')
+    group = parser.add_argument_group('Weighting options')
+    group.add_argument('--weight-type', choices=['natural', 'uniform', 'robust'], default='natural', help='Imaging density weights [%(default)s]')
+    group.add_argument('--robustness', type=float, default=0.0, help='Robustness parameter for --weight-type=robust [%(default)s]')
     group = parser.add_argument_group('Gridding options')
     group.add_argument('--grid-oversample', type=int, default=8, help='Oversampling factor for convolution kernels [%(default)s]')
     group.add_argument('--kernel-image-oversample', type=int, default=4, help='Oversampling factor for kernel generation [%(default)s]')
@@ -85,6 +88,7 @@ def get_parser():
     group.add_argument('--max-cache-size', type=int, default=None, help='Limit HDF5 cache size for preprocessing')
     group = parser.add_argument_group('Debugging options')
     group.add_argument('--host', action='store_true', help='Perform operations on the CPU')
+    group.add_argument('--write-weights', metavar='FILE', help='Write imaging weights to FITS file')
     group.add_argument('--write-psf', metavar='FILE', help='Write image of PSF to FITS file')
     group.add_argument('--write-grid', metavar='FILE', help='Write UV grid to FITS file')
     group.add_argument('--write-dirty', metavar='FILE', help='Write dirty image to FITS file')
@@ -146,6 +150,29 @@ def preprocess_visibilities(dataset, args, image_parameters, grid_parameters, po
     logger.info("Compressed %d visibilities to %d (%.2f%%)",
         collector.num_input, collector.num_output, 100.0 * collector.num_output / collector.num_input)
     return collector
+
+
+def make_weights(queue, reader, imager, weight_type, vis_block):
+    imager.clear_weights()
+    total = 0
+    for w_slice in range(reader.num_w_slices):
+        total += reader.len(0, w_slice)
+    bar = progress.make_progressbar('Computing weights', max=total)
+    queue.finish()
+    with progress.finishing(bar):
+        if weight_type != weight.NATURAL:
+            for w_slice in range(reader.num_w_slices):
+                for chunk in reader.iter_slice(0, w_slice, vis_block):
+                    imager.grid_weights(chunk.uv, chunk.weights)
+                    # Need to serialise calls to grid, since otherwise the next
+                    # call will overwrite the incoming data before the previous
+                    # iteration is done with it.
+                    queue.finish()
+                    bar.next(len(chunk.uv))
+        else:
+            bar.next(total)
+        imager.finalize_weights()
+        queue.finish()
 
 
 def make_dirty(queue, reader, name, field, imager, mid_w, vis_block, full_cycle=False):
@@ -271,6 +298,12 @@ def main():
             dataset.frequency(args.channel), array_p, output_polarizations,
             (np.float32 if args.precision == 'single' else np.float64),
             args.pixel_size, args.pixels)
+        weight_types = {
+            'natural': weight.NATURAL,
+            'uniform': weight.UNIFORM,
+            'robust': weight.ROBUST
+        }
+        weight_p = parameters.WeightParameters(weight_types[args.weight_type], args.robustness)
         if args.max_w is None:
             args.max_w = array_p.longest_baseline
         elif args.max_w.unit.physical_type == 'dimensionless':
@@ -300,6 +333,7 @@ def main():
             args.psf_patch)
 
         log_parameters("Image parameters", image_p)
+        log_parameters("Weight parameters", weight_p)
         log_parameters("Grid parameters", grid_p)
         log_parameters("CLEAN parameters", clean_p)
 
@@ -307,11 +341,11 @@ def main():
         lm_scale = float(image_p.pixel_size)
         lm_bias = -0.5 * image_p.pixels * lm_scale
         if args.host:
-            imager = imaging.ImagingHost(image_p, grid_p, clean_p)
+            imager = imaging.ImagingHost(image_p, weight_p, grid_p, clean_p)
         else:
             allocator = accel.SVMAllocator(context)
             imager_template = imaging.ImagingTemplate(
-                queue, array_p, image_p, grid_p, clean_p)
+                queue, array_p, image_p, weight_p, grid_p, clean_p)
             imager = imager_template.instantiate(args.vis_block, allocator)
             imager.ensure_all_bound()
         psf = imager.buffer('psf')
@@ -323,7 +357,13 @@ def main():
         collector = preprocess_visibilities(dataset, args, image_p, grid_p, polarization_matrix)
         reader = collector.reader()
 
-        #### Create dirty image ####
+        #### Compute imaging weights ####
+        make_weights(queue, reader, imager, weight_p.weight_type, args.vis_block)
+        if args.write_weights is not None:
+            with progress.step('Write image weights'):
+                io.write_fits_image(dataset, imager.buffer('weights_grid'), image_p, args.write_weights, bunit=None)
+
+        #### Create PSF ####
         slice_w_step = float(grid_p.max_w / image_p.wavelength / (grid_p.w_slices - 0.5))
         mid_w = np.arange(grid_p.w_slices) * slice_w_step
         make_dirty(queue, reader, 'PSF', 'weights', imager, mid_w, args.vis_block)
@@ -337,6 +377,7 @@ def main():
             with progress.step('Write PSF'):
                 io.write_fits_image(dataset, dirty, image_p, args.write_psf, restoring_beam)
 
+        #### Imaging ####
         imager.clear_model()
         for i in range(args.major):
             logger.info("Starting major cycle %d/%d", i + 1, args.major)
