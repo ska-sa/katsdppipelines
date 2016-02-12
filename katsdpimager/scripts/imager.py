@@ -12,6 +12,7 @@ import katsdpimager.parameters as parameters
 import katsdpimager.polarization as polarization
 import katsdpimager.grid as grid
 import katsdpimager.io as io
+import katsdpimager.fft as fft
 from contextlib import closing, contextmanager
 
 def parse_quantity(str_value):
@@ -66,12 +67,13 @@ def get_parser():
     return parser
 
 def make_progressbar(name, *args, **kwargs):
-    return progress.bar.Bar("{:16}".format(name), suffix='%(percent)3d%% [%(eta_td)s]', *args, **kwargs)
+    bar = progress.bar.Bar("{:16}".format(name), suffix='%(percent)3d%% [%(eta_td)s]', *args, **kwargs)
+    bar.update()
+    return bar
 
 @contextmanager
 def step(name):
     progress = make_progressbar(name, max=1)
-    progress.update()
     yield
     progress.next()
     progress.finish()
@@ -132,7 +134,17 @@ def main():
         progress.finish()
 
         with step('FFT'):
-            image = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(grid_data), axes=(0, 1)).real)
+            if args.host:
+                image = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(grid_data), axes=(0, 1)).real)
+            else:
+                image = accel.SVMArray(context, grid_data.shape, np.complex64)
+                invert_template = fft.GridToImageTemplate(
+                    queue, grid_data.shape, grid_data.padded_shape, image.shape)
+                invert = invert_template.instantiate(accel.SVMAllocator(context))
+                invert.bind(grid=grid_data, image=image)
+                invert()
+                queue.finish()
+                image = image.real * (1.0 / (image.shape[0] * image.shape[1]))
         if args.write_grid is not None:
             with step('Write grid'):
                 io.write_fits_grid(grid_data, image_p, args.write_grid)
