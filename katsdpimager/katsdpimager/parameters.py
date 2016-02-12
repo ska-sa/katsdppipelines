@@ -3,56 +3,12 @@ functions take physical quantities as Astropy quantities, rather than
 specifying any specific units.
 
 Most formulae are taken from SKA-TEL-SDP-0000003.
-
-Enumeration of polarizations uses the CASA enumeration values, which are
-different from those used in FITS:
-
-.. py:data:: STOKES_I
-
-.. py:data:: STOKES_Q
-
-.. py:data:: STOKES_U
-
-.. py:data:: STOKES_V
-
-.. py:data:: STOKES_RR
-
-.. py:data:: STOKES_RL
-
-.. py:data:: STOKES_LR
-
-.. py:data:: STOKES_LL
-
-.. py:data:: STOKES_XX
-
-.. py:data:: STOKES_XY
-
-.. py:data:: STOKES_YX
-
-.. py:data:: STOKES_YY
 """
 
 from __future__ import division
 import astropy.units as units
 import math
 import numpy as np
-
-
-STOKES_I = 1
-STOKES_Q = 2
-STOKES_U = 3
-STOKES_V = 4
-STOKES_RR = 5
-STOKES_RL = 6
-STOKES_LR = 7
-STOKES_LL = 8
-STOKES_XX = 9
-STOKES_XY = 10
-STOKES_YX = 11
-STOKES_YY = 12
-
-STOKES_NAMES = [None, 'I', 'Q', 'U', 'V', 'RR', 'RL', 'LR', 'LL', 'XX', 'XY', 'YX', 'YY']
-
 
 def is_smooth(x):
     """Whether x is a good candidate for FFT. We heuristically require
