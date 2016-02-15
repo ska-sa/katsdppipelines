@@ -13,7 +13,6 @@ import time
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 class TaskLoggingAdapter(logging.LoggerAdapter):
     """
@@ -244,11 +243,12 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                 target_name = target_split[0]
                 target_tags = target_split[1] if len(target_split)>1 else 'unknown'
                 if target_name != prev_target_name:
-                    self.accumulator_logger.info(' - {0}'.format(target_name,))
                     # update source list if necessary
                     target_list = self.telstate.get_range('cal_info_sources',st=0,return_format='recarray')['value'] if self.telstate.has_key('cal_info_sources') else []
                     if not target_name in target_list: self.telstate.add('cal_info_sources',target_name)
 
+                # increment the index indicating the position of the data in the buffer
+                array_index += 1
                 # reshape data and put into relevent arrays
                 data_buffer['vis'][array_index,:,:,:] = ig['correlator_data'].value[:,self.ordering].reshape([self.nchan,self.npol,self.nbl])
                 data_buffer['flags'][array_index,:,:,:] = ig['flags'].value[:,self.ordering].reshape([self.nchan,self.npol,self.nbl])
@@ -258,8 +258,6 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                 else:
                     data_buffer['weights'][array_index,:,:,:] = np.empty([self.nchan,self.npol,self.nbl],dtype=np.float32)
                 data_buffer['times'][array_index] = data_ts
-                # increment the index indicating how much data has been put into the buffer
-                array_index += 1
 
                 # break if activity has changed (i.e. the activity time has changed)
                 #   unless previous scan was a target, in which case accumulate subsequent gain scan too
@@ -281,6 +279,11 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                     self.accumulator_logger.info('Accumulate break due to buffer size limit')
                     obs_end_flag = False
                     break
+
+                # print name of target accumulated, if it has changed
+                #   this is at the end to avoid printing names of new target slews at the end of an accumulation
+                if target_name != prev_target_name:
+                    self.accumulator_logger.info(' - {0}'.format(target_name,))
 
                 prev_activity = activity
                 prev_activity_time = activity_time
@@ -394,9 +397,9 @@ def init_pipeline_control(control_method, control_task, data, data_shape, scan_a
             config = send.StreamConfig(max_packet_size=9172, rate=self.l1_rate)
             tx = send.UdpStream(spead2.ThreadPool(),self.l1_endpoint.host,self.l1_endpoint.port,config)
             if self.full_l1 or target_slices != []:
-                self.pipeline_logger.info('Transmit L1 data')
+                self.pipeline_logger.info('   Transmit L1 data')
                 self.data_to_SPEAD(target_slices, tx)
-                self.pipeline_logger.info('End transmit of L1 data')
+                self.pipeline_logger.info('   End transmit of L1 data')
 
         def data_to_SPEAD(self, target_slices, tx):
             """

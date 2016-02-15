@@ -6,6 +6,12 @@ from .calprocs import CalSolution
 import numpy as np
 import copy
 
+import ephem
+import katpoint
+
+import logging
+logger = logging.getLogger(__name__)
+
 #--------------------------------------------------------------------------------------------------
 #--- CLASS :  Scan
 #--------------------------------------------------------------------------------------------------
@@ -53,6 +59,8 @@ class Scan(object):
         Name of target obsrved in the scan.
     modvis : array of float, complex64 (ntime, nchan, npol, nbl)
         Intermediate visibility product.
+    model : list
+        List of model components
     nchan : int
         Number of frequency channels in the data.
     channel_freqs : list of float
@@ -64,7 +72,7 @@ class Scan(object):
 
     """
 
-    def __init__(self, data, time_slice, dump_period, nant, bls_lookup, target, chans=None, corr='xc'):
+    def __init__(self, data, time_slice, dump_period, nant, bls_lookup, target, chans=None, corr='xc', logger=logger):
 
         # cross-correlation mask. Must be np array so it can be used for indexing
         # if scan has explicitly been set up as a cross-correlation scan, select XC data only
@@ -88,7 +96,7 @@ class Scan(object):
         self.cross_weights = np.ones_like(self.cross_flags,dtype=np.float)
 
         self.times = data['times'][time_slice]
-        self.target = target
+        self.target = katpoint.Target(target)
 
         # intermediate product visibility - use sparingly!
         self.modvis = None
@@ -96,9 +104,17 @@ class Scan(object):
         # scan meta-data
         self.dump_period = dump_period
         self.nchan = self.vis.shape[1]
+        # note - keep an eye on ordering of frequencies - increasing with index, or decreasing?
         self.channel_freqs = range(self.nchan) if chans is None else list(chans)
         self.nant = nant
         self.npol = 4
+
+        # initialise model to unity
+        self.model = 1.
+        self.freqavg_model = 1.
+        self.model_raw_params = None
+
+        self.logger = logger
 
     def solint_from_nominal(self, input_solint):
         """
@@ -119,7 +135,7 @@ class Scan(object):
     # ---------------------------------------------------------------------------------------------
     # Calibration solution functions
 
-    def g_sol(self,input_solint,g0,REFANT,pre_apply=[]):
+    def g_sol(self,input_solint,g0,REFANT,pre_apply=[],**kwargs):
         """
         Solve for gain
 
@@ -134,6 +150,9 @@ class Scan(object):
         -------
         Gain CalSolution with soltype 'G', shape (time, pol, nant)
         """
+
+        # initialise model, if this scan target has an associated model
+        self._init_model(spectral=False)
 
         if len(pre_apply) > 0:
             self.modvis = copy.deepcopy(self.vis)
@@ -154,7 +173,7 @@ class Scan(object):
         ave_vis = calprocs.wavg(ave_vis,ave_flags,ave_weights,axis=1)
 
         # solve for gains G
-        g_soln = calprocs.g_fit(ave_vis,self.corrprod_lookup,g0,REFANT)
+        g_soln = calprocs.g_fit(ave_vis,self.corrprod_lookup,g0,REFANT,model=self.freqavg_model,**kwargs)
 
         return CalSolution('G', g_soln, ave_times)
 
@@ -236,6 +255,8 @@ class Scan(object):
         -------
         Bandpass CalSolution with soltype 'B', shape (chan, pol, nant)
         """
+        # initialise model, if this scan target has an associated model
+        self._init_model(spectral=True)
 
         if len(pre_apply) > 0:
             self.modvis = copy.deepcopy(self.vis)
@@ -249,7 +270,7 @@ class Scan(object):
         ave_vis, ave_time = calprocs.wavg(self.modvis,self.flags,self.weights,times=self.times,axis=0)
 
         # solve for bandpass
-        b_soln = calprocs.bp_fit(ave_vis,self.corrprod_lookup,bp0,REFANT)
+        b_soln = calprocs.bp_fit(ave_vis,self.corrprod_lookup,bp0,REFANT,model=self.model)
 
         return CalSolution('B', b_soln, ave_time)
 
@@ -354,7 +375,91 @@ class Scan(object):
         interp_solns = np.repeat(np.expand_dims(values,axis=0),len(self.times),axis=0)
         return CalSolution(solns.soltype, interp_solns, self.times)
 
+    # ---------------------------------------------------------------------------------------------
+    # model related functions
 
+    def _create_model(self, max_offset=8., spectral=False):
+        """
+        Creates numpy array models for use in the solver
+        *** more complex models will be divided through from the data - watch this space ***
 
+        Models are currently implimented for:
+          * a flat spectrum single point source in the phase centre
+          * a varied spectrum point source in the phase centre
 
+        Inputs
+        ======
+        max_offset : float
+            The difference in positon away from the phase centre for a point to be considered at the phase centre [arcseconds]
+            Default: 8 (= meerkat beam)
+        spectral : boolean
+            whether the model will have spectral dimensions
 
+        Returns
+        =======
+        Model of the source. Dimensions can be:
+           * scalar values 1
+           * (nant, nant)
+           * (nchan, 2, nant, nant)  (where the 2 is for polarisation)
+
+        """
+        # if models parameters have not been set for the scan, return unity model
+
+        if self.model_raw_params is None:
+            return 1.0
+
+        ra0, dec0 = self.target.radec()
+
+        # deal with easy case first!
+        if (self.model_raw_params is not None) and (self.model_raw_params.size == 1):
+            # check if source is at the phase centre
+            ra = ephem.hours(self.model_raw_params['RA'].item())
+            dec = ephem.degrees(self.model_raw_params['DEC'].item())
+
+            if ephem.separation((ra,dec),(ra0,dec0)) < calprocs.arcsec_to_rad(max_offset):
+
+                if (('a1' not in self.model_raw_params.dtype.names or self.model_raw_params['a1'] == 0) and
+                    ('a2' not in self.model_raw_params.dtype.names or self.model_raw_params['a2'] == 0) and
+                    ('a3' not in self.model_raw_params.dtype.names or self.model_raw_params['a3'] == 0)):
+                    # spectral index is zero
+                    S = 10.**self.model_raw_params['a0'].item()
+                    model = S * (1.0 - np.eye(self.nant, dtype=np.complex))
+                    self.logger.info('     Model: single point source, flat spectrum, flux: {0:03.4f} Jy'.format(S,))
+                else:
+                    model_params = [self.model_raw_params[a].item() for a in ['a0','a1','a2','a3']]
+                    if spectral:
+                        # full spectral model
+                        freq_model = calprocs.flux(model_params,self.channel_freqs)
+                        pol_freq_model = np.vstack([freq_model,freq_model]).T
+                        self.logger.info('     Model: single point source, spectral model, average flux over {0:03.3f}-{1:03.3f} GHz: {2:03.4f} Jy'.format(self.channel_freqs[0]/1.e9, self.channel_freqs[-1]/1.e9, np.mean(freq_model)))
+                        model = pol_freq_model[:,:,np.newaxis,np.newaxis] * (1.0 - np.eye(self.nant, dtype=np.complex))
+                    else:
+                        # use flux at the centre frequency
+                        S_freq = calprocs.flux(model_params,self.channel_freqs[len(self.channel_freqs)/2])
+                        model = S_freq * (1.0 - np.eye(self.nant, dtype=np.complex))
+                        self.logger.info('     Model: single point source, flux at centre frequency {0:03.3f} GHz: {1:03.4f} Jy'.format(self.channel_freqs[len(self.channel_freqs)/2]/1.e9, S_freq))
+        else:
+            print 'do something more complex!'
+
+        return model
+
+    def _init_model(self, max_offset=8., spectral=False):
+        """
+        Initialises models for use in the solver.
+        Checks for existing model scan attributes and creates models if models are not yet present
+
+        Inputs
+        ======
+        max_offset : float
+            The difference in positon away from the phase centre for a point to be considered at the phase centre [arcseconds]
+            Default: 8 (= meerkat beam)
+        spectral : boolean
+            whether the model will have spectral dimensions
+        """
+
+        if spectral:
+            if np.isscalar(self.model) and np.all(self.model == 1.):
+                self.model = self._create_model(max_offset, spectral=True)
+        else:
+            if np.isscalar(self.freqavg_model) and np.all(self.freqavg_model == 1.):
+                self.freqavg_model = self._create_model(max_offset, spectral=False)

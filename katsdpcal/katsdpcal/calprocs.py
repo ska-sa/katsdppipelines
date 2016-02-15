@@ -6,10 +6,42 @@ Solvers and averagers for use in the MeerKAT calibration pipeline.
 """
 
 import numpy as np
-import logging
 import copy
 
+import logging
 logger = logging.getLogger(__name__)
+
+#--------------------------------------------------------------------------------------------------
+#--- Modelling procedures
+#--------------------------------------------------------------------------------------------------
+
+def radec_to_lm(ra, dec, ra0, dec0):
+    """
+    Parameteters
+    ------------
+    ra : Right Ascension, radians
+    dec : Declination, radians
+    ra0 : Right Ascention of centre, radians
+    dec0 : Declination of centre, radians
+
+    Returns
+    -------
+    l, m : direction cosines
+    """
+    l = np.cos(dec)*np.sin(ra-ra0)
+    m = np.sin(dec)*np.cos(dec0)-np.cos(dec)*np.sin(dec0)*np.cos(ra-ra0)
+    return l, m
+
+def list_to_model(model_list, centre_position):
+    lmI_list = []
+
+    ra0, dec0 = centre_position
+
+    for ra, dec, I in model_list:
+        l, m = radec_to_lm(ra, dec, ra0, dec0)
+        lmI_list.append([l, m, I])
+
+    return lmI_list
 
 #--------------------------------------------------------------------------------------------------
 #--- Solvers
@@ -39,7 +71,7 @@ def get_bl_ant_pairs(corrprod_lookup):
     return antlist1, antlist2
 
 def stefcal(vis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0, init_gain=None,
-    model=None, algorithm='adi', num_iters=100, conv_thresh=0.0001, verbose=False):
+    model=1.0, algorithm='adi', num_iters=100, conv_thresh=0.0001, verbose=False):
     """Solve for antenna gains using ADI StefCal.
     ADI StefCal implimentation from:
     'Fast gain calibration in radio astronomy using alternating direction implicit methods:
@@ -171,7 +203,7 @@ def adi_stefcal_nonparallel(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0,
 
     return g_curr
 
-def adi_stefcal(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=None, model=None,
+def adi_stefcal(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=None, model=1.,
 	 num_iters=100, conv_thresh=0.0001, verbose=False):
     """Solve for antenna gains using ADI StefCal. Parallel version of the algorithm.
     ADI StefCal implimentation from:
@@ -212,7 +244,7 @@ def adi_stefcal(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=N
 
     # initialise calibrator source model
     #   default is unity with zeros along the diagonals to ignore autocorr
-    M = 1.0 - np.eye(num_ants, dtype=np.complex) if model is None else model
+    M = model * (1.0 - np.eye(num_ants, dtype=np.complex)) if np.isscalar(model) else model
 
     antA, antB = bl_ant_pairs
     for i in range(num_iters):
@@ -587,7 +619,7 @@ def g_fit(data,corrprod_lookup,g0=None,refant=0,**kwargs):
     vis_and_conj = np.concatenate((data, data.conj()),axis=-1)
     return stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, ref_ant=refant, init_gain=g0, **kwargs)
 
-def bp_fit(data,corrprod_lookup,bp0=None,refant=0,algorithm='adi'):
+def bp_fit(data,corrprod_lookup,bp0=None,refant=0,algorithm='adi',model=None):
     """
     Fit bandpass to visibility data.
 
@@ -614,7 +646,7 @@ def bp_fit(data,corrprod_lookup,bp0=None,refant=0,algorithm='adi'):
 
     # stefcal needs the visibilities as a list of [vis,vis.conjugate]
     vis_and_conj = np.concatenate((data, data.conj()),axis=-1)
-    return stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=100, ref_ant=refant, init_gain=bp0, algorithm=algorithm)
+    return stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=100, ref_ant=refant, init_gain=bp0, model=model, algorithm=algorithm)
 
 def k_fit(data,corrprod_lookup,chans=None,k0=None,bp0=None,refant=0,chan_sample=None,algorithm='adi'):
     """
@@ -1061,3 +1093,15 @@ class CalSolution(object):
         self.values = solvalues
         self.times = soltimes
         self.ts_solname =  'cal_product_{0}'.format(soltype,)
+
+#--------------------------------------------------------------------------------------------------
+#--- General helper functions
+#--------------------------------------------------------------------------------------------------
+
+def arcsec_to_rad(angle):
+    return np.pi*angle/60./60./180.
+
+def flux(coeffs,frequencies):
+    nu_ghz = np.array(frequencies)/1.e9
+    a0, a1, a2, a3 = coeffs
+    return 10.**(a0 + a1*np.log10(nu_ghz) + a2*(np.log10(nu_ghz)**2.0) + a3*(np.log10(nu_ghz)**3.0))
