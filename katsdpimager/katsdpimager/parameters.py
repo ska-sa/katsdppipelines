@@ -25,10 +25,10 @@ def is_smooth(x):
 
 class ArrayParameters(object):
     """Physical attributes of an interferometric array."""
-    def __init__(self, diameter, longest_baseline):
-        assert diameter.unit.physical_type == 'length'
+    def __init__(self, antenna_diameter, longest_baseline):
+        assert antenna_diameter.unit.physical_type == 'length'
         assert longest_baseline.unit.physical_type == 'length'
-        self.diameter = diameter
+        self.antenna_diameter = antenna_diameter
         self.longest_baseline = longest_baseline
 
 
@@ -79,7 +79,7 @@ class ImageParameters(object):
         # Compute number of pixels
         if pixels is None:
             # These are just a preliminary cell and pixel size, to compute pixels
-            cell_size = array.diameter * (math.pi / (7.6634 * q_fov))
+            cell_size = array.antenna_diameter * (math.pi / (7.6634 * q_fov))
             image_size = self.wavelength / cell_size
             # Allow image to be slightly smaller if it makes the Fourier transform easier
             pixels = int(0.98 * image_size / self.pixel_size)
@@ -100,6 +100,7 @@ class ImageParameters(object):
         self.polarizations = polarizations
 
     def __str__(self):
+        import polarization
         return """\
 Pixel size: {:.3f}
 Pixels: {}
@@ -112,7 +113,7 @@ Polarizations: {}
             self.pixels,
             np.arcsin(self.pixel_size * self.pixels).to(units.deg),
             self.cell_size, self.wavelength,
-            ','.join([STOKES_NAMES[i] for i in self.polarizations]))
+            ','.join([polarization.STOKES_NAMES[i] for i in self.polarizations]))
 
 
 class GridParameters(object):
