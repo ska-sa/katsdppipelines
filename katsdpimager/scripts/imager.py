@@ -5,6 +5,7 @@ import sys
 import argparse
 import astropy.units as units
 import numpy as np
+import logging
 import katsdpsigproc.accel as accel
 import katsdpimager.loader as loader
 import katsdpimager.parameters as parameters
@@ -20,7 +21,7 @@ def parse_quantity(str_value):
     """Parse a string into an astropy Quantity. Rather than trying to guess
     where the split occurs, we try every position from the back until we
     succeed."""
-    for i in range(len(str_value), -1, 0):
+    for i in range(len(str_value), 0, -1):
         try:
             value = float(str_value[:i])
             unit = units.Unit(str_value[i:])
@@ -63,7 +64,9 @@ def get_parser():
     group.add_argument('--kernel-image-oversample', type=int, default=4, help='Oversampling factor for kernel generation [%(default)s]')
     group.add_argument('--w-planes', type=int, default=128, help='Number of W planes [%(default)s]'),
     group.add_argument('--max-w', type=parse_quantity, help='Largest w, as either distance or wavelengths [longest baseline]')
-    group.add_argument('--aa-size', type=float, default=7, help='Support of anti-aliasing kernel [%(default)s]')
+    group.add_argument('--aa-width', type=float, default=7, help='Support of anti-aliasing kernel [%(default)s]')
+    group.add_argument('--kernel-width', type=float, default=None, help='Support of combined anti-aliasing + w kernel [computed]')
+    group.add_argument('--eps-w', type=float, default=0.01, help='Level at which to truncate W kernel [%(default)s]')
     group = parser.add_argument_group('Cleaning options')
     # TODO: compute from some heuristic if not specified, instead of a hard-coded default
     group.add_argument('--psf-patch', type=int, default=100, help='Pixels in beam patch for cleaning [%(default)s]')
@@ -154,14 +157,20 @@ def make_dirty(queue, dataset, args, polarization_matrix, gridder, grid_to_image
 
 def psf_shape(image_parameters, clean_parameters):
     psf_patch = min(image_parameters.pixels, clean_parameters.psf_patch)
-    return (psf_patch, psf_patch, len(image_parameters.polarizations))
+    return (len(image_parameters.polarizations), psf_patch, psf_patch)
 
 def extract_psf(image, psf):
-    y0 = (image.shape[0] - psf.shape[0]) // 2
-    y1 = y0 + psf.shape[0]
-    x0 = (image.shape[1] - psf.shape[1]) // 2
-    x1 = y0 + psf.shape[1]
-    psf[...] = image[y0:y1, x0:x1, ...]
+    """Copy the central region of `image` to `psf`.
+
+    .. todo::
+
+        Move to clean module, and ideally on the GPU.
+    """
+    y0 = (image.shape[1] - psf.shape[1]) // 2
+    y1 = y0 + psf.shape[1]
+    x0 = (image.shape[2] - psf.shape[2]) // 2
+    x1 = y0 + psf.shape[2]
+    psf[...] = image[..., y0:y1, x0:x1]
 
 def main():
     parser = get_parser()
@@ -189,9 +198,11 @@ def main():
             args.max_w = array_p.longest_baseline
         elif args.max_w.unit.physical_type == 'dimensionless':
             args.max_w = args.max_w * image_p.wavelength
+        if args.kernel_width is None:
+            args.kernel_width = parameters.w_kernel_width(image_p, args.max_w, args.eps_w, args.aa_width)
         grid_p = parameters.GridParameters(
-            args.aa_size, args.grid_oversample, args.kernel_image_oversample,
-            args.w_planes, args.max_w)
+            args.aa_width, args.grid_oversample, args.kernel_image_oversample,
+            args.w_planes, args.max_w, args.kernel_width)
         if args.clean_mode == 'I':
             clean_mode = clean.CLEAN_I
         elif args.clean_mode == 'IQUV':
@@ -203,6 +214,8 @@ def main():
             args.psf_patch)
 
         #### Create data and operation instances ####
+        lm_scale = float(image_p.pixel_size)
+        lm_bias = -0.5 * image_p.pixels * lm_scale
         if args.host:
             gridder = grid.GridderHost(image_p, grid_p)
             grid_data = gridder.values
@@ -210,10 +223,10 @@ def main():
             image = np.empty(grid_data.shape, image_p.real_dtype)
             model = np.empty(grid_data.shape, image_p.real_dtype)
             psf = np.empty(psf_shape(image_p, clean_p), image_p.real_dtype)
-            grid_to_image = fft.GridToImageHost(grid_data, layer, image)
+            grid_to_image = fft.GridToImageHost(
+                grid_data, layer, image,
+                gridder.taper(image_p.pixels), lm_scale, lm_bias)
             cleaner = clean.CleanHost(image_p, clean_p, image, psf, model)
-            image_scale = np.reciprocal(gridder.taper(image_p.pixels,
-                np.empty((image_p.pixels, image_p.pixels), image_p.real_dtype)))
         else:
             allocator = accel.SVMAllocator(context)
             # Gridder
@@ -222,43 +235,44 @@ def main():
             gridder.ensure_all_bound()
             grid_data = gridder.buffer('grid')
             # Grid to image
-            image_scale = np.reciprocal(gridder_template.taper(image_p.pixels,
-                accel.SVMArray(context, (image_p.pixels, image_p.pixels), image_p.real_dtype)))
+            kernel1d = accel.SVMArray(context, (image_p.pixels,), image_p.real_dtype)
+            gridder_template.taper(image_p.pixels, kernel1d)
+            # TODO: allocate these from the operations, to ensure alignment
             layer = accel.SVMArray(context, grid_data.shape, image_p.complex_dtype)
             image = accel.SVMArray(context, grid_data.shape, image_p.real_dtype)
             grid_to_image_template = fft.GridToImageTemplate(
                 queue, grid_data.shape, grid_data.padded_shape, image.shape, image.dtype)
-            grid_to_image = grid_to_image_template.instantiate(allocator)
-            grid_to_image.bind(grid=grid_data, layer=layer, image=image)
+            grid_to_image = grid_to_image_template.instantiate(lm_scale, lm_bias, allocator)
+            grid_to_image.bind(grid=grid_data, layer=layer, image=image, kernel1d=kernel1d)
             # CLEAN
-            psf = accel.SVMArray(context, psf_shape(image_p, clean_p), image_p.real_dtype)
-            model = accel.SVMArray(context, image.shape, image.dtype)
-            model[:] = 0
             cleaner_template = clean.CleanTemplate(
                 context, clean_p, image_p.real_dtype, len(output_polarizations))
             cleaner = cleaner_template.instantiate(queue, image_p, allocator)
-            cleaner.bind(dirty=image, model=model, psf=psf)
+            cleaner.bind(dirty=image)
             cleaner.ensure_all_bound()
+            psf = cleaner.buffer('psf')
+            model = cleaner.buffer('model')
+            model[:] = 0
 
         #### Create dirty image ####
         make_psf(queue, dataset, args, polarization_matrix, gridder, grid_to_image)
         # TODO: all this scaling is hacky. Move it into subroutines somewhere
-        image *= image_scale[..., np.newaxis]
-        scale = np.reciprocal(image[image.shape[0] // 2, image.shape[1] // 2, ...])
+        scale = np.reciprocal(image[..., image.shape[1] // 2, image.shape[2] // 2])
+        scale = scale[:, np.newaxis, np.newaxis]
         image *= scale
         if args.write_psf is not None:
             with progress.step('Write PSF'):
                 io.write_fits_image(dataset, image, image_p, args.write_psf)
         extract_psf(image, psf)
         make_dirty(queue, dataset, args, polarization_matrix, gridder, grid_to_image)
-        image *= image_scale[..., np.newaxis]
         image *= scale
         if args.write_grid is not None:
             with progress.step('Write grid'):
                 if args.host:
                     io.write_fits_grid(grid_data, image_p, args.write_grid)
                 else:
-                    io.write_fits_grid(np.fft.fftshift(grid_data), image_p, args.write_grid)
+                    io.write_fits_grid(np.fft.fftshift(grid_data, axes=(1, 2)),
+                                       image_p, args.write_grid)
         if args.write_dirty is not None:
             with progress.step('Write dirty image'):
                 io.write_fits_image(dataset, image, image_p, args.write_dirty)
@@ -284,4 +298,5 @@ def main():
             io.write_fits_image(dataset, model, image_p, args.output_file)
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     main()
