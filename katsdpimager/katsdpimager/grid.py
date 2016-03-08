@@ -1,6 +1,85 @@
 # -*- coding: utf-8 -*-
 
-"""Convolutional gridding"""
+r"""Convolutional gridding with W projection.
+
+The GPU approach is based on [Rom12_]. Each workgroup (thread block) handles a
+contiguous range of visibilities, with the threads cooperating to grid each
+visibility.  The grid is divided into *bins*, whose size is the same as the
+size of the convolution function. These bins are further divided into *tiles*,
+which are divided into *blocks*. A workitem (thread) handles all blocks that
+are at the same offset within their bin. Similarly, a workgroup handles all
+tiles that are at the same offset within their bin.
+
+.. tikz:: Mapping of workitems and workgroups to group points. One workgroup
+   contributes to all the green cells. One workitem contributes to all the
+   cells marked with a red dot. Here blocks are 2×2, tiles are 4×4 and bins
+   are 8×8. The dashed lines indicate the footprint of the convolution kernel
+   for a single visibility, showing that the thread contributes four values.
+
+   [x=0.5cm, y=0.5cm]
+   \foreach \i in {4, 12}
+       \foreach \j in {0, 8}
+       {
+           \fill[shift={(\i,\j)},green!50!white] (0, 0) rectangle (4, 4);
+       }
+   \foreach \i in {4,5, 12, 13}
+       \foreach \j in {2,3, 10,11}
+       {
+           \node[shift={(\i,\j)},circle,inner sep=0pt, minimum size=0.2cm,fill=red] at (0.5, 0.5) {};
+       }
+   \draw[help lines] (0, 0) grid[step=0.5cm] (16, 16);
+   \draw[very thick] (0, 0) grid[step=4cm] (16, 16);
+   \draw[very thick,dashed] (2, 3) rectangle (10, 11);
+
+This means that each visibility is processed by multiple work-groups.
+Specifically, the number of work-groups loading a visibility is the bin size
+over the tile size.
+
+Each thread maintains a number of accumulators: one per position within a
+block, per polarization. When moving to the next visibility, any counters that
+now correspond to a grid element outside the footprint are flushed to global
+memory (with an atomic add), and reset to a zero value at the new position
+that falls inside the footprint. Provided that the footprint only moves
+slowly, this reduces memory traffic.
+
+Visibilities are loaded in *batches*, whose size equals the number of
+workitems in a workgroup. First, all workitems cooperatively load a batch,
+preprocess it to determine pixel and subpixel coordinates, and store the
+values in shared memory. Then, each thread iterates over the visibilities in
+the batch. This amortises the costs of the global memory loads and address
+computations.
+
+Future planned changes
+----------------------
+At present, the footprint is allowed to move one grid cell at a time. If it
+were forced to allows align to the blocks, then a number of address
+computations could be amortized over a whole block. This would require that
+the kernel function be padded slightly (by one less than the block size) so
+that the support of the function always falls within the footprint, even when
+the footprint has been snapped to the block grid.
+
+There are two possible ways to handle tiles. The current implementation puts
+each tile position into a different workgroup. This has the advantage that it
+is not necessary to flush all the accumulators at the end of each batch, but
+the disadvantage that every visibility is loaded from global memory multiple
+times. A possible alternative (for which further analysis would be needed) is
+to load a batch into shared memory, and then process multiple tiles in series
+inside the workgroup, reusing the values in shared memory each time.
+
+Another reason to use separate workgroups for each tile is that it may be
+possible to eliminate atomic operations on small devices (such as a Tegra K1
+or X1) by having each workgroup process *all* the visibilities, rather than
+splitting them up to create more workgroups. This eliminates the potential for
+race conditions, because each workgroup is handling a disjoint part of the
+grid. This does limit the amount of available parallelism to the number of
+blocks per bin, which is why it is probably only practical on embedded
+devices, and even then probably requires a block size of 1.
+
+.. [Rom12] Romein, John W. 2012. An efficient work-distribution strategy for
+   gridding radio-telescope data on GPUs. In *Proceedings of the 26th ACM International
+   Conference on Supercomputing (ICS '12)*, 321-330.
+   http://www.astron.nl/~romein/papers/ICS-12/gridding.pdf
+"""
 
 from __future__ import division, print_function
 from . import parameters
@@ -12,6 +91,9 @@ import katsdpsigproc.accel as accel
 import katsdpsigproc.tune as tune
 import numba
 import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def kaiser_bessel(x, width, beta):
@@ -124,7 +206,7 @@ def antialias_w_kernel(
     :math:`\sqrt{1-l^2-m^2}-1 \approx (\sqrt{1-l^2}-1) + (\sqrt{1-m^2}-1)`
     makes it makes it very close to separable [#]_.
 
-    .. [#] The error in the approximation above is on the order of :math:10^{-8}
+    .. [#] The error in the approximation above is on the order of :math:`10^{-8}`
        for a 1 degree field of view.
 
     We multiply the inverse Fourier transform of the (idealised) antialiasing
@@ -214,7 +296,10 @@ def _generate_convolve_kernel(image_parameters, grid_parameters, width, out=None
             (grid_parameters.w_planes, grid_parameters.oversample, width),
             np.complex64)
     cell_wavelengths = float(image_parameters.cell_size / image_parameters.wavelength)
-    max_w_wavelengths = float(grid_parameters.max_w / image_parameters.wavelength)
+    # Separation in w between slices
+    w_slice_wavelengths = float(grid_parameters.max_w / (grid_parameters.w_slices * image_parameters.wavelength))
+    # Separation in w between planes
+    w_plane_wavelengths = w_slice_wavelengths / grid_parameters.w_planes
     # Puts the first null of the taper function at the edge of the image
     beta = math.pi * math.sqrt(0.25 * grid_parameters.antialias_width**2 - 1.0)
     # Move the null outside the image, to avoid numerical instabilities.
@@ -222,7 +307,10 @@ def _generate_convolve_kernel(image_parameters, grid_parameters, width, out=None
     # ideally should be handled by clipping the image.
     beta *= 1.2
     # TODO: use sqrt(w) scaling as in Cornwell, Golap and Bhatnagar (2008)?
-    for i, w in enumerate(np.linspace(0.0, max_w_wavelengths, grid_parameters.w_planes)):
+    # TODO: can halve work and memory by exploiting conjugate symmetry
+    # Find w for the midpoint of the final plane
+    max_w_wavelengths = (w_slice_wavelengths - w_plane_wavelengths) * 0.5
+    for i, w in enumerate(np.linspace(-max_w_wavelengths, max_w_wavelengths, grid_parameters.w_planes)):
         antialias_w_kernel(
             cell_wavelengths, w, width,
             grid_parameters.oversample,
@@ -244,17 +332,18 @@ class GridderTemplate(object):
         self.image_parameters = image_parameters
         self.dtype = image_parameters.complex_dtype
         # These must be powers of 2. TODO: autotune
-        self.wgs_x = 8
-        self.wgs_y = 8
-        self.multi_x = 2
-        self.multi_y = 2
+        self.wgs_x = 16
+        self.wgs_y = 16
+        self.multi_x = 1
+        self.multi_y = 1
         self.tile_x = self.wgs_x * self.multi_x
         self.tile_y = self.wgs_y * self.multi_y
         kernel_size = max(self.tile_x, self.tile_y)
         # Round kernel size up to a power of 2
         while kernel_size < grid_parameters.kernel_width:
             kernel_size *= 2
-        logging.info("Using kernel size of %d", kernel_size)
+        if kernel_size != grid_parameters.kernel_width:
+            logger.info("kernel size rounded up to %d", kernel_size)
         assert kernel_size % self.tile_x == 0
         assert kernel_size % self.tile_y == 0
         self.num_polarizations = len(image_parameters.polarizations)
@@ -310,6 +399,20 @@ class GridderTemplate(object):
 
 
 class Gridder(accel.Operation):
+    """Instantiation of :class:`GridderTemplate`.
+
+    .. rubric:: Slots
+
+    **uv** : array of int16×4
+        The first two elements for each visibility are the
+        UV coordinates of the first grid cell to be updated. The other two are
+        the subpixel U and V coordinates.
+    **w_plane** : array of int16
+        W plane index per visibility, clamped to the range of allocated w planes
+    **vis** : array of complex64 × pols
+        Visibilities
+    """
+
     def __init__(self, template, command_queue, array_parameters,
                  max_vis, allocator=None):
         super(Gridder, self).__init__(command_queue, allocator)
@@ -324,18 +427,13 @@ class Gridder(accel.Operation):
         self.slots['grid'] = accel.IOSlot(
             (template.num_polarizations, template.image_parameters.pixels, template.image_parameters.pixels),
             template.dtype)
-        self.slots['uvw'] = accel.IOSlot(
-            (max_vis, accel.Dimension(3, exact=True)), np.float32)
+        self.slots['uv'] = accel.IOSlot(
+            (max_vis, accel.Dimension(4, exact=True)), np.int16)
+        self.slots['w_plane'] = accel.IOSlot((max_vis,), np.int16)
         self.slots['vis'] = accel.IOSlot(
             (max_vis, accel.Dimension(template.num_polarizations, exact=True)), np.complex64)
         self.kernel = template.program.get_kernel('grid')
         self._num_vis = 0
-        cell_size_m = template.image_parameters.cell_size.to(units.m).value
-        self.uv_scale = template.grid_parameters.oversample / cell_size_m
-        # Offset to bias coordinates such that u,v=0 translates to the first
-        # pixel to update in the grid, measured in subpixels
-        uv_bias_pixels = template.image_parameters.pixels // 2 - (convolve_kernel_size - 1) // 2
-        self.uv_bias = float(uv_bias_pixels) * template.grid_parameters.oversample
 
     def set_num_vis(self, n):
         if n < 0 or n > self.max_vis:
@@ -347,13 +445,18 @@ class Gridder(accel.Operation):
         """TODO: implement on GPU"""
         self.buffer('grid').fill(0)
 
-    def grid(self, uvw, vis):
+    def grid(self, uv, sub_uv, w_plane, vis):
         """Add visibilities to the grid, with convolutional gridding using the
         anti-aliasing filter."""
-        self.set_num_vis(len(uvw))
-        self.buffer('uvw')[:len(uvw)] = uvw
-        self.buffer('vis')[:len(vis)] = vis
-        self()
+        N = len(uv)
+        if len(sub_uv) != N or len(w_plane) != N or len(vis) != N:
+            raise ValueError('Lengths do not match')
+        self.set_num_vis(N)
+        self.buffer('uv')[:N, 0:2] = uv
+        self.buffer('uv')[:N, 2:4] = sub_uv
+        self.buffer('w_plane')[:N] = w_plane
+        self.buffer('vis')[:N] = vis
+        return self()
 
     def _run(self):
         if self._num_vis == 0:
@@ -370,11 +473,10 @@ class Gridder(accel.Operation):
                 grid.buffer,
                 np.int32(grid.padded_shape[2]),
                 np.int32(grid.padded_shape[1] * grid.padded_shape[2]),
-                self.buffer('uvw').buffer,
+                self.buffer('uv').buffer,
+                self.buffer('w_plane').buffer,
                 self.buffer('vis').buffer,
                 self.template.convolve_kernel.buffer,
-                np.float32(self.uv_scale),
-                np.float32(self.uv_bias),
                 np.int32(vis_per_workgroup),
                 np.int32(self._num_vis),
             ],
@@ -392,35 +494,20 @@ class Gridder(accel.Operation):
 
 
 @numba.jit(nopython=True)
-def _grid(kernel, values, uvw, vis, pixels, cell_size, oversample, w_scale, sample):
+def _grid(kernel, values, uv, sub_uv, w_plane, vis, sample):
     """Internal implementation of :meth:`GridderHost.grid`, split out so that
     Numba can JIT it.
     """
-    max_w = kernel.shape[0] - 1
     ksize = kernel.shape[2]
-    # Offset to bias coordinates such that l,m=0 translates to the first
-    # pixel to update in the grid.
-    offset = np.float32(pixels // 2 - (ksize - 1) // 2)
-    uv_scale = np.float32(1 / cell_size)
-    for row in range(uvw.shape[0]):
-        u, v, w = uvw[row]
+    for row in range(uv.shape[0]):
+        u0, v0 = uv[row]
+        sub_u, sub_v = sub_uv[row]
         for i in range(vis.shape[1]):
             sample[i] = vis[row, i]
-        if w < 0:
-            u = -u
-            v = -v
-            w = -w
-            np.conj(sample, sample)
         # u and v are converted to cells, w to planes
-        u = u * uv_scale + offset
-        v = v * uv_scale + offset
-        w = np.rint(w * w_scale)
-        w_plane = int(min(w, max_w))
-        u0, sub_u = subpixel_coord(u, oversample)
-        v0, sub_v = subpixel_coord(v, oversample)
         for j in range(ksize):
             for k in range(ksize):
-                kernel_sample = kernel[w_plane, sub_v, j] * kernel[w_plane, sub_u, k]
+                kernel_sample = kernel[w_plane[row], sub_v, j] * kernel[w_plane[row], sub_u, k]
                 weight = np.conj(kernel_sample)
                 for pol in range(values.shape[0]):
                     values[pol, int(v0 + j), int(u0 + k)] += sample[pol] * weight
@@ -454,23 +541,21 @@ class GridderHost(object):
         x = np.arange(N) / N - 0.5
         return kaiser_bessel_fourier(x, self.grid_parameters.antialias_width, self.beta, out)
 
-    def grid(self, uvw, vis):
+    def grid(self, uv, sub_uv, w_plane, vis):
         """Add visibilities to the grid, with convolutional gridding.
 
         Parameters
         ----------
-        uvw : 2D Quantity array
-            UVW coordinates for visibilities, indexed by sample then u/v/w
-        vis : 2D ndarray of complex
+        uv : 2D array, integer
+            Preprocessed grid UV coordinates
+        sub_uv : 2D array, integer
+            Preprocessed grid UV sub-pixel coordinates
+        w_plane : 1D array, integer
+            Preprocessed grid W plane coordinates
+        vis : 2D ndarray of complex or real
             Visibility data, indexed by sample and polarization, and
             pre-multiplied by all weights
         """
-        assert uvw.unit.physical_type == 'length'
-        pixels = self.image_parameters.pixels
-        w_scale = float(units.m / self.grid_parameters.max_w) * (self.grid_parameters.w_planes - 1)
         _grid(self.kernel, self.values,
-              uvw.to(units.m).value.astype(np.float32), vis,
-              self.image_parameters.pixels,
-              self.image_parameters.cell_size.to(units.m).value,
-              self.grid_parameters.oversample,
-              np.float32(w_scale), np.empty((vis.shape[1],), self.values.dtype))
+              uv, sub_uv, w_plane, vis,
+              np.empty((vis.shape[1],), self.values.dtype))

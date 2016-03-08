@@ -1,6 +1,7 @@
 """Tests for katsdpimager.fft"""
 
 import numpy as np
+import math
 import katsdpimager.fft as fft
 import katsdpsigproc.accel as accel
 from katsdpsigproc.test.test_accel import device_test, cuda_test
@@ -51,8 +52,10 @@ class TestTaperDivide(object):
         size = 102
         lm_scale = 0.1 / size
         lm_bias = -lm_scale * size / 3   # Off-centre, to check that it's working
+        w = 12.3
         template = fft.TaperDivideTemplate(context, np.float32)
         fn = template.instantiate(command_queue, (size, size), lm_scale, lm_bias)
+        fn.set_w(w)
         fn.ensure_all_bound()
         # Create random input data
         rs = np.random.RandomState(1)
@@ -60,11 +63,14 @@ class TestTaperDivide(object):
         kernel1d = rs.uniform(1.0, 2.0, size).astype(np.float32)
         fn.buffer('kernel1d').set(command_queue, kernel1d)
         fn.buffer('src').set(command_queue, src)
+        fn.buffer('dest').set(command_queue, np.zeros((size, size), np.float32))
         # Compute expected value
         lm = np.arange(size) * lm_scale + lm_bias
         lm2 = lm * lm
         n = np.sqrt(1 - lm2[:, np.newaxis] - lm2[np.newaxis, :])
-        expected = np.fft.fftshift(src.real) * n / np.outer(kernel1d, kernel1d)
+        w_correction = np.exp(2j * math.pi * w * (n - 1))
+        corrected = np.fft.fftshift(src) * w_correction
+        expected = corrected.real * n / np.outer(kernel1d, kernel1d)
         # Check it
         fn()
         actual = fn.buffer('dest').get(command_queue)
@@ -77,8 +83,10 @@ class TestTaperDivide(object):
         shape = (slices, size, size)
         lm_scale = 0.1 / size
         lm_bias = -lm_scale * size / 3   # Off-centre, to check that it's working
+        w = 12.3
         template = fft.TaperDivideTemplate(context, np.float32)
         fn = template.instantiate(command_queue, shape, lm_scale, lm_bias)
+        fn.set_w(w)
         fn.ensure_all_bound()
         # Create random input data
         rs = np.random.RandomState(1)
@@ -86,11 +94,14 @@ class TestTaperDivide(object):
         kernel1d = rs.uniform(1.0, 2.0, size).astype(np.float32)
         fn.buffer('kernel1d').set(command_queue, kernel1d)
         fn.buffer('src').set(command_queue, src)
+        fn.buffer('dest').set(command_queue, np.zeros(shape, np.float32))
         # Compute expected value
         lm = np.arange(size) * lm_scale + lm_bias
         lm2 = lm * lm
         n = np.sqrt(1 - lm2[np.newaxis, :, np.newaxis] - lm2[np.newaxis, np.newaxis, :])
-        expected = np.fft.fftshift(src.real, axes=(1, 2)) * n / np.outer(kernel1d, kernel1d)[np.newaxis, ...]
+        w_correction = np.exp(2j * math.pi * w * (n - 1))
+        corrected = np.fft.fftshift(src, axes=(1, 2)) * w_correction
+        expected = corrected.real * n / np.outer(kernel1d, kernel1d)[np.newaxis, ...]
         # Check it
         fn()
         actual = fn.buffer('dest').get(command_queue)

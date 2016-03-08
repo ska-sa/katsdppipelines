@@ -6,16 +6,26 @@ import argparse
 import astropy.units as units
 import numpy as np
 import logging
+import colors
+import functools
+import tempfile
+import atexit
+import os
 import katsdpsigproc.accel as accel
 import katsdpimager.loader as loader
 import katsdpimager.parameters as parameters
 import katsdpimager.polarization as polarization
+import katsdpimager.preprocess as preprocess
 import katsdpimager.grid as grid
 import katsdpimager.io as io
 import katsdpimager.fft as fft
 import katsdpimager.clean as clean
 import katsdpimager.progress as progress
 from contextlib import closing, contextmanager
+
+
+logger = logging.getLogger()
+
 
 def parse_quantity(str_value):
     """Parse a string into an astropy Quantity. Rather than trying to guess
@@ -49,6 +59,7 @@ def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file', type=str, metavar='INPUT', help='Input measurement set')
     parser.add_argument('output_file', type=str, metavar='OUTPUT', help='Output FITS file')
+    parser.add_argument('--log-level', type=str, default='INFO', metavar='LEVEL', help='Logging level [%(default)s]')
     group = parser.add_argument_group('Input selection')
     group.add_argument('--input-option', '-i', action='append', default=[], metavar='KEY=VALUE', help='Backend-specific input parsing option')
     group.add_argument('--channel', '-c', type=int, default=0, help='Channel number [%(default)s]')
@@ -62,10 +73,11 @@ def get_parser():
     group = parser.add_argument_group('Gridding options')
     group.add_argument('--grid-oversample', type=int, default=8, help='Oversampling factor for convolution kernels [%(default)s]')
     group.add_argument('--kernel-image-oversample', type=int, default=4, help='Oversampling factor for kernel generation [%(default)s]')
-    group.add_argument('--w-planes', type=int, default=128, help='Number of W planes [%(default)s]'),
+    group.add_argument('--w-slices', type=int, help='Number of W slices [computed from --kernel-width]')
+    group.add_argument('--w-step', type=parse_quantity, default='1.0', help='Separation between W planes, in subgrid cells or a distance [%(default)s]'),
     group.add_argument('--max-w', type=parse_quantity, help='Largest w, as either distance or wavelengths [longest baseline]')
     group.add_argument('--aa-width', type=float, default=7, help='Support of anti-aliasing kernel [%(default)s]')
-    group.add_argument('--kernel-width', type=float, default=None, help='Support of combined anti-aliasing + w kernel [computed]')
+    group.add_argument('--kernel-width', type=int, default=64, help='Support of combined anti-aliasing + w kernel [computed]')
     group.add_argument('--eps-w', type=float, default=0.01, help='Level at which to truncate W kernel [%(default)s]')
     group = parser.add_argument_group('Cleaning options')
     # TODO: compute from some heuristic if not specified, instead of a hard-coded default
@@ -74,14 +86,17 @@ def get_parser():
     group.add_argument('--minor', type=int, default=1000, help='Minor cycles per major cycle [%(default)s]')
     group.add_argument('--clean-mode', choices=['I', 'IQUV'], default='IQUV', help='Stokes parameters to consider for peak-finding [%(default)s]')
     group = parser.add_argument_group('Performance tuning options')
-    group.add_argument('--vis-block', type=int, default=1048576, help='Number of visibilities to load at a time [%(default)s]')
+    group.add_argument('--vis-block', type=int, default=1048576, help='Number of visibilities to load and grid at a time [%(default)s]')
+    group.add_argument('--no-tmp-file', dest='tmp_file', action='store_false', default=True, help='Keep preprocessed visibilities in memory')
+    group.add_argument('--max-cache-size', type=int, default=None, help='Limit HDF5 cache size for preprocessing')
     group = parser.add_argument_group('Debugging options')
-    group.add_argument('--host', action='store_true', help='Perform gridding on the CPU')
+    group.add_argument('--host', action='store_true', help='Perform operations on the CPU')
     group.add_argument('--write-psf', metavar='FILE', help='Write image of PSF to FITS file')
     group.add_argument('--write-grid', metavar='FILE', help='Write UV grid to FITS file')
     group.add_argument('--write-dirty', metavar='FILE', help='Write dirty image to FITS file')
     group.add_argument('--write-model', metavar='FILE', help='Write model image to FITS file')
     group.add_argument('--write-residuals', metavar='FILE', help='Write image residuals to FITS file')
+    group.add_argument('--profile', action='store_true', help='Do profiling on GPU code')
     group.add_argument('--vis-limit', type=int, metavar='N', help='Use only the first N visibilities')
     return parser
 
@@ -94,7 +109,7 @@ def data_iter(dataset, args):
     for chunk in dataset.data_iter(args.channel, args.vis_block):
         if N is not None:
             if N < len(chunk['uvw']):
-                for key in ['uvw', 'weights', 'vis']:
+                for key in ['uvw', 'weights', 'baselines', 'vis']:
                     if key in chunk:
                         chunk[key] = chunk[key][:N]
                 chunk['progress'] = chunk['total']
@@ -104,56 +119,80 @@ def data_iter(dataset, args):
             if N == 0:
                 return
 
-def make_psf(queue, dataset, args, polarization_matrix, gridder, grid_to_image):
+def preprocess_visibilities(dataset, args, image_parameters, grid_parameters, polarization_matrix):
     bar = None
-    gridder.clear()
-    # TODO: pass a flag to avoid retrieving visibilities
+    if args.tmp_file:
+        handle, filename = tempfile.mkstemp('.h5')
+        os.close(handle)
+        atexit.register(os.remove, filename)
+        collector = preprocess.VisibilityCollectorHDF5(
+            filename, [image_parameters], grid_parameters, args.vis_block,
+            max_cache_size=args.max_cache_size)
+    else:
+        collector = preprocess.VisibilityCollectorMem([image_parameters], grid_parameters, args.vis_block)
     try:
         for chunk in data_iter(dataset, args):
-            uvw = chunk['uvw']
-            weights = chunk['weights']
             if bar is None:
-                bar = progress.make_progressbar("Gridding PSF", max=chunk['total'])
-            # Transform the visibilities to the desired polarization
-            weights = polarization.apply_polarization_matrix_weights(weights, polarization_matrix)
-            gridder.grid(uvw, weights)
-            if queue:
-                queue.finish()
+                bar = progress.make_progressbar("Preprocessing vis", max=chunk['total'])
+            collector.add(
+                0, chunk['uvw'], chunk['weights'], chunk['baselines'], chunk['vis'],
+                polarization_matrix)
             bar.goto(chunk['progress'])
     finally:
-        bar.finish()
+        if bar is not None:
+            bar.finish()
+        collector.close()
+    logger.info("Compressed %d visibilities to %d (%.2f%%)",
+        collector.num_input, collector.num_output, 100.0 * collector.num_output / collector.num_input)
+    return collector
 
-    with progress.step('FFT PSF'):
-        grid_to_image()
-        if queue:
-            queue.finish()
 
-def make_dirty(queue, dataset, args, polarization_matrix, gridder, grid_to_image):
-    bar = None
-    gridder.clear()
-    try:
-        for chunk in data_iter(dataset, args):
-            uvw = chunk['uvw']
-            weights = chunk['weights']
-            vis = chunk['vis']
-            if bar is None:
-                bar = progress.make_progressbar("Gridding", max=chunk['total'])
-            # Transform the visibilities to the desired polarization
-            vis = polarization.apply_polarization_matrix(vis, polarization_matrix)
-            weights = polarization.apply_polarization_matrix_weights(weights, polarization_matrix)
-            # Pre-weight the visibilities
-            vis *= weights
-            gridder.grid(uvw, vis)
+def timer(queue):
+    """Decorator that enqueues markers before and after the wrapped function, and
+    returns a function that, when called, returns the elapsed time."""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            def get_elapsed():
+                return end.time_since(start)
+            start = queue.enqueue_marker()
+            fn(*args, **kwargs)
+            end = queue.enqueue_marker()
+            return get_elapsed
+        return wrapper
+    return decorator
+
+
+def make_dirty(queue, reader, name, field, gridder, grid_to_image, mid_w, vis_block):
+    grid_to_image.clear()
+    for w_slice in range(reader.num_w_slices):
+        N = reader.len(0, w_slice)
+        if N == 0:
+            logger.info("Skipping slice %d which has no visibilities", w_slice + 1)
+            continue
+        label = '{} {}/{}'.format(name, w_slice + 1, reader.num_w_slices)
+        bar = progress.make_progressbar('Grid {}'.format(label), max=N)
+        gridder.clear()
+        grid_time = 0.0
+        with progress.finishing(bar):
+            for chunk in reader.iter_slice(0, w_slice, vis_block):
+                t = gridder.grid(chunk.uv, chunk.sub_uv, chunk.w_plane, chunk[field])
+                if queue:
+                    # Need to serialise calls to grid, since otherwise the next
+                    # call will overwrite the incoming data before the previous
+                    # iteration is done with it.
+                    queue.finish()
+                if t is not None:
+                    grid_time += t()
+                bar.next(len(chunk))
+        if grid_time > 0.0:
+            logger.info("Gridded %d points in %.3fs (%.3g/s)", N, grid_time, N / grid_time)
+
+        with progress.step('FFT {}'.format(label)):
+            grid_to_image.set_w(mid_w[w_slice])
+            grid_to_image()
             if queue:
                 queue.finish()
-            bar.goto(chunk['progress'])
-    finally:
-        bar.finish()
-
-    with progress.step('FFT'):
-        grid_to_image()
-        if queue:
-            queue.finish()
 
 def psf_shape(image_parameters, clean_parameters):
     psf_patch = min(image_parameters.pixels, clean_parameters.psf_patch)
@@ -172,16 +211,57 @@ def extract_psf(image, psf):
     x1 = y0 + psf.shape[2]
     psf[...] = image[..., y0:y1, x0:x1]
 
+
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.CRITICAL: colors.red,
+        logging.ERROR: colors.red,
+        logging.WARNING: colors.magenta,
+        logging.INFO: colors.green,
+        logging.DEBUG: colors.cyan
+    }
+
+    def __init__(self, *args, **kwargs):
+        super(ColorFormatter, self).__init__(*args, **kwargs)
+
+    def format(self, record):
+        msg = super(ColorFormatter, self).format(record)
+        if record.levelno in self.COLORS:
+            msg = self.COLORS[record.levelno](msg)
+        return msg
+
+
+def configure_logging(args):
+    log_handler = logging.StreamHandler()
+    fmt = "[%(levelname)s] %(message)s"
+    if sys.stderr.isatty():
+        log_handler.setFormatter(ColorFormatter(fmt))
+    else:
+        log_handler.setFormatter(logging.Formatter(fmt))
+    logger.addHandler(log_handler)
+    logger.setLevel(args.log_level.upper())
+
+def log_parameters(name, params):
+    if logger.isEnabledFor(logging.INFO):
+        s = str(params)
+        lines = s.split('\n')
+        logger.info(name + ":")
+        for line in lines:
+            if line:
+                logger.info('    ' + line)
+
+
 def main():
     parser = get_parser()
     args = parser.parse_args()
     args.input_option = ['--' + opt for opt in args.input_option]
+    configure_logging(args)
 
     queue = None
     context = None
     if not args.host:
         context = accel.create_some_context(device_filter=lambda x: x.is_cuda)
-        queue = context.create_command_queue()
+        queue = context.create_command_queue(profile=args.profile)
 
     with closing(loader.load(args.input_file, args.input_option)) as dataset:
         #### Determine parameters ####
@@ -198,11 +278,19 @@ def main():
             args.max_w = array_p.longest_baseline
         elif args.max_w.unit.physical_type == 'dimensionless':
             args.max_w = args.max_w * image_p.wavelength
-        if args.kernel_width is None:
-            args.kernel_width = parameters.w_kernel_width(image_p, args.max_w, args.eps_w, args.aa_width)
+        if args.w_slices is None:
+            args.w_slices = parameters.w_slices(image_p, args.max_w, args.eps_w, args.kernel_width, args.aa_width)
+        if args.w_step.unit.physical_type == 'length':
+            w_planes = float(args.max_w / args.w_step)
+        elif args.w_step.unit.physical_type == 'dimensionless':
+            w_step = args.w_step * image_p.cell_size / args.grid_oversample
+            w_planes = float(args.max_w / w_step)
+        else:
+            raise ValueError('--w-step must be dimensionless or a length')
+        w_planes = int(np.ceil(w_planes / args.w_slices))
         grid_p = parameters.GridParameters(
             args.aa_width, args.grid_oversample, args.kernel_image_oversample,
-            args.w_planes, args.max_w, args.kernel_width)
+            args.w_slices, w_planes, args.max_w, args.kernel_width)
         if args.clean_mode == 'I':
             clean_mode = clean.CLEAN_I
         elif args.clean_mode == 'IQUV':
@@ -212,6 +300,10 @@ def main():
         clean_p = parameters.CleanParameters(
             args.minor, args.loop_gain, clean_mode,
             args.psf_patch)
+
+        log_parameters("Image parameters", image_p)
+        log_parameters("Grid parameters", grid_p)
+        log_parameters("CLEAN parameters", clean_p)
 
         #### Create data and operation instances ####
         lm_scale = float(image_p.pixel_size)
@@ -233,6 +325,8 @@ def main():
             gridder_template = grid.GridderTemplate(context, image_p, grid_p)
             gridder = gridder_template.instantiate(queue, array_p, args.vis_block, allocator)
             gridder.ensure_all_bound()
+            if args.profile:
+                grid.Gridder.__call__ = timer(queue)(grid.Gridder.__call__)
             grid_data = gridder.buffer('grid')
             # Grid to image
             kernel1d = accel.SVMArray(context, (image_p.pixels,), image_p.real_dtype)
@@ -254,8 +348,14 @@ def main():
             model = cleaner.buffer('model')
             model[:] = 0
 
+        #### Preprocess visibilities ####
+        collector = preprocess_visibilities(dataset, args, image_p, grid_p, polarization_matrix)
+        reader = collector.reader()
+
         #### Create dirty image ####
-        make_psf(queue, dataset, args, polarization_matrix, gridder, grid_to_image)
+        slice_w_step = float(grid_p.max_w / image_p.wavelength / grid_p.w_slices)
+        mid_w = np.arange(0.5, grid_p.w_slices) * slice_w_step
+        make_dirty(queue, reader, 'PSF', 'weights', gridder, grid_to_image, mid_w, args.vis_block)
         # TODO: all this scaling is hacky. Move it into subroutines somewhere
         scale = np.reciprocal(image[..., image.shape[1] // 2, image.shape[2] // 2])
         scale = scale[:, np.newaxis, np.newaxis]
@@ -264,7 +364,7 @@ def main():
             with progress.step('Write PSF'):
                 io.write_fits_image(dataset, image, image_p, args.write_psf)
         extract_psf(image, psf)
-        make_dirty(queue, dataset, args, polarization_matrix, gridder, grid_to_image)
+        make_dirty(queue, reader, 'image', 'vis', gridder, grid_to_image, mid_w, args.vis_block)
         image *= scale
         if args.write_grid is not None:
             with progress.step('Write grid'):
@@ -298,5 +398,4 @@ def main():
             io.write_fits_image(dataset, model, image_p, args.output_file)
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
     main()
