@@ -148,17 +148,23 @@ def main():
     parser.add_argument('output_dir', help='Output directory')
     parser.add_argument('--stokes', default='IQUV', help='Stokes parameters to show')
     args = parser.parse_args()
-    katsdpimager_common = ['imager.py', '--stokes=${stokes}', '--input-option', 'data=CORRECTED_DATA', '${ms}']
+    katsdpimager_common = [
+        'imager.py',
+        '--stokes=${stokes}',
+        '--input-option', 'data=CORRECTED_DATA',
+        '--psf-patch=4608',
+        '${ms}']
     images = [
         Image('WSClean', 'wsclean', 'wsclean-{stokes}-image.fits',
               ['wsclean', '-mgain', '0.85', '-niter', '1000', '-threshold', '0.01',
+               '-weight', 'natural',
                '-size', '4608', '4608', '-scale', '1.747asec', '-pol', '${",".join(stokes.lower())}',
                '-name', '${output_dir}/wsclean', '${ms}'],
               clean_globs=['wsclean-*.fits']),
         Image('katsdpimager (GPU)', 'katsdpimager-gpu', 'image-gpu.fits',
               katsdpimager_common + ['${output_dir}/image-gpu.fits']),
-        # Image('katsdpimager (CPU)', 'katsdpimager-cpu', 'image-cpu.fits',
-        #       katsdpimager_common + ['--host', '${output_dir}/image-cpu.fits'])
+        Image('katsdpimager (CPU)', 'katsdpimager-cpu', 'image-cpu.fits',
+              katsdpimager_common + ['--host', '${output_dir}/image-cpu.fits'])
     ]
     return run(args, images)
 
