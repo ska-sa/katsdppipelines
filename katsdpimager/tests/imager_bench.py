@@ -9,6 +9,7 @@ import ephem
 import pkg_resources
 import numpy as np
 import timeit
+import json
 from astropy import units
 from katsdpimager import grid, preprocess, parameters, polarization, types, fft
 from katsdpsigproc import accel, fill
@@ -27,7 +28,10 @@ def add_parameters(args):
     """Augment args with extra fields for parameter objects"""
     grid_oversample = 8
     antialias_width = 7
-    kernel_width = 60
+    # This is used to pick the number of w slices. That allows the --kernel-width
+    # argument to vary ONLY the kernel width used in gridding, without
+    # simultaneously affecting the set of visibilities used.
+    nominal_kernel_width = 60
     eps_w = 0.001
     antennas = load_antennas()
     longest = 0.0
@@ -50,7 +54,7 @@ def add_parameters(args):
         image_parameters,
         longest,
         eps_w,
-        kernel_width,
+        nominal_kernel_width,
         antialias_width)
     w_planes = int(np.ceil(longest / w_step / w_slices))
     grid_parameters = parameters.GridParameters(
@@ -60,7 +64,7 @@ def add_parameters(args):
         w_slices=w_slices,
         w_planes=w_planes,
         max_w=longest,
-        kernel_width=kernel_width)
+        kernel_width=args.kernel_width)
     args.antennas = antennas
     args.array_parameters = array_parameters
     args.grid_parameters = grid_parameters
@@ -89,18 +93,17 @@ def make_uvw(args, n_time):
     return uvw.reshape(3, uvw.shape[1] * n_time).T.copy()
 
 
-def make_vis(args, N):
+def make_vis(args, n_time):
     """Generate uncompressed visibilities
 
     Parameters
     ----------
     args : argparse.Namespace
         Command-line arguments
-    N : int
-        Number of visibilities (rounded down to a whole dump)
+    n_time : int
+        Number of time samples
     """
     n_baselines = len(args.antennas) * (len(args.antennas) - 1) // 2
-    n_time = N // n_baselines
     N = n_time * n_baselines
     uvw = make_uvw(args, n_time)
     weights = np.ones((N, args.polarizations), np.float32)
@@ -109,24 +112,28 @@ def make_vis(args, N):
     return uvw, weights, baselines, vis
 
 
-def make_compressed_vis(args, N):
+def make_compressed_vis(args, n_time):
     """Generate compressed visibilities
 
     Parameters
     ----------
     args : argparse.Namespace
         Command-line arguments
-    N : int
-        Number of *uncompressed* visibilities (rounded down to a whole dump)
+    n_time : int
+        Number of time samples
 
     Returns
     -------
-    reader : :py:class:`katsdpimager.preprocess.VisibilityReaderMem`
+    reader : :py:class:`katsdpimager.preprocess.VisibilityReader`
         Reader that iterates the visibilities
     """
-    uvw, weights, baselines, vis = make_vis(args, N)
-    collector = preprocess.VisibilityCollectorMem(
-            [args.image_parameters], args.grid_parameters, N)
+    uvw, weights, baselines, vis = make_vis(args, n_time)
+    if args.write:
+        collector = preprocess.VisibilityCollectorHDF5(args.write,
+                [args.image_parameters], args.grid_parameters, len(vis))
+    else:
+        collector = preprocess.VisibilityCollectorMem(
+                [args.image_parameters], args.grid_parameters, len(vis))
     collector.add(0, uvw, weights, baselines, vis)
     collector.close()
     reader = collector.reader()
@@ -135,52 +142,52 @@ def make_compressed_vis(args, N):
 
 def benchmark_preprocess(args):
     add_parameters(args)
-    N = 2 * 1024**2
-    uvw, weights, baselines, vis = make_vis(args, N)
+    n_time = 900
+    uvw, weights, baselines, vis = make_vis(args, n_time)
     start = timeit.default_timer()
     collector = preprocess.VisibilityCollectorMem(
-            [args.image_parameters], args.grid_parameters, N)
+            [args.image_parameters], args.grid_parameters, len(vis))
     collector.add(0, uvw, weights, baselines, vis)
     collector.close()
     end = timeit.default_timer()
     elapsed = end - start
-    print("preprocessed {} visibilities in {} seconds".format(N, elapsed))
-    print("{:.2f} Mvis/s".format(N / elapsed / 1e6))
+    print("preprocessed {} visibilities in {} seconds".format(len(vis), elapsed))
+    print("{:.2f} Mvis/s".format(len(vis) / elapsed / 1e6))
 
 
 def benchmark_grid_degrid(args):
-    N = 2 * 1024**2
+    n_time = 3600
     add_parameters(args)
-    reader = make_compressed_vis(args, N)
+    N = n_time * len(args.antennas) * (len(args.antennas) - 1) // 2
+    reader = make_compressed_vis(args, n_time)
 
     context = accel.create_some_context()
     queue = context.create_tuning_command_queue()
-    allocator = accel.SVMAllocator(context)
-    gridder_template = args.template_class(context, args.image_parameters, args.grid_parameters)
-    gridder = gridder_template.instantiate(queue, args.array_parameters, N, allocator=allocator)
+    gridder_template = args.template_class(context, args.image_parameters, args.grid_parameters, tuning=args.tuning)
+    gridder = gridder_template.instantiate(queue, args.array_parameters, N)
     gridder.ensure_all_bound()
-    clear_template = fill.FillTemplate(context,
-        args.image_parameters.complex_dtype,
-        types.dtype_to_ctype(args.image_parameters.complex_dtype))
-    clear = clear_template.instantiate(queue, gridder.buffer('grid').shape, allocator=allocator)
-    clear.bind(data=gridder.buffer('grid'))
     elapsed = 0.0
     N_compressed = 0
+    uv = gridder.buffer('uv').empty_like()
+    w_plane = gridder.buffer('w_plane').empty_like()
+    vis = gridder.buffer('vis').empty_like()
     for w_slice in range(reader.num_w_slices):
         gridder.num_vis = reader.len(0, w_slice)
         N_compressed += gridder.num_vis
         if gridder.num_vis > 0:
-            clear()
-            queue.finish()
+            gridder.buffer('grid').zero(queue)
             start = 0
             for chunk in reader.iter_slice(0, w_slice):
                 rng = slice(start, start + len(chunk))
-                gridder.buffer('uv')[rng, 0:2] = chunk['uv']
-                gridder.buffer('uv')[rng, 2:4] = chunk['sub_uv']
-                gridder.buffer('w_plane')[rng] = chunk['w_plane']
-                gridder.buffer('vis')[rng] = chunk['vis']
+                uv[rng, 0:2] = chunk['uv']
+                uv[rng, 2:4] = chunk['sub_uv']
+                w_plane[rng] = chunk['w_plane']
+                vis[rng] = chunk['vis']
                 start += len(chunk)
-            gridder()  # Forces data transfer
+            gridder.buffer('uv').set_async(queue, uv)
+            gridder.buffer('w_plane').set_async(queue, w_plane)
+            gridder.buffer('vis').set_async(queue, vis)
+            queue.finish()
             queue.start_tuning()
             gridder()
             elapsed += queue.stop_tuning()
@@ -213,29 +220,44 @@ def benchmark_fft(args):
     print('{:.3f} GiB/s'.format(mem_rate / 1024**3))
 
 
+def add_arguments(subparser, arguments):
+    arg_map = {
+        '--polarizations': lambda: subparser.add_argument('--polarizations', type=int, default=4, choices=[1, 2, 3, 4], help='Number of polarizations'),
+        '--frequency': lambda: subparser.add_argument('--frequency', type=float, default=1412000000.0, help='Observation frequency (Hz)'),
+        '--int-time': lambda: subparser.add_argument('--int-time', type=float, default=2.0, help='Integration time (seconds)'),
+        '--kernel-width': lambda: subparser.add_argument('--kernel-width', type=int, default=60, help='Convolutional kernel size in pixels'),
+        '--pixels': lambda: subparser.add_argument('--pixels', type=int, default=4608, help='Grid/image dimensions'),
+        '--tuning': lambda: subparser.add_argument('--tuning', type=json.loads, help='Tuning arguments (JSON)'),
+        '--write': lambda: subparser.add_argument('--write', type=str, help='Write compressed visibilities to HDF5 file')
+    }
+    for arg_name in arguments:
+        arg_map[arg_name]()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--polarizations', type=int, default=4, choices=[1, 2, 3, 4], help='Number of polarizations')
-    parser.add_argument('--frequency', type=float, default=1412000000.0, help='Observation frequency (Hz)')
-    parser.add_argument('--int-time', type=float, default=2.0, help='Integration time (seconds)')
-
     subparsers = parser.add_subparsers(help='sub-commands')
 
     parser_preprocess = subparsers.add_parser('preprocess', help='preprocessing benchmark')
     parser_preprocess.set_defaults(func=benchmark_preprocess)
+    add_arguments(parser_preprocess, ['--polarizations', '--frequency', '--int-time'])
 
+    grid_degrid_arguments = ['--polarizations', '--frequency', '--int-time', '--kernel-width',
+                             '--tuning', '--write']
     parser_grid = subparsers.add_parser('grid', help='gridding benchmark')
     parser_grid.set_defaults(func=benchmark_grid_degrid, template_class=grid.GridderTemplate)
+    add_arguments(parser_grid, grid_degrid_arguments)
 
     parser_degrid = subparsers.add_parser('degrid', help='degridding benchmark')
     parser_degrid.set_defaults(func=benchmark_grid_degrid, template_class=grid.DegridderTemplate)
+    add_arguments(parser_degrid, grid_degrid_arguments)
 
     parser_ifft = subparsers.add_parser('ifft', help='grid-to-image FFT benchmark')
-    parser_ifft.add_argument('--pixels', type=int, default=4608, help='Grid/image dimensions')
+    add_arguments(parser_ifft, ['--pixels'])
     parser_ifft.set_defaults(func=benchmark_fft, mode=fft.FFT_INVERSE)
 
     parser_fft = subparsers.add_parser('fft', help='image-to-grid FFT benchmark')
-    parser_fft.add_argument('--pixels', type=int, default=4608, help='Grid/image dimensions')
+    add_arguments(parser_fft, ['--pixels'])
     parser_fft.set_defaults(func=benchmark_fft, mode=fft.FFT_FORWARD)
 
     args = parser.parse_args()
