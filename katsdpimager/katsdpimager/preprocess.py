@@ -29,8 +29,8 @@ import numpy as np
 import numba
 import math
 import logging
-import katsdpimager.polarization as polarization
-import katsdpimager.grid as grid
+from katsdpimager import polarization, grid, types
+from katsdpimager._sort_vis import ffi, lib
 import astropy.units as units
 
 
@@ -49,15 +49,19 @@ def _make_dtype(num_polarizations, internal):
         If True, the structure will include extra fields for baseline, w slice
         and channel.
     """
-    fields = [
-        ('uv', np.int16, (2,)),
-        ('sub_uv', np.int16, (2,)),
-        ('weights', np.float32, (num_polarizations,)),
-        ('vis', np.complex64, (num_polarizations,)),
-        ('w_plane', np.int16)
-    ]
     if internal:
-        fields += [('w_slice', np.int16), ('channel', np.int32), ('baseline', np.int32)]
+        return types.cffi_ctype_to_dtype(
+            ffi,
+            ffi.typeof('vis_{}_t'.format(num_polarizations)),
+            {'.vis[]': np.dtype(np.complex64)})
+    else:
+        fields = [
+            ('uv', np.int16, (2,)),
+            ('sub_uv', np.int16, (2,)),
+            ('weights', np.float32, (num_polarizations,)),
+            ('vis', np.complex64, (num_polarizations,)),
+            ('w_plane', np.int16)
+        ]
     return np.dtype(fields)
 
 
@@ -193,6 +197,7 @@ class VisibilityCollector(object):
         self._used = 0
         self.num_input = 0
         self.num_output = 0
+        self._sort_func = getattr(lib, "sort_vis_{}".format(num_polarizations))
 
     @property
     def num_channels(self):
@@ -213,7 +218,7 @@ class VisibilityCollector(object):
             return
         buffer = self._buffer[:self._used]
         # mergesort is stable, so will preserve ordering by time
-        buffer.sort(kind='mergesort', order=['channel', 'w_slice', 'baseline'])
+        self._sort_func(ffi.from_buffer(buffer), self._used)
         N = _compress_buffer(buffer)
         # Write regions to file
         if N > 0:
@@ -425,10 +430,11 @@ class VisibilityCollectorHDF5(VisibilityCollector):
         self._dataset.attrs.create('length', self._length)
         if logger.isEnabledFor(logging.INFO):
             filesize = self._file.id.get_filesize()
-            expected = self.store_dtype.itemsize * np.sum(self._length)
+            n_compressed = np.sum(self._length)
+            expected = self.store_dtype.itemsize * n_compressed
             if expected > 0:
-                logger.info("Wrote %d bytes to %s (%.2f%% compression)",
-                            filesize, self._file.filename, 100.0 * filesize / expected)
+                logger.info("Wrote %d visibilities in %d bytes to %s (%.2f%% compression ratio)",
+                            n_compressed, filesize, self._file.filename, 100.0 * filesize / expected)
             else:
                 logger.info("Wrote %d bytes to %s (no visibilities)",
                             filesize, self._file.filename)
