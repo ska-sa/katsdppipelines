@@ -13,31 +13,30 @@ The following transformations are done:
 - Visibilities with the same UVW coordinates (after quantisation) are merged
   ("compressed").
 
-The resulting visibilities are stored in HDF5 (:class:`VisibilityCollectorHDF5`)
-or numpy arrays (:class:`VisibilityCollectorMem`).
+The resulting visibilities are stored in HDF5
+(:class:`VisibilityCollectorHDF5`) or numpy arrays
+(:class:`VisibilityCollectorMem`). The latter is used mainly for testing.
 
 Partial sorting by baseline is implemented by buffering up a reasonably large
 number of visibilities and sorting them. The merging is also partial, since
 only adjacent visibilities are candidates for merging.
 
-There is also a memory-based backend to simplify testing.
+The core pieces are implemented in C++ for speed (see preprocess.cpp).
 """
 
 from __future__ import print_function, division
 import h5py
 import numpy as np
-import numba
 import math
 import logging
-from katsdpimager import polarization, grid, types
-from katsdpimager._sort_vis import ffi, lib
+from katsdpimager import polarization, grid, types, _preprocess
 import astropy.units as units
 
 
 logger = logging.getLogger(__name__)
 
 
-def _make_dtype(num_polarizations, internal):
+def _make_dtype(num_polarizations):
     """Creates a numpy structured dtype to hold a preprocessed visibility with
     associated metadata.
 
@@ -45,23 +44,14 @@ def _make_dtype(num_polarizations, internal):
     ----------
     num_polarizations : int
         Number of polarizations in the visibility.
-    internal : bool
-        If True, the structure will include extra fields for baseline, w slice
-        and channel.
     """
-    if internal:
-        return types.cffi_ctype_to_dtype(
-            ffi,
-            ffi.typeof('vis_{}_t'.format(num_polarizations)),
-            {'.vis[]': np.dtype(np.complex64)})
-    else:
-        fields = [
-            ('uv', np.int16, (2,)),
-            ('sub_uv', np.int16, (2,)),
-            ('weights', np.float32, (num_polarizations,)),
-            ('vis', np.complex64, (num_polarizations,)),
-            ('w_plane', np.int16)
-        ]
+    fields = [
+        ('uv', np.int16, (2,)),
+        ('sub_uv', np.int16, (2,)),
+        ('weights', np.float32, (num_polarizations,)),
+        ('vis', np.complex64, (num_polarizations,)),
+        ('w_plane', np.int16)
+    ]
     return np.dtype(fields)
 
 
@@ -79,100 +69,7 @@ def _make_fapl(cache_entries, cache_size, w0):
     return fapl
 
 
-@numba.jit(nopython=True)
-def _convert_to_buffer(
-        channel, uvw, weights, baselines, vis, out,
-        pixels, cell_size, max_w, w_slices, w_planes, oversample):
-    """Implementation of :meth:`VisibilityCollector._convert_to_buffer`,
-    split out as a function for numba acceleration.
-    """
-    N = uvw.shape[0]
-    P = vis.shape[1]
-    offset = np.float32(pixels // 2)
-    uv_scale = np.float32(1 / cell_size)
-    w_scale = float((w_slices - 0.5) * w_planes / max_w)
-    max_slice_plane = w_slices * w_planes - 1
-    for row in range(N):
-        u = uvw[row, 0]
-        v = uvw[row, 1]
-        w = uvw[row, 2]
-        if w < 0:
-            u = -u
-            v = -v
-            w = -w
-            for p in range(P):
-                out[row].vis[p] = np.conj(vis[row, p])
-        else:
-            for p in range(P):
-                out[row].vis[p] = vis[row, p]
-        for p in range(P):
-            out[row].vis[p] *= weights[row, p]
-        u = u * uv_scale + offset
-        v = v * uv_scale + offset
-        # The plane number is biased by half a slice, because the first slice
-        # is half-width and centered at w=0.
-        w = np.trunc(w * w_scale + w_planes / 2)
-        w_slice_plane = int(min(w, max_slice_plane))
-        w_slice = w_slice_plane // w_planes
-        w_plane = w_slice_plane % w_planes
-        u0, sub_u = grid.subpixel_coord(u, oversample)
-        v0, sub_v = grid.subpixel_coord(v, oversample)
-        out[row].channel = channel
-        out[row].uv[0] = u0
-        out[row].uv[1] = v0
-        out[row].sub_uv[0] = sub_u
-        out[row].sub_uv[1] = sub_v
-        out[row].w_plane = w_plane
-        out[row].w_slice = w_slice
-        for p in range(P):
-            out[row].weights[p] = weights[row, p]
-        out[row].baseline = baselines[row]
-
-
-@numba.jit(nopython=True)
-def _compress_buffer(buffer):
-    """Core loop of :meth:`VisibilityCollector._process_buffer, split into a
-    free function for numba acceleration.
-    """
-    out_pos = 0
-    last = buffer[0]    # Value irrelevant, but needed for type inference
-    last_valid = False
-    P = buffer[0].vis.shape[0]
-    for element in buffer:
-        if element.baseline < 0:
-            continue       # Autocorrelation
-        # Here uv and sub_uv are converted to lists because == gives
-        # elementwise results on arrays.
-        key = (element.channel, element.w_slice,
-               element.uv[0], element.uv[1],
-               element.sub_uv[0], element.sub_uv[1],
-               element.w_plane)
-        if (last_valid and
-                element.channel == last.channel and
-                element.w_slice == last.w_slice and
-                element.uv[0] == last.uv[0] and
-                element.uv[1] == last.uv[1] and
-                element.sub_uv[0] == last.sub_uv[0] and
-                element.sub_uv[1] == last.sub_uv[1] and
-                element.w_plane == last.w_plane):
-            for p in range(P):
-                last.vis[p] += element.vis[p]
-            for p in range(P):
-                last.weights[p] += element.weights[p]
-        else:
-            if last_valid:
-                buffer[out_pos] = last
-                out_pos += 1
-            prev_key = key
-            last = element
-            last_valid = True
-    if last_valid:
-        buffer[out_pos] = last
-        out_pos += 1
-    return out_pos
-
-
-class VisibilityCollector(object):
+class VisibilityCollector(_preprocess.VisibilityCollector):
     """Base class that accepts a stream of visibility data and stores it. The
     subclasses provide the storage backends. Multiple channels are supported.
 
@@ -187,17 +84,17 @@ class VisibilityCollector(object):
         Number of visibilities to buffer, prior to compression
     """
     def __init__(self, image_parameters, grid_parameters, buffer_size):
+        num_polarizations = len(image_parameters[0].polarizations)
+        super(VisibilityCollector, self).__init__(
+            num_polarizations,
+            grid_parameters.max_w.to(units.m).value,
+            grid_parameters.w_slices,
+            grid_parameters.w_planes,
+            grid_parameters.oversample,
+            self._emit, buffer_size)
         self.image_parameters = image_parameters
         self.grid_parameters = grid_parameters
-        num_polarizations = len(image_parameters[0].polarizations)
-        self.store_dtype = _make_dtype(num_polarizations, False)
-        self.buffer_dtype = _make_dtype(num_polarizations, True)
-        self._buffer = np.rec.recarray(buffer_size, self.buffer_dtype)
-        #: Number of valid elements in buffer
-        self._used = 0
-        self.num_input = 0
-        self.num_output = 0
-        self._sort_func = getattr(lib, "sort_vis_{}".format(num_polarizations))
+        self.store_dtype = _make_dtype(num_polarizations)
 
     @property
     def num_channels(self):
@@ -207,59 +104,16 @@ class VisibilityCollector(object):
     def num_w_slices(self):
         return self.grid_parameters.w_slices
 
-    def _process_buffer(self):
-        """Sort and compress the buffer, and write the results to file.
-
-        The buffer is sorted, then compressed in-place. It is then split into
-        regions that have the same channel and w slice, each of which is
-        appended to the relevant dataset in the file.
-        """
-        if self._used == 0:
-            return
-        buffer = self._buffer[:self._used]
-        # mergesort is stable, so will preserve ordering by time
-        self._sort_func(ffi.from_buffer(buffer), self._used)
-        N = _compress_buffer(buffer)
-        # Write regions to file
-        if N > 0:
-            key = buffer[:N][['channel', 'w_slice']]
-            prev = 0
-            for split in np.nonzero(key[1:] != key[:-1])[0]:
-                end = split + 1
-                self._emit(buffer[prev:end])
-                prev = end
-            self._emit(buffer[prev:N])
-        self.num_input += self._used
-        self.num_output += N
-        self._used = 0
-
     def _emit(self, elements):
         """Write an array of compressed elements with the same channel and w
         slice to the backing store. The caller must provide a non-empty
-        array."""
-        raise NotImplementedError()
+        array.
 
-    def _convert_to_buffer(self, channel, uvw, weights, baselines, vis, out):
-        """Apply element-wise preprocessing to a number of elements and write
-        the results to `out`, which will be a view of a range from the buffer.
-
-        Parameters
-        ----------
-        channel : int
-            Channel number for all the provided visibilities
-        uvw, weights, baselines, vis : array
-            See :meth:`add`
-        out : record array
-            N-element view of portion of the buffer to write
+        Overrides of this function *must not* hold a reference to `elements`.
+        The memory underneath is not reference-counted and is invalid once
+        this function returns.
         """
-        _convert_to_buffer(
-            channel, uvw.to(units.m).value, weights, baselines, vis, out,
-            self.image_parameters[channel].pixels,
-            self.image_parameters[channel].cell_size.to(units.m).value,
-            self.grid_parameters.max_w.to(units.m).value,
-            self.grid_parameters.w_slices,
-            self.grid_parameters.w_planes,
-            self.grid_parameters.oversample)
+        raise NotImplementedError()
 
     def add(self, channel, uvw, weights, baselines, vis, polarization_matrix=None):
         """Add a set of visibilities to the collector. Each of the provided
@@ -287,52 +141,22 @@ class VisibilityCollector(object):
             If specified, the input visibilities are transformed by this
             matrix.
         """
-        N = uvw.shape[0]
-        if len(uvw.shape) != 2:
-            raise ValueError('uvw has wrong number of dimensions')
-        if len(weights.shape) != 2:
-            raise ValueError('weights has wrong number of dimensions')
-        if len(baselines.shape) != 1:
-            raise ValueError('baselines has wrong number of dimensions')
-        if len(vis.shape) != 2:
-            raise ValueError('vis has wrong number of dimensions')
-        if weights.shape[0] != N or baselines.shape[0] != N or vis.shape[0] != N:
-            raise ValueError('Arrays have different shapes')
-        if uvw.shape[1] != 3:
-            raise ValueError('uvw has invalid shape')
-        ip = self.image_parameters[channel]
 
+        # Force to single precision, since that's what the C++ code demands.
+        # Note: this is true even when gridding at double precision, as
+        # individual visibilities are very noisy.
+        weights = weights.astype(np.float32)
+        vis = vis.astype(np.complex64)
+        uvw = uvw.astype(np.float32)
         if polarization_matrix is not None:
             weights = polarization.apply_polarization_matrix_weights(weights, polarization_matrix)
             vis = polarization.apply_polarization_matrix(vis, polarization_matrix)
-        if weights.shape[1] != len(ip.polarizations):
-            raise ValueError('weights has invalid shape')
-        if vis.shape[1] != len(ip.polarizations):
-            raise ValueError('vis has invalid shape')
 
-        # Copy data to the buffer
-        start = 0
-        while start < N:
-            M = min(N - start, len(self._buffer) - self._used)
-            end = start + M
-            fill = self._buffer[self._used : self._used + M]
-            self._convert_to_buffer(
-                channel,
-                uvw[start : end],
-                weights[start : end],
-                baselines[start : end],
-                vis[start : end],
-                self._buffer[self._used : self._used + M])
-            self._used += M
-            start += M
-            if self._used == len(self._buffer):
-                self._process_buffer()
-
-    def close(self):
-        """Finalize processing and close any resources. This must be called before
-        :meth:`reader`. Subclasses may overload this method.
-        """
-        self._process_buffer()
+        ip = self.image_parameters[channel]
+        super(VisibilityCollector, self).add(
+            channel,
+            ip.pixels, ip.cell_size.to(units.m).value,
+            uvw, weights, baselines, vis)
 
     def reader(self):
         """Create and return a reader object that can be used to iterate over
@@ -414,8 +238,8 @@ class VisibilityCollectorHDF5(VisibilityCollector):
 
     def _emit(self, elements):
         N = elements.shape[0]
-        channel = elements[0].channel
-        w_slice = elements[0].w_slice
+        channel = elements[0]['channel']
+        w_slice = elements[0]['w_slice']
         old_length = self._length[channel, w_slice]
         self._length[channel, w_slice] += N
         if self._length[channel, w_slice] > self._dataset.shape[2]:
@@ -456,7 +280,7 @@ class VisibilityCollectorMem(VisibilityCollector):
             [[] for w_slice in range(self.num_w_slices)] for channel in range(self.num_channels)]
 
     def _emit(self, elements):
-        dataset = self.datasets[elements[0].channel][elements[0].w_slice]
+        dataset = self.datasets[elements[0]['channel']][elements[0]['w_slice']]
         dataset.append(elements.astype(self.store_dtype))
 
     def reader(self):
