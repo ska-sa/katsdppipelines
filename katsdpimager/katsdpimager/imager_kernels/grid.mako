@@ -10,8 +10,8 @@ typedef atomic_accum_${real_type}2 atomic_accum_Complex;
 #define TILE_Y ${multi_y * wgs_y}
 #define MULTI_X ${multi_x}
 #define MULTI_Y ${multi_y}
-#define CONVOLVE_KERNEL_SIZE_X ${convolve_kernel_size_x}
-#define CONVOLVE_KERNEL_SIZE_Y ${convolve_kernel_size_y}
+#define BIN_X ${bin_x}
+#define BIN_Y ${bin_y}
 #define CONVOLVE_KERNEL_OVERSAMPLE ${convolve_kernel_oversample}
 #define CONVOLVE_KERNEL_OVERSAMPLE_MASK ${convolve_kernel_oversample - 1}
 #define CONVOLVE_KERNEL_OVERSAMPLE_SHIFT ${int.bit_length(convolve_kernel_oversample) - 1}
@@ -23,7 +23,7 @@ typedef atomic_accum_${real_type}2 atomic_accum_Complex;
 #define atomic_accum_Complex_add atomic_accum_${real_type}2_add
 
 /// Computes a * b
-DEVICE_FN float2 complex_mul(float2 a, float2 b)
+DEVICE_FN float2 Complex_mul(float2 a, float2 b)
 {
     return make_float2(fma(a.x, b.x, -a.y * b.y),
                        fma(a.x, b.y, a.y * b.x));
@@ -51,12 +51,14 @@ DEVICE_FN void writeback(
     GLOBAL atomic_accum_Complex * RESTRICT out,
     int out_row_stride,
     int out_pol_stride,
-    int u, int v, const Complex values[NPOLS])
+    int u0, int v0, const Complex values[MULTI_Y][MULTI_X][NPOLS])
 {
-    int offset = (v * out_row_stride + u);
+    int offset = (v0 * out_row_stride + u0);
     for (int p = 0; p < NPOLS; p++)
     {
-        atomic_accum_Complex_add(&out[offset], values[p]);
+        for (int y = 0; y < MULTI_Y; y++)
+            for (int x = 0; x < MULTI_X; x++)
+                atomic_accum_Complex_add(&out[offset + y * out_row_stride + x], values[y][x][p]);
         offset += out_pol_stride;
     }
 }
@@ -70,6 +72,7 @@ void grid(
     const GLOBAL short * RESTRICT w_plane,
     const GLOBAL float2 * RESTRICT vis,
     const GLOBAL float2 * RESTRICT convolve_kernel,
+    int uv_bias,
     int vis_per_workgroup,
     int nvis)
 {
@@ -87,7 +90,8 @@ void grid(
     // In-register sums
     Complex sums[MULTI_Y][MULTI_X][NPOLS];
     // Last-known UV coordinates
-    int2 cur_uv[MULTI_Y][MULTI_X];
+    int cur_u0 = 0;
+    int cur_v0 = 0;
 
     // Zero-initialize things
     for (int y = 0; y < MULTI_Y; y++)
@@ -95,7 +99,6 @@ void grid(
         {
             for (int p = 0; p < NPOLS; p++)
                 sums[y][x][p] = make_Complex(0.0f, 0.0f);
-            cur_uv[y][x] = make_int2(0, 0);
         }
 
     int u_phase = get_group_id(1) * TILE_X + get_local_id(0) * MULTI_X;
@@ -119,7 +122,7 @@ void grid(
                 int idx = vis_id * NPOLS + p;
                 batch_vis[p][lid] = vis[idx];
             }
-            int2 min_uv = make_int2(sample_uv.x, sample_uv.y);
+            int2 min_uv = make_int2(sample_uv.x - uv_bias, sample_uv.y - uv_bias);
             int offset_w = sample_w_plane * CONVOLVE_KERNEL_W_STRIDE;
             batch_min_uv[lid] = min_uv;
             batch_offset[lid] = make_int2(
@@ -137,24 +140,28 @@ void grid(
                 sample_vis[p] = batch_vis[p][vis_id];
             int2 min_uv = batch_min_uv[vis_id];
             int2 base_offset = batch_offset[vis_id];
+            int u0 = wrap(min_uv.x, BIN_X, u_phase);
+            int v0 = wrap(min_uv.y, BIN_Y, v_phase);
+            if (u0 != cur_u0 || v0 != cur_v0)
+            {
+                writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
+                for (int y = 0; y < MULTI_Y; y++)
+                    for (int x = 0; x < MULTI_X; x++)
+                        for (int p = 0; p < NPOLS; p++)
+                            sums[y][x][p] = make_Complex(0.0f, 0.0f);
+                cur_u0 = u0;
+                cur_v0 = v0;
+            }
+            float2 weight_u[MULTI_X];
+            float2 weight_v[MULTI_Y];
+            for (int x = 0; x < MULTI_X; x++)
+                weight_u[x] = convolve_kernel[u0 + base_offset.x + x];
+            for (int y = 0; y < MULTI_Y; y++)
+                weight_v[y] = convolve_kernel[v0 + base_offset.y + y];
             for (int y = 0; y < MULTI_Y; y++)
                 for (int x = 0; x < MULTI_X; x++)
                 {
-                    // TODO: expand convolution kernel footprint such that
-                    // multi-xy block is emitted as a unit, instead of separate
-                    // cur_uv for each element.
-                    int u = wrap(min_uv.x, CONVOLVE_KERNEL_SIZE_X, u_phase + x);
-                    int v = wrap(min_uv.y, CONVOLVE_KERNEL_SIZE_Y, v_phase + y);
-                    if (u != cur_uv[y][x].x || v != cur_uv[y][x].y)
-                    {
-                        writeback(out, out_row_stride, out_pol_stride, cur_uv[y][x].x, cur_uv[y][x].y, sums[y][x]);
-                        cur_uv[y][x] = make_int2(u, v);
-                        for (int p = 0; p < NPOLS; p++)
-                            sums[y][x][p] = make_Complex(0.0f, 0.0f);
-                    }
-                    float2 weight_u = convolve_kernel[u + base_offset.x];
-                    float2 weight_v = convolve_kernel[v + base_offset.y];
-                    float2 weight = complex_mul(weight_u, weight_v);
+                    float2 weight = Complex_mul(weight_u[x], weight_v[y]);
                     for (int p = 0; p < NPOLS; p++)
                     {
                         // The weight is conjugated because the w kernel is
@@ -170,7 +177,5 @@ void grid(
     }
 
     // Write back final internal values
-    for (int y = 0; y < MULTI_Y; y++)
-        for (int x = 0; x < MULTI_X; x++)
-            writeback(out, out_row_stride, out_pol_stride, cur_uv[y][x].x, cur_uv[y][x].y, sums[y][x]);
+    writeback(out, out_row_stride, out_pol_stride, cur_u0, cur_v0, sums);
 }

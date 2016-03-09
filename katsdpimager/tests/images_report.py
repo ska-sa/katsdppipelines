@@ -183,7 +183,7 @@ def main():
         'imager.py',
         '--stokes=${stokes}',
         '--input-option', 'data=CORRECTED_DATA',
-        '--psf-patch=4608',
+        '--eps-w=0.001', '--major=5',
         '${ms}']
     lwimager_common = [
         'lwimager', 'ms=${ms}', 'npix=4608', 'cellsize={}arcsec'.format(pixel_size), 'wprojplanes=128', 'threshold=0.01Jy',

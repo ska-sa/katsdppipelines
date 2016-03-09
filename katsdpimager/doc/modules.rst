@@ -1,5 +1,5 @@
-Modules
-=======
+katsdpimager
+============
 
 .. toctree::
    :maxdepth: 4
