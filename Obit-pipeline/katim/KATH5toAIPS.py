@@ -42,7 +42,6 @@ import time,math,os
 import UV, UVVis, OErr, UVDesc, Table, History
 from OTObit import day2dhms
 import numpy
-from numpy import numarray
 
 def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
               calInt=1.0, **kwargs):
@@ -546,8 +545,7 @@ def ConvertKATData(outUV, katdata, meta, err):
     visno = 0
     # Get IO buffers as numpy arrays
     shape = len(outUV.VisBuf) / 4
-    buffer =  numarray.array(sequence=outUV.VisBuf,
-                             type=numarray.Float32, shape=shape)
+    buffer =  numpy.frombuffer(outUV.VisBuf,dtype=numpy.float32, count=shape)
 
     # Template vis
     vis = outUV.ReadVis(err, firstVis=1)
