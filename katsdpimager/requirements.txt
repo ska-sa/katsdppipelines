@@ -26,6 +26,7 @@ scikit-cuda
 scipy
 singledispatch
 six
-git+ssh://git@github.com/ska-sa/katsdpsigproc@imager-support#egg=katsdpsigproc
+git+ssh://git@github.com/ska-sa/katsdpsigproc#egg=katsdpsigproc
+git+ssh://git@github.com/ska-sa/katversion
 traceback2
 unittest2
