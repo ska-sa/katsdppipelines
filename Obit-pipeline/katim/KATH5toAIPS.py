@@ -166,9 +166,7 @@ def GetKATMeta(katdata, err):
     out = {}
     # Spectral windows
     sw = []
-    for s in katdata.spectral_windows:
-        sw.append((s.num_chans, s.channel_freqs[0], s.channel_freqs[1]-s.channel_freqs[0]))
-    out["spw"] = [sw[0]]
+    out["spw"] = [(len(katdata.num_chans), katdata.channel_freqs[0], katdata.channel_freqs[1]-katdata.channel_freqs[0])]
     # targets
     tl = []
     tb = []
