@@ -10,6 +10,7 @@ setup (
     packages = find_packages(),
     scripts = [
         "scripts/KATContPipe.py",
+        "scripts/h5touvfits.py",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
