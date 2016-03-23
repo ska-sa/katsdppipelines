@@ -166,7 +166,7 @@ def GetKATMeta(katdata, err):
     out = {}
     # Spectral windows
     sw = []
-    out["spw"] = [(len(katdata.num_chans), katdata.channel_freqs[0], katdata.channel_freqs[1]-katdata.channel_freqs[0])]
+    out["spw"] = [(len(katdata.channels), katdata.channel_freqs[0], katdata.channel_freqs[1]-katdata.channel_freqs[0])]
     # targets
     tl = []
     tb = []
@@ -558,7 +558,7 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
     numflags=0
     numvis=0
     # Do we need to stop Fringes
-    stop_w = kwargs.get(stop_w,False)
+    stop_w = kwargs.get('stop_w',False)
     if stop_w:
         msg = "W term in UVW coordinates will be used to stop the fringes."
         OErr.PLog(err, OErr.Info, msg)
@@ -595,8 +595,8 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
             for ibase in itertools.combinations_with_replacement(ants,2):
             #loop over polarisations
                 for istok in range(0,nstok):
-                        icorrprod = (ibase[0][0],ibase[1][0],istok)
-                        iprod = p.index(icorrprod)
+                    icorrprod = (ibase[0][0],ibase[1][0],istok)
+                    iprod = p.index(icorrprod)
                     thisvis=vs[iint:iint+1,:,iprod:iprod+1]
                     thisw=ww[iint:iint+1,iprod]
                     # Fringe stop the data if necessary
