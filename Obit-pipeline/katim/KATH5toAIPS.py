@@ -68,6 +68,8 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
         Calibration interval in min.
     targets : list, optinal
         List of targetnames to extract from the file
+    stop_w : bool
+        Fring stop data? (Values only for KAT-7)
     """
     ################################################################
     OErr.PLog(err, OErr.Info, "Converting h5 data to AIPS UV format.")
@@ -501,7 +503,7 @@ def StopFringes(visData,freqData,wData,polProd):
     return outVisData
 
 
-def ConvertKATData(outUV, katdata, meta, err):
+def ConvertKATData(outUV, katdata, meta, err, **kwargs):
     """
     Read KAT HDF data and write Obit UV
 
@@ -558,20 +560,8 @@ def ConvertKATData(outUV, katdata, meta, err):
     numflags=0
     numvis=0
     # Do we need to stop Fringes
-    try:
-        autodelay=[int(ad) for ad in katdata.sensor['DBE/auto-delay']]
-        autodelay=all(autodelay)
-    except:
-        autodelay=False
-
-    #autodelay=False
-    #if katdata.ants[0].name[0]=='a':
-    #    try:
-    #        autodelay=[int(ad) for ad in katdata.sensor['DBE/auto-delay']]
-    #        autodelay=all(autodelay)
-    #    except:
-    #        autodelay=False
-    if not autodelay:
+    stop_w = kwargs.get(stop_w,False)
+    if stop_w:
         msg = "W term in UVW coordinates will be used to stop the fringes."
         OErr.PLog(err, OErr.Info, msg)
         OErr.printErr(err)
@@ -612,7 +602,7 @@ def ConvertKATData(outUV, katdata, meta, err):
                     thisvis=vs[iint:iint+1,:,iprod:iprod+1]
                     thisw=ww[iint:iint+1,iprod]
                     # Fringe stop the data if necessary
-                    if not autodelay:
+                    if stop_w:
                         thisvis=StopFringes(thisvis[:,:,0],katdata.channel_freqs,thisw,katdata.corr_products[iprod])
                     # Copy slices
                     indx = nrparm+(p[iprod][2])*3
