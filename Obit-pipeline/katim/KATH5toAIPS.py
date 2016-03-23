@@ -42,6 +42,7 @@ import time,math,os
 import UV, UVVis, OErr, UVDesc, Table, History
 from OTObit import day2dhms
 import numpy
+import itertools
 
 def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
               calInt=1.0, **kwargs):
@@ -203,7 +204,9 @@ def GetKATMeta(katdata, err):
     al = []
     alook = {}
     i = 0
-    for a in katdata.ants:
+    #MeerKAT or KAT7??
+    antlist = katdata.ants[::-1] if katdata.ants[0].name[0]=='m' else katdata.ants
+    for a in antlist:
         name  = a.name
         x,y,z = a.position_ecef
         diam  = a.diameter
@@ -515,6 +518,7 @@ def ConvertKATData(outUV, katdata, meta, err):
     nstok   = meta["nstokes"]       # Number of Stokes products
     p       = meta["products"]      # baseline stokes indices
     nprod   = len(p)                # number of correlations/baselines
+    ants    = meta["ants"]
     # work out Start time in unix sec
     tm = katdata.timestamps[1:2]
     tx = time.gmtime(tm[0])
@@ -559,6 +563,14 @@ def ConvertKATData(outUV, katdata, meta, err):
         autodelay=all(autodelay)
     except:
         autodelay=False
+
+    #autodelay=False
+    #if katdata.ants[0].name[0]=='a':
+    #    try:
+    #        autodelay=[int(ad) for ad in katdata.sensor['DBE/auto-delay']]
+    #        autodelay=all(autodelay)
+    #    except:
+    #        autodelay=False
     if not autodelay:
         msg = "W term in UVW coordinates will be used to stop the fringes."
         OErr.PLog(err, OErr.Info, msg)
@@ -578,7 +590,7 @@ def ConvertKATData(outUV, katdata, meta, err):
         except:
             continue
         # Negate the weights that are online flagged (ie. apply the online flags here)
-        wt = numpy.where(fg,-wt,wt)
+        wt[numpy.where(fg)]=-32767.
         numflags += numpy.sum(fg)
         numvis += fg.size
         uu = katdata.u
@@ -591,42 +603,46 @@ def ConvertKATData(outUV, katdata, meta, err):
         print msg
         # Loop over integrations
         for iint in range(0,nint):
-            # loop over data products/baselines
-            for iprod in range(0,nprod):
-                thisvis=vs[iint:iint+1,:,iprod:iprod+1]
-                thisw=ww[iint:iint+1,iprod]
-                # Fringe stop the data if necessary
-                if not autodelay:
-                    thisvis=StopFringes(thisvis[:,:,0],katdata.channel_freqs,thisw,katdata.corr_products[iprod])
-                # Copy slices
-                indx = nrparm+(p[iprod][2])*3
-                buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thisvis.real.flatten()
-                indx += 1
-                buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thisvis.imag.flatten()
-                indx += 1
-                buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = wt[iint:iint+1,:,iprod:iprod+1].flatten()
-                # Write if Stokes index >= next or the last
-                if (iprod==nprod-1) or (p[iprod][2]>=p[iprod+1][2]):
-                    # Random parameters
-                    buffer[ilocu]  = uu[iint][iprod]/lamb
-                    buffer[ilocv]  = vv[iint][iprod]/lamb
-                    buffer[ilocw]  = ww[iint][iprod]/lamb
-                    buffer[iloct]  = (tm[iint]-time0)/86400.0 # Time in days
-                    buffer[ilocb]  = p[iprod][0]*256.0 + p[iprod][1]
-                    buffer[ilocsu] = suid
-                    outUV.Write(err, firstVis=visno)
-                    visno += 1
-                    buffer[3]= -3.14159
-                    #print visno,buffer[0:5]
-                    firstVis = None  # Only once
-                    # initialize visibility
-                    first = True
+            #loop over baselines
+            for ibase in itertools.combinations_with_replacement(ants,2):
+            #loop over polarisations
+                for istok in range(0,nstok):
+                        icorrprod = (ibase[0][0],ibase[1][0],istok)
+                        iprod = p.index(icorrprod)
+                    thisvis=vs[iint:iint+1,:,iprod:iprod+1]
+                    thisw=ww[iint:iint+1,iprod]
+                    # Fringe stop the data if necessary
+                    if not autodelay:
+                        thisvis=StopFringes(thisvis[:,:,0],katdata.channel_freqs,thisw,katdata.corr_products[iprod])
+                    # Copy slices
+                    indx = nrparm+(p[iprod][2])*3
+                    buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thisvis.real.flatten()
+                    indx += 1
+                    buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thisvis.imag.flatten()
+                    indx += 1
+                    buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = wt[iint:iint+1,:,iprod:iprod+1].flatten()
+                    # Write if Stokes index >= next or the last
+                    if (iprod==nprod-1) or (p[iprod][2]>=p[iprod+1][2]):
+                        # Random parameters
+                        buffer[ilocu]  = uu[iint][iprod]/lamb
+                        buffer[ilocv]  = vv[iint][iprod]/lamb
+                        buffer[ilocw]  = ww[iint][iprod]/lamb
+                        buffer[iloct]  = (tm[iint]-time0)/86400.0 # Time in days
+                        buffer[ilocb]  = p[iprod][0]*256.0 + p[iprod][1]
+                        buffer[ilocsu] = suid
+                        outUV.Write(err, firstVis=visno)
+                        visno += 1
+                        buffer[3]= -3.14159
+                        #print visno,buffer[0:5]
+                        firstVis = None  # Only once
+                        # initialize visibility
+                        first = True
         # end loop over integrations
         if err.isErr:
             OErr.printErrMsg(err, "Error writing data")
     # end loop over scan
     if numvis>0:
-        msg= "Applied %s online flags to %s visibilities (%.3f%%)"%(numflags,numvis,float(numflags)/float(numvis))
+        msg= "Applied %s online flags to %s visibilities (%.3f%%)"%(numflags,numvis,(float(numflags)/float(numvis)*100.))
         OErr.PLog(err, OErr.Info, msg)
         OErr.printErr(err)
     outUV.Close(err)
