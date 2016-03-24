@@ -31,6 +31,7 @@ This module requires katfile and katpoint and their dependencies
 #-----------------------------------------------------------------------
 try:
     import katdal as katfile
+    from katdal import averager
     import katpoint
 except Exception, exception:
     print exception
@@ -43,6 +44,7 @@ import UV, UVVis, OErr, UVDesc, Table, History
 from OTObit import day2dhms
 import numpy
 import itertools
+import pyfits
 
 def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
               calInt=1.0, **kwargs):
@@ -96,7 +98,7 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
     WriteSUTable (outUV, meta, err)
 
     # Convert data
-    ConvertKATData(outUV, katdata, meta, err)
+    ConvertKATData(outUV, katdata, meta, err, stop_w=kwargs.get('stop_w',False), timeav=kwargs.get('timeav',1))
 
     # Index data
     OErr.PLog(err, OErr.Info, "Indexing data")
@@ -501,7 +503,7 @@ def StopFringes(visData,freqData,wData,polProd):
     return outVisData
 
 
-def ConvertKATData(outUV, katdata, meta, err, **kwargs):
+def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1):
     """
     Read KAT HDF data and write Obit UV
 
@@ -519,6 +521,9 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
     p       = meta["products"]      # baseline stokes indices
     nprod   = len(p)                # number of correlations/baselines
     ants    = meta["ants"]
+    antslookup={}
+    for ant in katdata.ants:
+        antslookup[ant.name]=ant
     # work out Start time in unix sec
     tm = katdata.timestamps[1:2]
     tx = time.gmtime(tm[0])
@@ -558,7 +563,6 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
     numflags=0
     numvis=0
     # Do we need to stop Fringes
-    stop_w = kwargs.get('stop_w',False)
     if stop_w:
         msg = "W term in UVW coordinates will be used to stop the fringes."
         OErr.PLog(err, OErr.Info, msg)
@@ -567,10 +571,14 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
     for scan, state, target in katdata.scans():
         # Fetch data
         tm = katdata.timestamps[:]
-        nint = len(tm)
         vs = katdata.vis[:]
         wt = katdata.weights()[:]
         fg = katdata.flags()[:]
+        if timeav>1:
+            vs,wt,fg,tm=AverageTime(vs,wt,fg,tm,int(timeav))
+            #Lets average the data!!!
+            #vs,wt,fg,tm,cf=averager.average_visibilities(vs,wt,fg,tm,katdata.channel_freqs,timeav=int(timeav),chanav=1,flagav=True)
+        nint = len(tm)
         #Get target suid
         # Only on targets in the input list
         try:
@@ -581,9 +589,14 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
         wt[numpy.where(fg)]=-32767.
         numflags += numpy.sum(fg)
         numvis += fg.size
-        uu = katdata.u
-        vv = katdata.v
-        ww = katdata.w
+        uu = numpy.zeros((len(tm),katdata.shape[2],),dtype=numpy.float64)
+        vv = numpy.zeros_like(uu)
+        ww = numpy.zeros_like(uu)
+        for num,corr_prod in enumerate(katdata.corr_products):
+            uvw_coordinates = numpy.array(target.uvw(antslookup[corr_prod[1][:4]], timestamp=tm, antenna=antslookup[corr_prod[0][:4]]))
+            uu[:,num] = uvw_coordinates[0]
+            vv[:,num] = uvw_coordinates[1]
+            ww[:,num] = uvw_coordinates[2]
         # Number of integrations
         msg = "Scan:%4d Int: %4d %16s Start %s"%(scan,nint,target.name,day2dhms((tm[0]-time0)/86400.0)[0:12])
         OErr.PLog(err, OErr.Info, msg);
@@ -598,6 +611,7 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
                     icorrprod = (ibase[0][0],ibase[1][0],istok)
                     iprod = p.index(icorrprod)
                     thisvis=vs[iint:iint+1,:,iprod:iprod+1]
+                    thiswt=wt[iint:iint+1,:,iprod:iprod+1]
                     thisw=ww[iint:iint+1,iprod]
                     # Fringe stop the data if necessary
                     if stop_w:
@@ -608,23 +622,23 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
                     indx += 1
                     buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thisvis.imag.flatten()
                     indx += 1
-                    buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = wt[iint:iint+1,:,iprod:iprod+1].flatten()
+                    buffer[indx:indx+(nchan+1)*nstok*3:nstok*3] = thiswt.flatten()
                     # Write if Stokes index >= next or the last
-                    if (iprod==nprod-1) or (p[iprod][2]>=p[iprod+1][2]):
-                        # Random parameters
-                        buffer[ilocu]  = uu[iint][iprod]/lamb
-                        buffer[ilocv]  = vv[iint][iprod]/lamb
-                        buffer[ilocw]  = ww[iint][iprod]/lamb
-                        buffer[iloct]  = (tm[iint]-time0)/86400.0 # Time in days
-                        buffer[ilocb]  = p[iprod][0]*256.0 + p[iprod][1]
-                        buffer[ilocsu] = suid
-                        outUV.Write(err, firstVis=visno)
-                        visno += 1
-                        buffer[3]= -3.14159
-                        #print visno,buffer[0:5]
-                        firstVis = None  # Only once
-                        # initialize visibility
-                        first = True
+                    #if (iprod==nprod-1) or (p[iprod][2]>=p[iprod+1][2]):
+                # Random parameters
+                buffer[ilocu]  = uu[iint][iprod]/lamb
+                buffer[ilocv]  = vv[iint][iprod]/lamb
+                buffer[ilocw]  = ww[iint][iprod]/lamb
+                buffer[iloct]  = (tm[iint]-time0)/86400.0 # Time in days
+                buffer[ilocb]  = p[iprod][0]*256.0 + p[iprod][1]
+                buffer[ilocsu] = suid
+                outUV.Write(err, firstVis=visno)
+                visno += 1
+                buffer[3]= -3.14159
+                #print visno,buffer[0:5]
+                firstVis = None  # Only once
+                # initialize visibility
+                first = True
         # end loop over integrations
         if err.isErr:
             OErr.printErrMsg(err, "Error writing data")
@@ -638,3 +652,43 @@ def ConvertKATData(outUV, katdata, meta, err, **kwargs):
         OErr.printErrMsg(err, "Error closing data")
     # end ConvertKATData
 
+def AverageTime(vis,wt,fg,ts,av=4):
+    """
+    Sum data in time (does not yet preserve weights- they are initialised to 1 whith flags set to zero)
+    """
+    old_shape=vis.shape
+    av_remainder=old_shape[0]%av
+    if av_remainder>0:
+        vis=vis[:-av_remainder]
+        wt=wt[:-av_remainder]
+        fg=fg[:-av_remainder]
+        ts=ts[:-av_remainder]
+    vis=vis.reshape((old_shape[0]/av,av,old_shape[1],old_shape[2]))
+    fg=fg.reshape((old_shape[0]/av,av,old_shape[1],old_shape[2]))
+    weight=numpy.ones((old_shape[0]/av,av,old_shape[1],old_shape[2]))*~fg
+    vis=numpy.sum(vis*weight,axis=1)
+    fg=numpy.sum(fg,axis=1,dtype=numpy.bool)
+    wt=numpy.ones_like(vis,dtype=numpy.float32)*~fg
+    ts=numpy.average(ts.reshape(old_shape[0]/av,av),axis=1)
+
+    return vis,fg,wt,ts
+
+def MakeTemplate(inuv,outuv,katdata):
+    """
+    Construct a template file with the correct channel range and write it to outuv.
+    """
+    numchans=len(katdata.channel_freqs)
+    uvfits = pyfits.open(inuv)
+    #Resize the visibility table
+    vistable = uvfits[1].columns
+    vistable.del_col('VISIBILITIES')
+    newvis = pyfits.Column(name='VISIBILITIES',format='%dE'%(3*4*numchans),dim='(3,4,%d,1,1,1)'%(numchans,),array=numpy.zeros((1,1,1,numchans,4,3,),dtype=numpy.float32))
+    vistable.add_col(newvis)
+    vishdu = pyfits.BinTableHDU.from_columns(vistable)
+    for key in uvfits[1].header.keys():
+        if (key not in vishdu.header.keys()) and (key != 'HISTORY'):
+            vishdu.header[key]=uvfits[1].header[key]
+
+    newuvfits = pyfits.HDUList([uvfits[0],vishdu,uvfits[2],uvfits[3],uvfits[4],uvfits[5],uvfits[6]])
+
+    newuvfits.writeto(outuv,clobber=True)
