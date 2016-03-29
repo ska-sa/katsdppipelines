@@ -593,7 +593,7 @@ def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1):
         vv = numpy.zeros_like(uu)
         ww = numpy.zeros_like(uu)
         for num,corr_prod in enumerate(katdata.corr_products):
-            uvw_coordinates = numpy.array(target.uvw(antslookup[corr_prod[1][:4]], timestamp=tm, antenna=antslookup[corr_prod[0][:4]]))
+            uvw_coordinates = numpy.array(target.uvw(antslookup[corr_prod[0][:4]], timestamp=tm, antenna=antslookup[corr_prod[1][:4]]))
             uu[:,num] = uvw_coordinates[0]
             vv[:,num] = uvw_coordinates[1]
             ww[:,num] = uvw_coordinates[2]
