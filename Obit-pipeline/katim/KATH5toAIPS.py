@@ -207,7 +207,9 @@ def GetKATMeta(katdata, err):
     alook = {}
     i = 0
     #MeerKAT or KAT7??
-    antlist = katdata.ants[::-1] if katdata.ants[0].name[0]=='m' else katdata.ants
+    #antlist = katdata.ants[::-1] if katdata.ants[0].name[0]=='m' else katdata.ants
+    katdata.ants.sort()
+    antlist = katdata.ants
     for a in antlist:
         name  = a.name
         x,y,z = a.position_ecef
