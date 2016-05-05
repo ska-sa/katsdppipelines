@@ -84,9 +84,12 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
             flag_row = self._main.getcol('FLAG_ROW', start, end - start)
             field_id = self._main.getcol('FIELD_ID', start, end - start)
             data_desc_id = self._main.getcol('DATA_DESC_ID', start, end - start)
+            antenna1 = self._main.getcol('ANTENNA1', start, end - start)
+            antenna2 = self._main.getcol('ANTENNA2', start, end - start)
             valid = np.logical_not(flag_row)
             valid = np.logical_and(valid, field_id == self._field_id)
             valid = np.logical_and(valid, data_desc_id == self._data_desc_id)
+            valid = np.logical_and(valid, antenna1 != antenna2)
             data = self._main.getcol(self._data_col, start, end - start)[valid, channel, ...]
             # Note: UVW is negated due to differing sign conventions
             uvw = -self._main.getcol('UVW', start, end - start)[valid, ...]
@@ -98,7 +101,9 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
                 weight = self._main.getcol('WEIGHT', start, end - start)[valid, ...]
             flag = self._main.getcol('FLAG', start, end - start)[valid, ...]
             weight = weight * np.logical_not(flag[:, channel, :])
-            yield dict(uvw=uvw, weights=weight, vis=data, progress=end, total=self._main.nrows())
+            baseline = (antenna1 * self._antenna.nrows() + antenna2)[valid, ...]
+            yield dict(uvw=uvw, weights=weight, baselines=baseline, vis=data,
+                       progress=end, total=self._main.nrows())
 
     def close(self):
         self._main.close()

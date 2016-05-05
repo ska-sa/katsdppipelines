@@ -1,19 +1,26 @@
 #!/bin/bash
 set -e -x
 
-pip install -U pip setuptools wheel
-pip install numpy  # Some requirements need it already installed
-pip install -r requirements.txt
+pip install -r ~/docker-base/pre-requirements.txt
+install-requirements.py -d ~/docker-base/base-requirements.txt -d ~/docker-base/gpu-requirements.txt \
+    -r requirements.txt
 if [ "$1" = "" ]; then
-    pip install coverage
+    install-requirements.py -d ~/docker-base/base-requirements.txt -d ~/docker-base/gpu-requirements.txt \
+        -r test-requirements.txt
+    pip install --no-index -e '.[test]'
+    # numba crashes on import on ARM, so remove it
+    if ! python -c 'import numba'; then
+        pip uninstall --yes numba
+    fi
     nosetests --with-xunit --with-coverage --cover-erase --cover-package=katsdpimager --cover-xml
-    # Hack to try to make Jenkins Cobertura plugin find the source
+    # Hack to make Jenkins Cobertura plugin find the source
     sed -i -e 's!katsdppipelines/katsdpimager</source>!katsdppipelines</source>!' \
            -e 's!filename="katsdpimager/!filename="katsdpimager/katsdpimager/!g' \
            coverage.xml
 elif [ "$1" = "images" ]; then
-    pip install astropy aplpy mako matplotlib
-    pip install -e .
+    install-requirements.py -d ~/docker-base/base-requirements.txt -d ~/docker-base/gpu-requirements.txt \
+        -r report-requirements.txt
+    pip install --no-index -e '.[report]'
     cd tests
     rm -rf simple.ms simple.ms_p0 simple.lsm.html report
     makems
