@@ -76,7 +76,8 @@ def get_tracks(data, ts):
             start_indx.append(nearest_time_indx)
             if 'track' in prev_state:
                 stop_indx.append(nearest_time_indx-1)
-        elif 'slew' in state:
+        # ignore 'stop' and affiliated 'slew'
+        elif 'slew' in state and 'stop' not in prev_state:
             stop_indx.append(nearest_time_indx-1)
         prev_state = state
 
@@ -203,28 +204,27 @@ def pipeline(data, ts, task_name='pipeline'):
     target_slices = []
 
     for scan_slice in reversed(track_slices):
+
         # start time, end time
         t0 = data['times'][scan_slice.start]
         t1 = data['times'][scan_slice.stop-1]
 
         # if we only have one timestamp in the scan, ignore it
         #  (this happens when there is no slew between tracks so we catch the first dump of the next track)
-        if (scan_slice.stop - scan_slice.start) == 1: continue
+        n_times = scan_slice.stop - scan_slice.start
+        if n_times == 1: continue
 
         # extract scan info from the TS
         #  target string contains: 'target name, tags, RA, DEC'
-        # The large 300s window here is to account for a target that may have been set prior to a
-        # slew, prior to the current scan.
-        target = ts.get_range(target_key,et=t0,include_previous=300.)[0][0]
+        target = ts.get_range(target_key,et=t0)[0][0]
         # add the dump period here to account for scan start and activity change being closely timed
         scan_state = ts.get_range(activity_key,et=t0+dump_period,include_previous=300.)[0][0]
         taglist = target.split(',')[1].split()
-        # fudge for now to add delay cal tag to bpcals
-        if 'bpcal' in taglist: taglist.append('delaycal')
 
         target_name = target.split(',')[0]
         pipeline_logger.info('-----------------------------------')
         pipeline_logger.info('Target: {0}'.format(target_name,))
+        pipeline_logger.info('   Timestamps:   {0}'.format(n_times,))
         pipeline_logger.info('   Tags:   {0}'.format(taglist,))
 
         # ---------------------------------------
@@ -261,7 +261,7 @@ def pipeline(data, ts, task_name='pipeline'):
             # ---------------------------------------
             # K solution
             pipeline_logger.info('   Solving for K on delay calibrator {0}'.format(target_name,))
-            k_soln = s.k_sol(k_chan_sample,k0_h,bp0_h,refant_ind,pre_apply=[g_to_apply])
+            k_soln = s.k_sol(k_chan_sample,refant_ind,pre_apply=[g_to_apply])
 
             # ---------------------------------------
             # update TS
