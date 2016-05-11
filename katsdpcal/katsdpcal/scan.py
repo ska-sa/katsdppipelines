@@ -135,7 +135,7 @@ class Scan(object):
     # ---------------------------------------------------------------------------------------------
     # Calibration solution functions
 
-    def g_sol(self,input_solint,g0,REFANT,pre_apply=[],**kwargs):
+    def g_sol(self,input_solint,g0,REFANT,bchan=1,echan=0,pre_apply=[],**kwargs):
         """
         Solve for gain
 
@@ -144,6 +144,8 @@ class Scan(object):
         input_solint : nominal solution interval to use for the fit
         g0 : initial estimate of gains for solver, shape (time, pol, nant)
         REFANT : reference antenna, int
+        bchan : start channel for fit, int, optional
+        echan : end channel for fit, int, optional
         pre_apply : calibration solutions to apply, list of CalSolutions, optional
 
         Returns
@@ -165,11 +167,12 @@ class Scan(object):
         # set up solution interval
         solint, dumps_per_solint = calprocs.solint_from_nominal(input_solint,self.dump_period,len(self.times))
 
-        # first averge in time over solution interval
-
-        ave_vis, ave_flags, ave_weights, av_sig, ave_times = calprocs.wavg_full_t(self.modvis,self.flags,self.weights,
-                dumps_per_solint,axis=0,times=self.times)
-        # second average over all channels
+        # first averge in time over solution interval, for specified channel range (no averaging over channel)
+        if echan == 0: echan = None
+        chan_slice = [slice(None),slice(bchan,echan),slice(None),slice(None)]
+        ave_vis, ave_flags, ave_weights, av_sig, ave_times = calprocs.wavg_full_t(self.modvis[chan_slice],
+                self.flags[chan_slice],self.weights[chan_slice],dumps_per_solint,axis=0,times=self.times)
+        # secondly, average channels
         ave_vis = calprocs.wavg(ave_vis,ave_flags,ave_weights,axis=1)
 
         # solve for gains G
@@ -208,14 +211,16 @@ class Scan(object):
         kcross_soln = calprocs.kcross_fit(ave_vis,av_flags,self.channel_freqs,chan_ave=chan_ave)
         return CalSolution('KCROSS', kcross_soln, np.average(self.times))
 
-    def k_sol(self,chan_sample,REFANT,pre_apply=[]):
+    def k_sol(self,REFANT,bchan=1,echan=0,chan_sample=1,pre_apply=[]):
         """
         Solve for delay
 
         Parameters
         ----------
-        chan_sample : channel sampling to use in delay fit
         REFANT : reference antenna, int
+        bchan : start channel for fit, int, optional
+        echan : end channel for fit, int, optional
+        chan_sample : channel sampling to use in delay fit, optional
         pre_apply : calibration solutions to apply, list of CalSolutions, optional
 
         Returns
@@ -231,11 +236,14 @@ class Scan(object):
         for soln in pre_apply:
            self.modvis = self.apply(soln,origvis=False)
 
-        # average over all time (no averaging over channel)
-        ave_vis, ave_time = calprocs.wavg(self.modvis,self.flags,self.weights,times=self.times,axis=0)
+        # average over all time, for specified channel range (no averaging over channel)
+        if echan == 0: echan = None
+        chan_slice = [slice(None),slice(bchan,echan),slice(None),slice(None)]
+        ave_vis, ave_time = calprocs.wavg(self.modvis[chan_slice],self.flags[chan_slice],self.weights[chan_slice],times=self.times,axis=0)
 
-        # solve for delay K
-        k_soln = calprocs.k_fit(ave_vis,self.corrprod_lookup,self.channel_freqs,REFANT,chan_sample=chan_sample)
+        # solve for delay K, using specified channel range
+        k_freqs = self.channel_freqs[bchan:echan]
+        k_soln = calprocs.k_fit(ave_vis,self.corrprod_lookup,k_freqs,REFANT,chan_sample=chan_sample)
 
         return CalSolution('K', k_soln, ave_time)
 

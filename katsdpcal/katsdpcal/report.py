@@ -50,7 +50,7 @@ def insert_fig(report,fig,name=None):
     report : open report file to write to
     fig    : matplitlib figure 
     """
-    figname = "{}.jpeg".format(name if name else str(fig))
+    figname = "{}.eps".format(name if name else str(fig))
     fig.savefig(figname,bbox_inches='tight')
     fig_text = \
     '''.. image:: {}
@@ -255,8 +255,7 @@ def make_cal_report(ts,report_path):
         # convert delays to nano seconds
         vals = 1e9*vals
 
-        cal_rst.writeln('**POL 0**')
-        write_table_timerow(cal_rst,'KCROSS',times,vals)
+        write_table_timerow(cal_rst,['KCROSS'],times,vals)
 
     # ---------------------------------
     # bandpass
