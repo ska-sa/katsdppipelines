@@ -120,7 +120,6 @@ def get_solns_to_apply(s,ts,sol_list,logger,time_range=[]):
                 soln = calprocs.CalSolution('G', solval, soltime)
 
             solns_to_apply.append(s.interpolate(soln))
-            logger.info('   Apply {0} solution to {1}'.format(X,s.target.name))
 
         except KeyError:
             # TS doesn't yet contain 'X'
@@ -256,29 +255,32 @@ def pipeline(data, ts, task_name='pipeline'):
             # K solution
             pipeline_logger.info('   Solving for K on beamformer calibrator {0}'.format(target_name,))
             k_soln = s.k_sol(refant_ind,ts.cal_k_bchan,ts.cal_k_echan)
-            pipeline_logger.info('   Saving K to Telescope State')
+            pipeline_logger.info('    - Saving K to Telescope State')
             ts.add(k_soln.ts_solname,k_soln.values,ts=k_soln.times)
 
             # ---------------------------------------
             # B solution
             pipeline_logger.info('   Solving for B on beamformer calibrator {0}'.format(target.split(',')[0],))
             # get K solutions to apply and interpolate it to scan timestamps
+            pipeline_logger.info('    - Pre-apply {0} solution to {1}'.format('K',s.target.name))
             solns_to_apply = get_solns_to_apply(s,ts,['K'],pipeline_logger)
             b_soln = s.b_sol(bp0_h,refant_ind,pre_apply=solns_to_apply)
-            pipeline_logger.info('   Saving B to Telescope State')
+            pipeline_logger.info('    - Saving B to Telescope State')
             ts.add(b_soln.ts_solname,b_soln.values,ts=b_soln.times)
 
             # ---------------------------------------
             # G solution
-            pipeline_logger.info('   Solving for G on gain calibrator {0}'.format(target.split(',')[0],))
-            # get B solutions to apply and interpolate them to scan timestamps
+            pipeline_logger.info('   Solving for G on beamformer calibrator {0}'.format(target.split(',')[0],))
+            # get B solutions to apply and interpolate them to scan timestamps along with K
             solns_to_apply.extend(get_solns_to_apply(s,ts,['B'],pipeline_logger))
 
             # use single solution interval
             dumps_per_solint = np.ceil(scan_slice.stop-scan_slice.start-1)
             g_solint = dumps_per_solint*dump_period
+            pipeline_logger.info('    - Pre-apply {0} solution to {1}'.format('K',s.target.name))
+            pipeline_logger.info('    - Pre-apply {0} solution to {1}'.format('B',s.target.name))
             g_soln = s.g_sol(g_solint,g0_h,refant_ind,ts.cal_g_bchan,ts.cal_g_echan,pre_apply=solns_to_apply)
-            pipeline_logger.info('   Saving G to Telescope State')
+            pipeline_logger.info('    - Saving G to Telescope State')
             # add gains to TS, iterating through solution times
             for v,t in zip(g_soln.values,g_soln.times):
                 ts.add(g_soln.ts_solname,v,ts=t)
@@ -303,7 +305,7 @@ def pipeline(data, ts, task_name='pipeline'):
 
             # ---------------------------------------
             # update TS
-            pipeline_logger.info('   Saving K to Telescope State')
+            pipeline_logger.info('    - Saving K to Telescope State')
             ts.add(k_soln.ts_solname,k_soln.values,ts=k_soln.times)
 
             # ---------------------------------------
@@ -319,7 +321,7 @@ def pipeline(data, ts, task_name='pipeline'):
 
             # ---------------------------------------
             # preliminary G solution
-            pipeline_logger.info('   Solving for preliminary G on kcross calibrator {0}'.format(target_name,))
+            pipeline_logger.info('   Solving for preliminary G on KCROSS calibrator {0}'.format(target_name,))
             # solve and interpolate to scan timestamps
             pre_g_soln = s.g_sol(k_solint,g0_h,refant_ind,pre_apply=solns_to_apply)
             g_to_apply = s.interpolate(pre_g_soln)
@@ -332,7 +334,7 @@ def pipeline(data, ts, task_name='pipeline'):
 
             # ---------------------------------------
             # update TS
-            pipeline_logger.info('   Saving KCROSS to Telescope State')
+            pipeline_logger.info('    - Saving KCROSS to Telescope State')
             ts.add(kcross_soln.ts_solname,kcross_soln.values,ts=kcross_soln.times)
 
             # ---------------------------------------
@@ -360,7 +362,7 @@ def pipeline(data, ts, task_name='pipeline'):
 
             # ---------------------------------------
             # update TS
-            pipeline_logger.info('   Saving B to Telescope State')
+            pipeline_logger.info('    - Saving B to Telescope State')
             ts.add(b_soln.ts_solname,b_soln.values,ts=b_soln.times)
 
             # ---------------------------------------
@@ -383,7 +385,7 @@ def pipeline(data, ts, task_name='pipeline'):
 
             # ---------------------------------------
             # update TS
-            pipeline_logger.info('   Saving G to Telescope State')
+            pipeline_logger.info('    - Saving G to Telescope State')
             # add gains to TS, iterating through solution times
             for v,t in zip(g_soln.values,g_soln.times):
                 ts.add(g_soln.ts_solname,v,ts=t)
