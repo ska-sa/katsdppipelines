@@ -303,12 +303,13 @@ def make_cal_report(ts,report_path):
     cal_rst.writeln()
     cal_rst.writeln()
     cal_rst.close()
-    
-    print os.listdir('.')
-    print os.listdir(project_dir)
-    # convert rst to pdf 
-    print 'rst2pdf  -s eightpoint {0}/calreport_source/{1}'.format(project_dir,report_file)
-    os.system('rst2pdf  -s eightpoint {0}/calreport_source/{1}'.format(project_dir,report_file))
-    # move to project directory
-    shutil.move(report_file.replace('rst','pdf'),project_dir)
+
+    # will do this properly with subprocess later (quick fix for now, to keep katsdpcal running)
+    try:
+        # convert rst to pdf
+        os.system('rst2pdf  -s eightpoint {0}/calreport_source/{1}'.format(project_dir,report_file))
+        # move to project directory
+        shutil.move(report_file.replace('rst','pdf'),project_dir)
+    except Exception, e:
+        print 'Report generation failed: {0}'.format(e,)
     
