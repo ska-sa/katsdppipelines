@@ -74,16 +74,16 @@ def setup_logger(log_path):
 
     # logging to file
     logging.basicConfig(filename='{0}/pipeline.log'.format(log_path,),
-                        format='%(asctime)s.%(msecs)02d %(name)-24s %(levelname)-8s %(message)s',
-                        datefmt='%d-%m-%y %H:%M:%S',)
+                        format='%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',)
     logger.setLevel(logging.INFO)
 
     # logging to stdout
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     # set format for console use
-    formatter = logging.Formatter('%(asctime)s.%(msecs)02d %(name)-24s %(levelname)-8s %(message)s')
-    formatter.datefmt='%d-%m %H:%M:%S'
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s')
+    formatter.datefmt='%Y-%m-%d %H:%M:%S'
     # tell the handler to use this format
     console.setFormatter(formatter)
     # add the handler to the root logger
@@ -262,12 +262,12 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
 
     # buffer needs to include:
     #   visibilities, shape(time,channel,baseline,pol), type complex64 (8 bytes)
-    #   flags, shape(time,channel,baseline,pol), type int8 (? confirm)
-    #   weights, shape(time,channel,baseline,pol), type int8 (? confirm)
+    #   flags, shape(time,channel,baseline,pol), type uint8 (1 byte)
+    #   weights, shape(time,channel,baseline,pol), type float32 (4 bytes)
     #   time, shape(time), type float64 (8 bytes)
     # plus minimal extra for scan transition indices
-    scale_factor = 8. + 1. + 1.  # vis + flags + weights
-    time_factor = 4. # 8.
+    scale_factor = 8. + 1. + 4. # vis + flags + weights
+    time_factor = 8. + 0.1 # time + 0.1 for good measure (indiced)
     array_length = buffer_maxsize/((scale_factor*ts.cbf_n_chans*npol*nbl) + time_factor)
     array_length = np.int(np.ceil(array_length))
     logger.info('Buffer size : {0} G'.format(buffer_maxsize/1.e9,))
