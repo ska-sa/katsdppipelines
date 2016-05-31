@@ -57,12 +57,12 @@ def insert_fig(report,fig,name=None):
     fig_text = \
     '''.. image:: {}
        :align: center
-    '''.format(figname)
+    '''.format(figname,)
     report.writeln()
     report.writeln(fig_text)
     report.writeln()
 
-def write_bullet_if_present(report,ts,var_text,var_name,var_format,transform=None):
+def write_bullet_if_present(report,ts,var_text,var_name,transform=None):
     """
     Write bullet point, if TescopeState key is present
 
@@ -72,13 +72,12 @@ def write_bullet_if_present(report,ts,var_text,var_name,var_format,transform=Non
     ts     : telescope state
     var_text : bullet point description, string
     var_name : telescope state key, string
-    var_format : format for printing, string
     transform : transform for applying to TelescopeState value before reporting, optional
     """
     ts_value = ts[var_name] if ts.has_key(var_name) else 'unknown'
     if transform is not None:
         ts_value = transform(ts_value)
-    report.writeln('* {0}:  {1:{2}}'.format(var_text,ts_value,var_format))
+    report.writeln('* {0}:  {1}'.format(var_text,ts_value))
 
 def write_summary(report,ts):
     """
@@ -90,10 +89,10 @@ def write_summary(report,ts):
     ts     : telescope state
     """
     # write RST style bulletted list
-    write_bullet_if_present(report,ts,'Int time','sdp_l0_int_time','f')
-    write_bullet_if_present(report,ts,'Channels','cbf_n_chans','d')
-    write_bullet_if_present(report,ts,'Antennas','antenna_mask','d',transform=len)
-    write_bullet_if_present(report,ts,'Antenna list','antenna_mask','s')
+    write_bullet_if_present(report,ts,'Int time','sdp_l0_int_time')
+    write_bullet_if_present(report,ts,'Channels','cbf_n_chans')
+    write_bullet_if_present(report,ts,'Antennas','antenna_mask',transform=len)
+    write_bullet_if_present(report,ts,'Antenna list','antenna_mask')
     report.writeln()
 
     report.writeln('Source list:')
@@ -196,7 +195,7 @@ def make_cal_report(ts,report_path):
     except (TypeError, KeyError, AttributeError):
         # TypeError, KeyError because this isn't properly implimented yet
         # AttributeError in case this key isnt in the telstate for whatever reason
-        project_name = '{0}_unknown_project'.format(int(time.time()))
+        project_name = '{0}_unknown_project'.format(int(time.time()),)
 
     # make calibration report directory and move into it
     if not report_path: report_path = '.'
