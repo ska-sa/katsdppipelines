@@ -2,6 +2,7 @@
 import numpy as np
 import time
 import os
+import shutil
 import signal
 import manhole
 
@@ -59,7 +60,7 @@ def parse_opts():
     #parser.set_defaults(telstate='localhost')
     return parser.parse_args()
 
-def setup_logger(log_path):
+def setup_logger(log_name,log_path='.'):
     """
     Set up the pipeline logger.
     The logger writes to a pipeline.log file and to stdout.
@@ -68,12 +69,13 @@ def setup_logger(log_path):
     ======
     log_path : str
         path in which log file will be written
+    log_name : str
+        name of log file
     """
-    if not log_path: log_path = '.'
     log_path = os.path.abspath(log_path)
 
     # logging to file
-    logging.basicConfig(filename='{0}/pipeline.log'.format(log_path,),
+    logging.basicConfig(filename='{0}/{1}'.format(log_path,log_name),
                         format='%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',)
     logger.setLevel(logging.INFO)
@@ -90,6 +92,30 @@ def setup_logger(log_path):
     logging.getLogger('').addHandler(console)
     # set log level to INFO for katsdpcal module
     #logging.getLogger('katsdpcal').setLevel(logging.INFO)
+
+def setup_observation_logger(log_name,log_path='.'):
+    """
+    Set up a pipeline logger to file.
+
+    Inputs
+    ======
+    log_path : str
+        path in which log file will be written
+    """
+    log_path = os.path.abspath(log_path)
+
+    # logging to file
+    # set format
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s')
+    formatter.datefmt='%Y-%m-%d %H:%M:%S'
+
+    obs_log = logging.FileHandler('{0}/{1}'.format(log_path,log_name))
+    obs_log.setFormatter(formatter)
+    logging.getLogger('').addHandler(obs_log)
+    return obs_log
+
+def stop_observation_logger(obs_log):
+    logging.getLogger('').removeHandler(obs_log)
 
 def all_alive(process_list):
     """
@@ -180,7 +206,7 @@ def kill_shutdown():
 
 def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e9, auto=True,
            l0_endpoint=':7200', l1_endpoint='127.0.0.1:7202', l1_rate=5.0e7, full_l1=False,
-           mproc=True, param_file='', report_path=''):
+           mproc=True, param_file='', report_path='', log_path='.', full_log=None):
     """
     Start the pipeline using 'num_buffers' buffers, each of size 'buffer_maxsize'.
     This will instantiate num_buffers + 1 threads; a thread for each pipeline and an
@@ -217,6 +243,8 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
         File of default pipeline parameters
     report_path : string
         Path under which to save pipeline report
+    log_path : string
+        Path for pipeline logs
     """
 
     print 'opt params: ', antenna_mask, cbf_n_chans
@@ -282,7 +310,10 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
     forced_shutdown = False
 
     while not forced_shutdown:
-        logger.info('=========================')
+        observation_log = '{0}_pipeline.log'.format(int(time.time()),)
+        obs_log = setup_observation_logger(observation_log,log_path)
+
+        logger.info('===========================')
         logger.info('   Starting new observation')
 
         # set up conditions for the buffers
@@ -336,8 +367,28 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
                 map(lambda x: x.join(), pipelines)
             logger.info('Pipeline tasks closed')
 
+            # get observation name
+            try:
+                obs_keys = ts.get_range('obs_params',st=0,return_format='recarray')['value']
+                # choose most recent experiment id, if there are more than one
+                experiment_id_string = [x for x in obs_keys if 'experiment_id' in x][-1]
+                experiment_id = eval(experiment_id_string.split()[-1])
+            except (TypeError, KeyError, AttributeError):
+                # TypeError, KeyError because this isn't properly implimented yet
+                # AttributeError in case this key isnt in the telstate for whatever reason
+                experiment_id = '{0}_unknown_project'.format(int(time.time()),)
+
+            # make directory for this observation, for logs and report
+            if not report_path: report_path = '.'
+            report_path = os.path.abspath(report_path)
+            obs_dir = '{0}/{1}'.format(report_path,experiment_id)
+            try:
+                os.mkdir(obs_dir)
+            except OSError:
+                logger.warning('Experiment ID directory {} already exits'.format(obs_dir,))
+
             # create pipeline report (very basic at the moment)
-            make_cal_report(ts,report_path)
+            make_cal_report(ts,report_path,experiment_id)
 
             if full_l1:
                 # send L1 stop transmission
@@ -347,14 +398,22 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
                 logger.info('L1 stream ended')
 
             logger.info('   Observation ended')
-            logger.info('=========================')
+            logger.info('===========================')
+
+            # copy log of this observation into the report directory
+            shutil.move('{0}/{1}'.format(log_path,observation_log),'{0}/pipeline_{1}.log'.format(obs_dir,experiment_id))
+            stop_observation_logger(obs_log)
+            if full_log != None:
+                shutil.copy('{0}/{1}'.format(log_path,full_log),'{0}/{1}'.format(obs_dir,full_log))
 
 if __name__ == '__main__':
 
     opts = parse_opts()
 
     # set up logging
-    setup_logger(opts.log_path)
+    log_name = 'pipeline.log'
+    log_path = os.path.abspath(opts.log_path)
+    setup_logger(log_name,log_path)
 
     # threading or multiprocessing imports
     if opts.threading is False:
@@ -378,4 +437,4 @@ if __name__ == '__main__':
            num_buffers=opts.num_buffers, buffer_maxsize=opts.buffer_maxsize, auto=not(opts.no_auto),
            l0_endpoint=opts.l0_spectral_spead[0], l1_endpoint=opts.l1_spectral_spead,
            l1_rate=opts.l1_rate, full_l1=opts.full_l1, mproc=not(opts.threading),
-           param_file=opts.parameters, report_path=opts.report_path)
+           param_file=opts.parameters, report_path=opts.report_path, log_path=log_path, full_log=log_name)
