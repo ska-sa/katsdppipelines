@@ -79,7 +79,7 @@ def write_bullet_if_present(report,ts,var_text,var_name,transform=None):
         ts_value = transform(ts_value)
     report.writeln('* {0}:  {1}'.format(var_text,ts_value))
 
-def write_summary(report,ts):
+def write_summary(report,ts,st=None,et=None):
     """
     Write observation summary information to report
 
@@ -87,8 +87,13 @@ def write_summary(report,ts):
     ----------
     report : report file to write to
     ts     : telescope state
+    st     : start time for reporting parameters, seconds, float, optional
+    et     : end time for reporting parameters, seconds, float, optional
     """
     # write RST style bulletted list
+    report.writeln('* {0}:  {1}'.format('Start time',time.strftime("%x %X",time.gmtime(st))))
+
+    # telescope state values
     write_bullet_if_present(report,ts,'Int time','sdp_l0_int_time')
     write_bullet_if_present(report,ts,'Channels','cbf_n_chans')
     write_bullet_if_present(report,ts,'Antennas','antenna_mask',transform=len)
@@ -98,7 +103,7 @@ def write_summary(report,ts):
     report.writeln('Source list:')
     report.writeln()
     try:
-        target_list = ts.get_range('cal_info_sources',st=0,return_format='recarray')['value'] if ts.has_key('cal_info_sources') else []
+        target_list = ts.get_range('cal_info_sources',st=st,et=et,return_format='recarray')['value'] if ts.has_key('cal_info_sources') else []
         for target in target_list:
             report.writeln('* {0:s}'.format(target,))
     except AttributeError:
@@ -107,7 +112,7 @@ def write_summary(report,ts):
 
     report.writeln()    
 
-def write_table_timerow(report,colnames,time,data):
+def write_table_timerow(report,colnames,times,data):
     """
     Write RST style table to report, rows: time, columns: antenna
 
@@ -115,7 +120,7 @@ def write_table_timerow(report,colnames,time,data):
     ----------
     report   : report file to write to
     colnames : list of column names, list of string
-    time     : list of times (equates to number of rows in the table)
+    times    : list of times (equates to number of rows in the table)
     data     : table data, shape (time, columns)
     """
     # create table header
@@ -123,7 +128,7 @@ def write_table_timerow(report,colnames,time,data):
     header.insert(0,'time')
 
     n_entries = len(header)
-    col_width = 15
+    col_width = 30
     col_header = '='*col_width+' '
 
     # write table header
@@ -133,7 +138,7 @@ def write_table_timerow(report,colnames,time,data):
     report.writeln(col_header*n_entries)
 
     # add each time row to the table
-    for t, d in zip(time,data):
+    for t, d in zip(times,data):
         data_string = " ".join(["{:.4e}".format(di.real,).ljust(col_width) for di in np.atleast_1d(d)])
         report.write("{:.4e}".format(t,).ljust(col_width+1))
         report.writeln(data_string)  
@@ -142,7 +147,7 @@ def write_table_timerow(report,colnames,time,data):
     report.writeln(col_header*n_entries)
     report.writeln()
 
-def write_table_timecol(report,antennas,time,data):
+def write_table_timecol(report,antennas,times,data):
     """
     Write RST style table to report, rows: antenna, columns: time
 
@@ -150,17 +155,18 @@ def write_table_timecol(report,antennas,time,data):
     ----------
     report : report file to write to
     antennas : list of antenna names, comma separated string, or single string of comma separated antenna names
-    time     : list of times (equates to number of columns in the table)
+    times    : list of times (equates to number of columns in the table)
     data     : table data, shape (time, antenna)
     """
 
-    n_entries = len(time) + 1
-    col_width = 15
+    n_entries = len(times) + 1
+    col_width = 30
     col_header = '='*col_width+' '
 
     # create table header
-    header = " ".join(["{:.4e}".format(t,).ljust(col_width) for t in time])
-    header = 'ant'.ljust(col_width+1) + header
+    timestrings = [time.strftime("%d %X",time.gmtime(t)) for t in times]
+    header = " ".join(["{}".format(t,).ljust(col_width) for t in timestrings])
+    header = 'Ant'.ljust(col_width+1) + header
 
     # write table header
     report.writeln()
@@ -179,7 +185,7 @@ def write_table_timecol(report,antennas,time,data):
     report.writeln(col_header*n_entries)
     report.writeln()
 
-def make_cal_report(ts,report_path,project_name=None):
+def make_cal_report(ts,report_path,project_name=None,st=None,et=None):
     """
     Creates pdf calibration pipeline report (from RST source),
     using data from the Telescope State 
@@ -188,7 +194,9 @@ def make_cal_report(ts,report_path,project_name=None):
     ----------
     ts           : TelescopeState
     report_path  : path where report will be created, string
-    project_name : ID associated with project, string
+    project_name : ID associated with project, string, optional
+    st           : start time for reporting parameters, seconds, float, optional
+    et           : end time for reporting parameters, seconds, float, optional
     """
 
     if project_name == None:
@@ -229,7 +237,7 @@ def make_cal_report(ts,report_path,project_name=None):
     cal_rst.write_heading_1('Observation summary')
     cal_rst.writeln('Observation: {0:s}'.format(project_name,))
     cal_rst.writeln()
-    write_summary(cal_rst,ts)
+    write_summary(cal_rst,ts,st=st,et=et)
 
     # --------------------------------------------------------------------
     # write RFI summary
@@ -251,7 +259,7 @@ def make_cal_report(ts,report_path,project_name=None):
         cal_rst.writeln('Delay calibration solutions ([ns])')
         cal_rst.writeln()
 
-        product = ts.get_range(cal_product,st=0,return_format='recarray')
+        product = ts.get_range(cal_product,st=st,et=et,return_format='recarray')
         vals = product['value']
         # K shape is n_time, n_pol, n_ant
         times = product['time']
@@ -274,7 +282,7 @@ def make_cal_report(ts,report_path,project_name=None):
         cal_rst.writeln('Cross polarisation delay calibration solutions ([ns])')
         cal_rst.writeln()
 
-        product = ts.get_range(cal_product,st=0,return_format='recarray')
+        product = ts.get_range(cal_product,st=st,et=et,return_format='recarray')
         vals = product['value']
         # K shape is n_time, n_pol, n_ant
         times = product['time']
@@ -294,7 +302,7 @@ def make_cal_report(ts,report_path,project_name=None):
         cal_rst.writeln('Bandpass calibration solutions')
         cal_rst.writeln()
 
-        product = ts.get_range(cal_product,st=0,return_format='recarray')
+        product = ts.get_range(cal_product,st=st,et=et,return_format='recarray')
         vals = product['value']
         # B shape is n_time, n_chan, n_pol, n_ant
         times = product['time']
@@ -302,7 +310,7 @@ def make_cal_report(ts,report_path,project_name=None):
         for ti in range(len(times)):
             t = time.strftime("%Y %x %X",time.gmtime(times[ti]))
             cal_rst.writeln('Time: {}'.format(t,))
-            insert_fig(cal_rst,plotting.plot_bp_solns(vals[ti]),name='B_'+str(ti))
+            insert_fig(cal_rst,plotting.plot_bp_solns(vals[ti]),name='{0}/B_{1}'.format(report_source_path,str(ti)))
 
     # ---------------------------------
     # gain
@@ -314,15 +322,15 @@ def make_cal_report(ts,report_path,project_name=None):
         cal_rst.writeln('Gain calibration solutions')
         cal_rst.writeln()
 
-        product = ts.get_range(cal_product,st=0,return_format='recarray')
+        product = ts.get_range(cal_product,st=st,et=et,return_format='recarray')
         vals = product['value']
         # G shape is n_time, n_pol, n_ant
         times = product['time']
 
         cal_rst.writeln('**POL 0**')
-        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,0,:]),name='G_P0')
+        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,0,:]),name='{0}/G_P0'.format(report_source_path,))
         cal_rst.writeln('**POL 1**')
-        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,1,:]),name='G_P1')
+        insert_fig(cal_rst,plotting.plot_g_solns(times,vals[:,1,:]),name='{0}/G_P1'.format(report_source_path,))
 
     # --------------------------------------------------------------------
     # close off report

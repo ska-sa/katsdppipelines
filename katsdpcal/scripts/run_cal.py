@@ -369,14 +369,18 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
 
             # get observation name
             try:
-                obs_keys = ts.get_range('obs_params',st=0,return_format='recarray')['value']
-                # choose most recent experiment id, if there are more than one
+                obs_params = ts.get_range('obs_params',st=0,return_format='recarray')
+                obs_keys = obs_params['value']
+                obs_times = obs_params['time']
+                # choose most recent experiment id (last entry in the list), if there are more than one
                 experiment_id_string = [x for x in obs_keys if 'experiment_id' in x][-1]
                 experiment_id = eval(experiment_id_string.split()[-1])
+                obs_start = [t for x,t in zip(obs_keys,obs_times) if 'experiment_id' in x][-1]
             except (TypeError, KeyError, AttributeError):
                 # TypeError, KeyError because this isn't properly implimented yet
                 # AttributeError in case this key isnt in the telstate for whatever reason
                 experiment_id = '{0}_unknown_project'.format(int(time.time()),)
+                obs_start = None
 
             # make directory for this observation, for logs and report
             if not report_path: report_path = '.'
@@ -388,7 +392,7 @@ def run_threads(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=20e
                 logger.warning('Experiment ID directory {} already exits'.format(obs_dir,))
 
             # create pipeline report (very basic at the moment)
-            make_cal_report(ts,report_path,experiment_id)
+            make_cal_report(ts,report_path,experiment_id,st=obs_start)
 
             if full_l1:
                 # send L1 stop transmission
