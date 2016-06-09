@@ -76,8 +76,8 @@ def get_tracks(data, ts):
             start_indx.append(nearest_time_indx)
             if 'track' in prev_state:
                 stop_indx.append(nearest_time_indx-1)
-        # ignore 'stop' and affiliated 'slew'
-        elif ('slew' in state) or ('stop' in 'state') and ('track' in prev_state):
+        #    stop_indx.append(nearest_time_indx-1)
+        if 'track' in prev_state:
             stop_indx.append(nearest_time_indx-1)
         prev_state = state
 
@@ -115,7 +115,7 @@ def get_solns_to_apply(s,ts,sol_list,logger,time_range=[]):
             else:
                 # get G values for an hour range on either side of target scan
                 t0, t1 = time_range
-                gsols = ts.get_range(ts_solname,st=t0-60.*60.,et=t1+60.*60,return_format='recarray')
+                gsols = ts.get_range(ts_solname,st=t0-2.*60.*60.,et=t1+2.*60.*60,return_format='recarray')
                 solval, soltime = gsols['value'], gsols['time']
                 soln = calprocs.CalSolution('G', solval, soltime)
 
@@ -335,7 +335,7 @@ def pipeline(data, ts, task_name='pipeline'):
             # ---------------------------------------
             # KCROSS solution
             pipeline_logger.info('   Solving for KCROSS on delay calibrator {0}'.format(target_name,))
-            kcross_soln = s.kcross_sol(ts.cal_kcross_chanave,pre_apply=solns_to_apply)
+            kcross_soln = s.kcross_sol(ts.cal_k_bchan,ts.cal_k_echan,ts.cal_kcross_chanave,pre_apply=solns_to_apply)
 
             # ---------------------------------------
             # update TS
