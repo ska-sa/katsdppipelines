@@ -1,5 +1,6 @@
 
 import os
+import subprocess
 import shutil
 
 import logging
@@ -218,7 +219,7 @@ def make_cal_report(ts,report_path,project_name=None,st=None,et=None):
     try:
         os.mkdir(report_source_path)
     except OSError:
-        print 'Report source directory already exists. Stop report generation.'
+        logger.info('Report source directory already exists. Stop report generation.')
         return
     os.chdir(report_source_path)
     
@@ -364,15 +365,11 @@ def make_cal_report(ts,report_path,project_name=None,st=None,et=None):
     # will do this properly with subprocess later (quick fix for now, to keep katsdpcal running)
     try:
         # convert rst to pdf
-        print 'pwd - '
-        os.system('pwd')
-        print 'ls -'
-        os.system('ls')
-        print 'command -'
-        print 'rst2pdf -s eightpoint {0}/{1}'.format(report_source_path,report_file)
-        os.system('rst2pdf  -s eightpoint {0}/{1}'.format(report_source_path,report_file))
-        # move to project directory
-        shutil.move(report_file.replace('rst','pdf'),project_dir)
-    except Exception, e:
-        print 'Report generation failed: {0}'.format(e,)
-    
+        subprocess.check_output(['rst2pdf', '-s', 'eightpoint', '{0}'.format(report_source_path,report_file)])
+    except subprocess.CalledProcessError as e:
+        logger.info('Report pdf creation failed: code {0}'.format(e.returncode,))
+        logger.info('                            command {0}'.format(e.cmd,))
+        logger.info('                            output {0}'.format(e.output,))
+
+    # move to project directory
+    shutil.move(report_file.replace('rst','pdf'),project_dir)
