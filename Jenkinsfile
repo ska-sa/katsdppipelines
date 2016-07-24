@@ -9,4 +9,9 @@ if (!katsdp.isTegra()) {
 else {
     katsdp.setDependencies(['tegra_ska-sa/katsdpdockerbase/master'])
 }
-katsdp.standardBuild(maintainer: 'bmerry@ska.ac.za', subdir: 'katsdpimager', cuda: true)
+katsdp.standardBuild(
+    maintainer: 'bmerry@ska.ac.za',
+    subdir: 'katsdpimager',
+    cuda: true,
+    prepare_timeout: [time: 90, unit: 'MINUTES'],
+    test_timeout: [time: 90, unit: 'MINUTES'])
