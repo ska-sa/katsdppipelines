@@ -3,7 +3,7 @@
 def katsdp = fileLoader.fromGit('scripts/katsdp.groovy', 'git@github.com:ska-sa/katsdpjenkins', 'master', 'katpull', '')
 
 if (!katsdp.isTegra()) {
-    katsdp.setDependencies(['ska-sa/katsdpdockerbase/master', 'ska-sa/katpoint/master'])
+    katsdp.setDependencies(['ska-sa/katsdpdockerbase/master', 'ska-sa/katpoint/master', 'ska-sa/katsdpsigproc/master'])
     katsdp.standardBuild(maintainer: 'laura@ska.ac.za', subdir: 'katsdpcal')
 }
 else {
