@@ -212,7 +212,11 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
 
                 # get activity and target tag from TS
                 data_ts = ig['timestamp'].value + cbf_sync_time
-                activity_full = self.telstate.get_range(activity_key,et=data_ts,include_previous=True)[0]
+                if self.telstate.has_key(activity_key):
+                    activity_full = self.telstate.get_range(activity_key,et=data_ts,include_previous=True)[0]
+                else:
+                    self.accumulator_logger.info('no activity recorded for reference antenna {0} - ignoring dump'.format(self.telstate.cal_refant,))
+                    continue
                 activity, activity_time = activity_full
 
                 # if this is the first scan of the observation, set up some values
@@ -294,10 +298,12 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
             # if we exited the loop because it was the end of the SPEAD transmission
             if obs_end_flag:
                 if data_ts != None:
-                    self.telstate.add('cal_obs_end_time',data_ts,ts=data_ts)
+                    end_time = data_ts
                 else:
                     # no data_ts variable because no data has flowed
                     self.accumulator_logger.info(' --- no data flowed ---')
+                    end_time = time.time()
+                self.telstate.add('cal_obs_end_time',end_time,ts=end_time)
                 self.accumulator_logger.info('Observation ended')
                 self._obsend.set()
 
