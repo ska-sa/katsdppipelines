@@ -79,8 +79,12 @@ class Scan(object):
         # NOTE: This makes the asumption that the XC data are grouped at the beginning of the bl ordering,
         #       Followed by the AC data.
         # ******* Fancy indexing will not work here, as it returns a copy, not a view *******
-        xc_mask = np.array([b0!=b1 for b0,b1 in bls_lookup])
-        xc_slice = slice(np.where(xc_mask)[0][0], np.where(xc_mask)[0][-1]+1)
+        self.xc_mask = np.array([b0!=b1 for b0,b1 in bls_lookup])
+        try:
+            xc_slice = slice(np.where(self.xc_mask)[0][0], np.where(self.xc_mask)[0][-1]+1)
+        except IndexError:
+            # not XC data
+            xc_slice = slice(None)
         self.bl_slice = xc_slice if corr is 'xc' else slice(None)
         self.corrprod_lookup = bls_lookup[self.bl_slice]
 
@@ -135,7 +139,7 @@ class Scan(object):
     # ---------------------------------------------------------------------------------------------
     # Calibration solution functions
 
-    def g_sol(self,input_solint,g0,REFANT,pre_apply=[],**kwargs):
+    def g_sol(self,input_solint,g0,REFANT,bchan=1,echan=0,pre_apply=[],**kwargs):
         """
         Solve for gain
 
@@ -144,6 +148,8 @@ class Scan(object):
         input_solint : nominal solution interval to use for the fit
         g0 : initial estimate of gains for solver, shape (time, pol, nant)
         REFANT : reference antenna, int
+        bchan : start channel for fit, int, optional
+        echan : end channel for fit, int, optional
         pre_apply : calibration solutions to apply, list of CalSolutions, optional
 
         Returns
@@ -160,16 +166,18 @@ class Scan(object):
             self.modvis = self.vis
 
         for soln in pre_apply:
-           self.modvis = self.apply(soln,origvis=False)
+            self.logger.info('    - Pre-apply {0} solution to {1}'.format(soln.soltype,self.target.name))
+            self.modvis = self.apply(soln,origvis=False)
 
         # set up solution interval
         solint, dumps_per_solint = calprocs.solint_from_nominal(input_solint,self.dump_period,len(self.times))
 
-        # first averge in time over solution interval
-
-        ave_vis, ave_flags, ave_weights, av_sig, ave_times = calprocs.wavg_full_t(self.modvis,self.flags,self.weights,
-                dumps_per_solint,axis=0,times=self.times)
-        # second average over all channels
+        # first averge in time over solution interval, for specified channel range (no averaging over channel)
+        if echan == 0: echan = None
+        chan_slice = [slice(None),slice(bchan,echan),slice(None),slice(None)]
+        ave_vis, ave_flags, ave_weights, av_sig, ave_times = calprocs.wavg_full_t(self.modvis[chan_slice],
+                self.flags[chan_slice],self.weights[chan_slice],dumps_per_solint,axis=0,times=self.times)
+        # secondly, average channels
         ave_vis = calprocs.wavg(ave_vis,ave_flags,ave_weights,axis=1)
 
         # solve for gains G
@@ -177,13 +185,15 @@ class Scan(object):
 
         return CalSolution('G', g_soln, ave_times)
 
-    def kcross_sol(self,chan_ave,pre_apply=[]):
+    def kcross_sol(self,bchan=1,echan=0,chan_ave=1,pre_apply=[]):
         """
         Solve for cross hand delay offset
 
         Parameters
         ----------
-        chan_ave : channels to average together prior during fit
+        bchan : start channel for fit, int, optional
+        echan : end channel for fit, int, optional
+        chan_ave : channels to average together prior during fit, int, optional
         pre_apply : calibration solutions to apply, list of CalSolutions, optional
 
         Returns
@@ -197,27 +207,30 @@ class Scan(object):
             self.modvis = self.cross_vis
 
         for soln in pre_apply:
-           self.modvis = self.apply(soln,origvis=False)
+            self.logger.info('    - Pre-apply {0} solution to {1}'.format(soln.soltype,self.target.name))
+            self.modvis = self.apply(soln,origvis=False)
 
-        # average over all time (no averaging over channel)
-        ave_vis, av_flags, av_weights, av_sig = calprocs.wavg_full(self.modvis,self.cross_flags,self.cross_weights,axis=0)
+        # average over all time, for specified channel range (no averaging over channel)
+        if echan == 0: echan = None
+        chan_slice = [slice(None),slice(bchan,echan),slice(None),slice(None)]
+        ave_vis, av_flags, av_weights, av_sig = calprocs.wavg_full(self.modvis[chan_slice],self.cross_flags[chan_slice],self.cross_weights[chan_slice],axis=0)
 
         # solve for cross hand delay KCROSS
         # note that the kcross solver needs the flags because it averages the data
         #  (strictly it should need weights too, but deal with that leter when weights are meaningful)
-        kcross_soln = calprocs.kcross_fit(ave_vis,av_flags,self.channel_freqs,chan_ave=chan_ave)
+        kcross_soln = calprocs.kcross_fit(ave_vis,av_flags,self.channel_freqs[bchan:echan],chan_ave=chan_ave)
         return CalSolution('KCROSS', kcross_soln, np.average(self.times))
 
-    def k_sol(self,chan_sample,k0,bp0,REFANT,pre_apply=[]):
+    def k_sol(self,REFANT,bchan=1,echan=0,chan_sample=1,pre_apply=[]):
         """
         Solve for delay
 
         Parameters
         ----------
-        chan_sample : channel sampling to use in delay fit
-        k0 : initial estimate of delay, float
-        bp0 : initial estimate of bandpass for solver, shape (chan, pol, nant)
         REFANT : reference antenna, int
+        bchan : start channel for fit, int, optional
+        echan : end channel for fit, int, optional
+        chan_sample : channel sampling to use in delay fit, optional
         pre_apply : calibration solutions to apply, list of CalSolutions, optional
 
         Returns
@@ -231,13 +244,17 @@ class Scan(object):
             self.modvis = self.vis
 
         for soln in pre_apply:
-           self.modvis = self.apply(soln,origvis=False)
+            self.logger.info('    - Pre-apply {0} solution to {1}'.format(soln.soltype,self.target.name))
+            self.modvis = self.apply(soln,origvis=False)
 
-        # average over all time (no averaging over channel)
-        ave_vis, ave_time = calprocs.wavg(self.modvis,self.flags,self.weights,times=self.times,axis=0)
+        # average over all time, for specified channel range (no averaging over channel)
+        if echan == 0: echan = None
+        chan_slice = [slice(None),slice(bchan,echan),slice(None),slice(None)]
+        ave_vis, ave_time = calprocs.wavg(self.modvis[chan_slice],self.flags[chan_slice],self.weights[chan_slice],times=self.times,axis=0)
 
-        # solve for delay K
-        k_soln = calprocs.k_fit(ave_vis,self.corrprod_lookup,self.channel_freqs,k0,bp0,REFANT,chan_sample=chan_sample)
+        # solve for delay K, using specified channel range
+        k_freqs = self.channel_freqs[bchan:echan]
+        k_soln = calprocs.k_fit(ave_vis,self.corrprod_lookup,k_freqs,REFANT,chan_sample=chan_sample)
 
         return CalSolution('K', k_soln, ave_time)
 
@@ -264,7 +281,8 @@ class Scan(object):
             self.modvis = self.vis
 
         for soln in pre_apply:
-           self.modvis = self.apply(soln,origvis=False)
+            self.logger.info('    - Pre-apply {0} solution to {1}'.format(soln.soltype,self.target.name))
+            self.modvis = self.apply(soln,origvis=False)
 
         # average over all time (no averaging over channel)
         ave_vis, ave_time = calprocs.wavg(self.modvis,self.flags,self.weights,times=self.times,axis=0)
@@ -292,7 +310,6 @@ class Scan(object):
             return
         else:
             return self._apply_newvis(solval, origvis=origvis)
-
 
     def _apply_newvis(self, solval, origvis=True):
         """
@@ -331,8 +348,8 @@ class Scan(object):
     def apply(self, soln, origvis=True, inplace=False):
         # set up more complex interpolation methods later
         if soln.soltype is 'G':
-            # add empty channel dimension
-            full_sol = np.expand_dims(soln.values,axis=1)
+            # add empty channel dimension if necessary
+            full_sol = np.expand_dims(soln.values,axis=1) if len(soln.values.shape) < 4 else soln.values
             return self._apply(full_sol,origvis=origvis,inplace=inplace)
         elif soln.soltype is 'K':
             # want shape (ntime, nchan, npol, nant)
@@ -364,11 +381,15 @@ class Scan(object):
         values = solns.values
         times = solns.times
 
-        real_interp = calprocs.interp_extrap_1d(times, values.real, kind='linear', axis=0)
-        imag_interp = calprocs.interp_extrap_1d(times, values.imag, kind='linear', axis=0)
+        if len(times) < 2:
+            # case of only one solution value being interpolated
+            return self.inf_interpolate(solns)
+        else:
+            real_interp = calprocs.interp_extrap_1d(times, values.real, kind='linear', axis=0)
+            imag_interp = calprocs.interp_extrap_1d(times, values.imag, kind='linear', axis=0)
 
-        interp_solns = real_interp(self.times) + 1.0j*imag_interp(self.times)
-        return CalSolution(solns.soltype, interp_solns, self.times)
+            interp_solns = real_interp(self.times) + 1.0j*imag_interp(self.times)
+            return CalSolution(solns.soltype, interp_solns, self.times)
 
     def inf_interpolate(self, solns):
         values = solns.values
