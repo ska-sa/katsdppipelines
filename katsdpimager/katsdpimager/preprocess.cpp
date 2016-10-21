@@ -17,6 +17,9 @@
 #include <algorithm>
 #include <cstring>
 #include <cmath>
+#include <complex>
+#include <Eigen/Core>
+#include "mulz.h"
 
 namespace py = boost::python;
 
@@ -32,7 +35,7 @@ struct vis_t
     std::int16_t uv[2];
     std::int16_t sub_uv[2];
     float weights[P];
-    float vis[P][2];
+    std::complex<float> vis[P];
     std::int16_t w_plane;    ///< Plane within W slice
     std::int16_t w_slice;    ///< W-stacking slice
     std::int32_t channel;
@@ -65,10 +68,46 @@ public:
         int oversample,
         const py::object &emit_callback);
     virtual ~visibility_collector_base() {}
+
+    /**
+     * Add a batch of visibilities. The @c py::object parameters are all numpy
+     * arrays. The parameter list indicates the preferred types, but they will
+     * be cast if necessary (as well as converted to C-order contiguous).
+     * Performance will be best if they are already in the appropriate type and
+     * layout.
+     *
+     * Let P be the number of output polarizations, and Q be the number of
+     * input polarizations.  When Q &lt; 4, it is possible that the input
+     * polarizations are insufficient to compute the requested Stokes
+     * parameters. It is the caller's responsibility to ensure this does not
+     * happen.
+     *
+     * If no feed angle correction is needed, pass @c None for @a feed_angle1,
+     * @a feed_angle2 and @a mueller_circular. In this case, @a mueller_stokes
+     * converts directly from @a vis to the output Stokes parameters.
+     *
+     * @param channel      Channel number
+     * @param cell_size    Size of UV cells, in same units as @a uvw
+     * @param uvw          UVW coordinates, Nx3, complex64
+     * @param weights      Imaging weights, NxQ, float32
+     * @param baselines    Baseline indices, N, int32 (negative for autocorrelations)
+     * @param vis          Visibilities (in arbitrary frame), NxQ, complex64
+     * @param feed_angle1, feed_angle2  Feed angles in radians for the two
+     *                     antennas in the baseline, for rotating from
+     *                     feed-relative to celestial frame, N, float32
+     * @param mueller_stokes Mueller matrix that converts from celestial RL polarization
+     *                     frame to the desired output Stokes parameters, Px4.
+     * @param mueller_circular  Mueller matrix that converts from the frame
+     *                     given in @a vis to a feed-relative RL (circular) polarization
+     *                     frame, 4xQ.
+     */
     virtual void add(
         int channel, float cell_size,
         const py::object &uvw, const py::object &weights,
-        const py::object &baselines, const py::object &vis) = 0;
+        const py::object &baselines, const py::object &vis,
+        const py::object &feed_angle1, const py::object &feed_angle2,
+        const py::object &mueller_stokes,
+        const py::object &mueller_circular) = 0;
     virtual void close() = 0;
 };
 
@@ -84,6 +123,72 @@ visibility_collector_base::visibility_collector_base(
     oversample(oversample),
     emit_callback(emit_callback)
 {
+}
+
+/**
+ * Static Mueller matrix, for the case of no parallactic angle correction.
+ */
+template<int P, int Q>
+class mueller_generator_simple
+{
+public:
+    typedef Eigen::Matrix<std::complex<float>, P, Q> result_type;
+
+private:
+    result_type mueller;
+
+public:
+    explicit mueller_generator_simple(const result_type &mueller) : mueller(mueller) {}
+    const result_type &operator()(std::size_t) const { return mueller; }
+};
+
+/**
+ * Mueller matrix computed with parallactic angle correction.
+ */
+template<int P, int Q>
+class mueller_generator_parallactic
+{
+public:
+    typedef Eigen::Matrix<std::complex<float>, P, Q> result_type;
+
+private:
+    const float *feed_angle1;
+    const float *feed_angle2;
+    const Eigen::Matrix<std::complex<float>, P, 4> stokes;
+    const Eigen::Matrix<std::complex<float>, 4, Q> circular;
+
+public:
+    mueller_generator_parallactic(
+        const float *feed_angle1, const float *feed_angle2,
+        const Eigen::Matrix<std::complex<float>, P, 4> &stokes,
+        const Eigen::Matrix<std::complex<float>, 4, Q> &circular);
+
+    result_type operator()(std::size_t idx) const;
+};
+
+template<int P, int Q>
+mueller_generator_parallactic<P, Q>::mueller_generator_parallactic(
+    const float *feed_angle1, const float *feed_angle2,
+    const Eigen::Matrix<std::complex<float>, P, 4> &stokes,
+    const Eigen::Matrix<std::complex<float>, 4, Q> &circular)
+    : feed_angle1(feed_angle1), feed_angle2(feed_angle2),
+    stokes(stokes), circular(circular)
+{
+}
+
+template<int P, int Q>
+auto mueller_generator_parallactic<P, Q>::operator()(std::size_t idx) const -> result_type
+{
+    Eigen::Matrix<std::complex<float>, 4, Q> mueller = circular;
+    std::complex<float> rotate1(std::cos(feed_angle1[idx]), std::sin(feed_angle1[idx]));
+    std::complex<float> rotate2(std::cos(feed_angle2[idx]), std::sin(feed_angle2[idx]));
+    std::complex<float> RRscale = rotate1 * conj(rotate2);
+    std::complex<float> RLscale = rotate1 * rotate2;
+    mueller.row(0) *= RRscale;
+    mueller.row(1) *= RLscale;
+    mueller.row(2) *= conj(RLscale);
+    mueller.row(3) *= conj(RRscale);
+    return stokes * mueller;
 }
 
 template<int P>
@@ -111,6 +216,22 @@ private:
      */
     void compress();
 
+    template<int Q, typename Generator>
+    void add_impl2(
+        int channel, float cell_size, std::size_t N,
+        const float uvw[][3], const float weights[],
+        const std::int32_t baselines[], const std::complex<float> vis[],
+        const Generator &gen);
+
+    template<int Q>
+    void add_impl(
+        int channel, float cell_size,
+        const py::object &uvw, const py::object &weights,
+        const py::object &baselines, const py::object &vis,
+        const py::object &feed_angle1, const py::object &feed_angle2,
+        const py::object &mueller_stokes,
+        const py::object &mueller_circular);
+
 public:
     visibility_collector(
         float max_w,
@@ -123,7 +244,10 @@ public:
     virtual void add(
         int channel, float cell_size,
         const py::object &uvw, const py::object &weights,
-        const py::object &baselines, const py::object &vis) override;
+        const py::object &baselines, const py::object &vis,
+        const py::object &feed_angle1, const py::object &feed_angle2,
+        const py::object &mueller_stokes,
+        const py::object &mueller_circular) override;
 
     virtual void close() override;
 };
@@ -245,8 +369,7 @@ void visibility_collector<P>::compress()
         {
             // Continue accumulating the current visibility
             for (int p = 0; p < P; p++)
-                for (int j = 0; j < 2; j++)
-                    last.vis[p][j] += element.vis[p][j];
+                last.vis[p] += element.vis[p];
             for (int p = 0; p < P; p++)
                 last.weights[p] += element.weights[p];
         }
@@ -264,22 +387,30 @@ void visibility_collector<P>::compress()
 }
 
 template<int P>
-void visibility_collector<P>::add(
-    int channel, float cell_size,
-    const py::object &uvw_obj, const py::object &weights_obj,
-    const py::object &baselines_obj, const py::object &vis_obj)
+template<int Q, typename Generator>
+void visibility_collector<P>::add_impl2(
+    int channel, float cell_size, std::size_t N,
+    const float uvw[][3], const float weights_raw[],
+    const std::int32_t baselines[], const std::complex<float> vis_raw[],
+    const Generator &gen)
 {
-    // Coerce objects to proper arrays and validate types and dimensions
-    py::object uvw_array = get_array(uvw_obj, NPY_FLOAT32, -1, 3);
-    const std::size_t N = PyArray_DIMS((PyArrayObject *) uvw_array.ptr())[0];
-    py::object weights_array = get_array(weights_obj, NPY_FLOAT32, N, P);
-    py::object baselines_array = get_array(baselines_obj, NPY_INT32, N, -1);
-    py::object vis_array = get_array(vis_obj, NPY_COMPLEX64, N, P);
+    typedef Eigen::Matrix<std::complex<float>, P, Q> MatrixPQcf;
+    typedef Eigen::Matrix<float, P, 1> VectorPf;
+    typedef Eigen::Matrix<std::complex<float>, P, 1> VectorPcf;
 
-    auto uvw = array_data<const float[3]>(uvw_array);
-    auto weights = array_data<const float[P]>(weights_array);
-    auto baselines = array_data<const int32_t>(baselines_array);
-    auto vis = array_data<const float[P][2]>(vis_array);
+    /* Eigen doesn't allow column-major row vectors and vice versa (see
+     * http://eigen.tuxfamily.org/bz/show_bug.cgi?id=416)
+     * Note that the numpy arrays are C-order (row-major), but they're mapped
+     * into Eigen as column-major, and hence are transposed.
+     */
+    constexpr auto data_major = (Q == 1) ? Eigen::RowMajor : Eigen::ColMajor;
+
+    const Eigen::Map<Eigen::Matrix<MulZ<std::complex<float>>, Q, Eigen::Dynamic, data_major>> vis(
+        reinterpret_cast<MulZ<std::complex<float>> *>(
+            const_cast<std::complex<float> *>(vis_raw)), Q, N);
+    const Eigen::Map<Eigen::Matrix<MulZ<float>, Q, Eigen::Dynamic, data_major>> weights(
+        reinterpret_cast<MulZ<float> *>(
+            const_cast<float *>(weights_raw)), Q, N);
 
     float uv_scale = 1.0f / cell_size;
     float w_scale = (w_slices - 0.5f) * w_planes / max_w;
@@ -290,6 +421,25 @@ void visibility_collector<P>::add(
             continue; // autocorrelation
         if (buffer_size == buffer_capacity)
             compress();
+
+        const MatrixPQcf &convert = gen(i);
+        VectorPcf xvis = (convert.template cast<MulZ<std::complex<float>>>() * vis.col(i))
+                         .template cast<std::complex<float>>();
+
+        /* Transform weights. Weights are proportional to inverse variance, so we
+         * first convert to variance, then invert again once output variances are
+         * known. Covariance is not modelled.
+         *
+         * The absolute values are taken first. Weights can't be negative, but
+         * they can be -0.0, whose inverse is -Inf. If a mix of -Inf and +Inf
+         * variances is allowed, then the combined variance could be NaN
+         * rather than +Inf.
+         */
+        VectorPf xweights =
+            (convert.cwiseAbs2().template cast<MulZ<float>>()
+             * weights.col(i).cwiseAbs().cwiseInverse())
+            .template cast<float>().cwiseInverse();
+
         vis_t<P> &out = buffer[buffer_size];
         float u = uvw[i][0];
         float v = uvw[i][1];
@@ -299,19 +449,13 @@ void visibility_collector<P>::add(
             u = -u;
             v = -v;
             w = -w;
-            for (int p = 0; p < P; p++)
-            {
-                out.vis[p][0] = vis[i][p][0];
-                out.vis[p][1] = -vis[i][p][1]; // conjugate
-            }
+            xvis = xvis.conjugate();
         }
-        else
-            std::memcpy(&out.vis, &vis[i], sizeof(vis[i]));
         for (int p = 0; p < P; p++)
         {
-            float weight = weights[i][p];
-            out.vis[p][0] *= weight;
-            out.vis[p][1] *= weight;
+            float weight = xweights(p);
+            out.vis[p] = xvis(p) * weight;
+            out.weights[p] = weight;
         }
         u = u * uv_scale;
         v = v * uv_scale;
@@ -325,7 +469,6 @@ void visibility_collector<P>::add(
         out.channel = channel;
         out.w_plane = w_slice_plane % w_planes;
         out.w_slice = w_slice_plane / w_planes;
-        std::memcpy(&out.weights, &weights[i], sizeof(weights[i]));
         out.baseline = baselines[i];
         // This could wrap if the buffer has > 4 billion elements, but that
         // can only affect efficiency, not correctness.
@@ -333,6 +476,109 @@ void visibility_collector<P>::add(
         buffer_size++;
     }
     num_input += N;
+}
+
+template<int P>
+template<int Q>
+void visibility_collector<P>::add_impl(
+    int channel, float cell_size,
+    const py::object &uvw_obj, const py::object &weights_obj,
+    const py::object &baselines_obj, const py::object &vis_obj,
+    const py::object &feed_angle1_obj, const py::object &feed_angle2_obj,
+    const py::object &mueller_stokes_obj,
+    const py::object &mueller_circular_obj)
+{
+    // Coerce objects to proper arrays and validate types and dimensions
+    py::object uvw_array = get_array(uvw_obj, NPY_FLOAT32, -1, 3);
+    const std::size_t N = PyArray_DIMS((PyArrayObject *) uvw_array.ptr())[0];
+    py::object weights_array = get_array(weights_obj, NPY_FLOAT32, N, Q);
+    py::object baselines_array = get_array(baselines_obj, NPY_INT32, N, -1);
+    py::object vis_array = get_array(vis_obj, NPY_COMPLEX64, N, Q);
+
+    auto uvw = array_data<const float[3]>(uvw_array);
+    auto baselines = array_data<const std::int32_t>(baselines_array);
+    auto vis = array_data<const std::complex<float>>(vis_array);
+    auto weights = array_data<const float>(weights_array);
+
+    constexpr auto matrix_major = (Q != 1) ? Eigen::RowMajor : Eigen::ColMajor;
+
+    if (feed_angle1_obj.is_none())
+    {
+        if (!feed_angle2_obj.is_none() || !mueller_circular_obj.is_none())
+        {
+            PyErr_SetString(PyExc_ValueError, "feed_angle1 is None but feed_angle2 or mueller_circular is not");
+            py::throw_error_already_set();
+        }
+        py::object mueller_stokes_array = get_array(mueller_stokes_obj, NPY_COMPLEX64, P, Q);
+        const Eigen::Map<Eigen::Matrix<std::complex<float>, P, Q, matrix_major>> mueller_stokes(
+            array_data<std::complex<float>>(mueller_stokes_array));
+        mueller_generator_simple<P, Q> gen(mueller_stokes);
+        add_impl2<Q, mueller_generator_simple<P, Q>>(
+            channel, cell_size, N, uvw, weights, baselines, vis, gen);
+    }
+    else
+    {
+        py::object feed_angle1_array = get_array(feed_angle1_obj, NPY_FLOAT32, N, -1);
+        py::object feed_angle2_array = get_array(feed_angle2_obj, NPY_FLOAT32, N, -1);
+        auto feed_angle1 = array_data<const float>(feed_angle1_array);
+        auto feed_angle2 = array_data<const float>(feed_angle2_array);
+
+        py::object mueller_stokes_array = get_array(mueller_stokes_obj, NPY_COMPLEX64, P, 4);
+        py::object mueller_circular_array = get_array(mueller_circular_obj, NPY_COMPLEX64, 4, Q);
+        const Eigen::Map<Eigen::Matrix<std::complex<float>, P, 4, Eigen::RowMajor>> mueller_stokes(
+            array_data<std::complex<float>>(mueller_stokes_array));
+        const Eigen::Map<Eigen::Matrix<std::complex<float>, 4, Q, matrix_major>> mueller_circular(
+            array_data<std::complex<float>>(mueller_circular_array));
+
+        mueller_generator_parallactic<P, Q> gen(feed_angle1, feed_angle2,
+                                                mueller_stokes, mueller_circular);
+        add_impl2<Q, mueller_generator_parallactic<P, Q>>(
+            channel, cell_size, N, uvw, weights, baselines, vis, gen);
+    }
+}
+
+template<int P>
+void visibility_collector<P>::add(
+    int channel, float cell_size,
+    const py::object &uvw, const py::object &weights,
+    const py::object &baselines, const py::object &vis,
+    const py::object &feed_angle1, const py::object &feed_angle2,
+    const py::object &mueller_stokes,
+    const py::object &mueller_circular)
+{
+    PyObject *ptr = vis.ptr();
+    if (!PyArray_Check(ptr))
+        throw std::invalid_argument("vis is not an array");
+    PyArrayObject *array = (PyArrayObject *) ptr;
+    if (PyArray_NDIM(array) != 2)
+        throw std::invalid_argument("vis is not 2D");
+    int Q = PyArray_DIMS(array)[1];
+    switch (Q)
+    {
+    case 1:
+        add_impl<1>(channel, cell_size, uvw, weights, baselines, vis,
+                    feed_angle1, feed_angle2,
+                    mueller_stokes, mueller_circular);
+        break;
+    case 2:
+        add_impl<2>(channel, cell_size, uvw, weights, baselines, vis,
+                    feed_angle1, feed_angle2,
+                    mueller_stokes, mueller_circular);
+        break;
+    case 3:
+        add_impl<3>(channel, cell_size, uvw, weights, baselines, vis,
+                    feed_angle1, feed_angle2,
+                    mueller_stokes, mueller_circular);
+        break;
+    case 4:
+        add_impl<4>(channel, cell_size, uvw, weights, baselines, vis,
+                    feed_angle1, feed_angle2,
+                    mueller_stokes, mueller_circular);
+        break;
+    default:
+        throw std::invalid_argument("vis does not have 1-4 columns");
+        break;
+    }
 }
 
 template<int P>
