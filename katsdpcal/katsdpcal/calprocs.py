@@ -7,6 +7,7 @@ Solvers and averagers for use in the MeerKAT calibration pipeline.
 
 import numpy as np
 import copy
+import katpoint
 
 import logging
 logger = logging.getLogger(__name__)
@@ -42,6 +43,84 @@ def list_to_model(model_list, centre_position):
         lmI_list.append([l, m, I])
 
     return lmI_list
+
+def to_ut(t):
+    """
+    Converts MJD seconds into Unix time in seconds
+
+    Parameters
+    ----------
+    t : time in MJD seconds
+
+    Returns
+    -------
+    Unix time in seconds
+    """
+    return (t/86400. - 2440587.5 + 2400000.5)*86400.
+
+def calc_uvw_wave(phase_centre, timestamps, corrprod_lookup, ant_descriptions, wavelengths=None, array_centre=None):
+    """
+    Calculate uvw coordinates
+
+    Parameters
+    ----------
+    phase_centre : katpoint target for phase centre position
+    timestamps : times, array of floats, shape(nrows)
+    corrprod_lookup : lookup table of antenna indices for each baseline, array shape(nant,2)
+    antenna_descriptions : description strings for the antennas, same order as antlist, list of string
+    wavelengths : wavelengths, single value or array shape(nchans)
+    array_centre : description string for array centre position, string
+
+    Returns
+    -------
+    uvw_wave : uvw coordinates, normalised by wavelength
+    """
+    uvw = calc_uvw(phase_centre, timestamps, corrprod_lookup, ant_descriptions, array_centre)
+    if wavelengths is None:
+        return uvw
+    elif np.isscalar(wavelengths):
+        return uvw/wavelengths
+    else:
+        return uvw[:,:,np.newaxis,:]/wavelengths[:,np.newaxis]
+
+def calc_uvw(phase_centre, timestamps, corrprod_lookup, ant_descriptions, array_centre=None):
+    """
+    Calculate uvw coordinates
+
+    Parameters
+    ----------
+    phase_centre : katpoint target for phase centre position
+    timestamps : times, array of floats, shape(nrows)
+    corrprod_lookup : lookup table of antenna indices for each baseline, array shape(nant,2)
+    antenna_descriptions : description strings for the antennas, same order as antlist, list of string
+    array_centre : description string for array centre position, string
+
+    Returns
+    -------
+    uvw_wave : uvw coordinates
+    """
+    if array_centre is not None:
+        array_reference_position = katpoint.Antenna(array_centre)
+    else:
+        # if no array centre position is given, use lat-long-alt of first antenna in the antenna list
+        refant = katpoint.Antenna(ant_descriptions[0])
+        array_reference_position = katpoint.Antenna('array_position',*refant.ref_position_wgs84)
+
+    # use the array reference position for the basis
+    basis = phase_centre.uvw_basis(timestamp=timestamps, antenna=array_reference_position)
+    antenna_uvw = np.empty([len(ant_descriptions),3,len(timestamps)])
+
+    for i, antenna in enumerate(ant_descriptions):
+        ant = katpoint.Antenna(antenna)
+        enu = np.array(ant.baseline_toward(array_reference_position))
+        v = np.tensordot(basis, enu, ([1], [0]))
+        antenna_uvw[i,...] = np.tensordot(basis, enu, ([1], [0]))
+
+    baseline_uvw = np.empty([3,len(timestamps),len(corrprod_lookup)])
+    for i,[a1,a2] in enumerate(corrprod_lookup):
+        baseline_uvw[...,i] = antenna_uvw[a2] - antenna_uvw[a1]
+
+    return baseline_uvw
 
 #--------------------------------------------------------------------------------------------------
 #--- Solvers
@@ -125,7 +204,7 @@ def stefcal(vis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0, init_gain=No
     else:
         raise ValueError(' '+algorithm+' is not a valid stefcal implimentation.')
 
-def adi_stefcal_nonparallel(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=None, model=None,
+def adi_stefcal_nonparallel(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=None, model=1.,
 	num_iters=100, conv_thresh=0.0001, verbose=False):
     """Solve for antenna gains using ADI StefCal. Non parallel version of the algorithm.
     ADI StefCal implimentation from:
@@ -297,7 +376,7 @@ def adi_stefcal(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=N
     return g_curr
 
 def adi_stefcal_acorr(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_gain=None,
-	model=None,  num_iters=100, conv_thresh=0.0001, verbose=False):
+	model=1.,  num_iters=100, conv_thresh=0.0001, verbose=False):
     """Solve for antenna gains using ADI StefCal, including fake autocorr data. Non parallel version of
     the algorithm.
     ADI StefCal implimentation from:
@@ -338,7 +417,7 @@ def adi_stefcal_acorr(vis, num_ants, bl_ant_pairs, weights=1.0, ref_ant=0, init_
     g_curr = 1.0*g_prev
     # initialise calibrator source model
     #   default is unity with zeros along the diagonals to ignore autocorr
-    M = 1.0 - np.eye(num_ants, dtype=np.complex) if model is None else model
+    M = model * (1.0 - np.eye(num_ants, dtype=np.complex)) if np.isscalar(model) else model
 
     antA, antB = bl_ant_pairs
     for i in range(num_iters):
@@ -633,7 +712,7 @@ def g_fit(data,corrprod_lookup,g0=None,refant=0,**kwargs):
     vis_and_conj = np.concatenate((data, data.conj()),axis=-1)
     return stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, ref_ant=refant, init_gain=g0, **kwargs)
 
-def bp_fit(data,corrprod_lookup,bp0=None,refant=0,algorithm='adi',model=None):
+def bp_fit(data,corrprod_lookup,bp0=None,refant=0,**kwargs):
     """
     Fit bandpass to visibility data.
 
@@ -660,11 +739,11 @@ def bp_fit(data,corrprod_lookup,bp0=None,refant=0,algorithm='adi',model=None):
 
     # stefcal needs the visibilities as a list of [vis,vis.conjugate]
     vis_and_conj = np.concatenate((data, data.conj()),axis=-1)
-    bp = stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=1000, ref_ant=refant, init_gain=bp0, model=model, algorithm=algorithm)
+    bp = stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=1000, init_gain=bp0, **kwargs)
     # centre the phase on zero
     return bp * np.exp(-1.0j*np.median(np.angle(bp),axis=0))
 
-def k_fit(data,corrprod_lookup,chans=None,refant=0,chan_sample=1,algorithm='adi'):
+def k_fit(data,corrprod_lookup,chans=None,refant=0,chan_sample=1,**kwargs):
     """
     Fit delay (phase slope across frequency) to visibility data.
 
@@ -730,7 +809,7 @@ def k_fit(data,corrprod_lookup,chans=None,refant=0,chan_sample=1,algorithm='adi'
                 v_corrected[ci,p,vi] = data[ci,p,vi] * np.exp(-1.0j*2.*np.pi*c*coarse_k[p,corrprod_lookup[vi,0]]) * np.exp(1.0j*2.*np.pi*c*coarse_k[p,corrprod_lookup[vi,1]])
     # stefcal needs the visibilities as a list of [vis,vis.conjugate]
     vis_and_conj = np.concatenate((v_corrected, v_corrected.conj()),axis=-1)
-    bpass = stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=1000, ref_ant=refant, init_gain=None, algorithm=algorithm)
+    bpass = stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0, num_iters=1000, ref_ant=refant, init_gain=None, **kwargs)
 
     # find slope of the residual bandpass
     delta_k = np.empty_like(coarse_k)
@@ -853,7 +932,7 @@ def wavg_full(data,flags,weights,axis=0,threshold=0.3):
     av_flags = np.nansum(flags,axis=axis) > flags.shape[0]*threshold
 
     # fake weights for now
-    av_weights = np.ones_like(av_data,dtype=np.float)
+    av_weights = np.ones_like(av_data,dtype=np.float32)
 
     return av_data, av_flags, av_weights, av_sig
 
@@ -1199,9 +1278,7 @@ class CalSolution(object):
 #--------------------------------------------------------------------------------------------------
 
 def arcsec_to_rad(angle):
-    return np.pi*angle/60./60./180.
-
-def flux(coeffs,frequencies):
-    nu_ghz = np.array(frequencies)/1.e9
-    a0, a1, a2, a3 = coeffs
-    return 10.**(a0 + a1*np.log10(nu_ghz) + a2*(np.log10(nu_ghz)**2.0) + a3*(np.log10(nu_ghz)**3.0))
+    """
+    Convert angle in arcseconds to angle in radians
+    """
+    return np.deg2rad(angle/60./60.)
