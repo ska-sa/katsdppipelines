@@ -16,4 +16,4 @@ katsdp.standardBuild(
     cuda: true,
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
-katsdp.mail('laura@ska.ac.za bmerry@ska.ac.za')
+katsdp.mail(maintainer)
