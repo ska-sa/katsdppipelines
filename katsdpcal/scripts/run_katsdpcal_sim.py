@@ -124,10 +124,15 @@ if __name__ == '__main__':
         l1_pane.cmd('send-keys','sim_l1_receive.py --telstate {0} --file {1} {2}; '.format(opts.telstate, file_fullpath, image))
     l1_pane.enter()
 
-    # wait a couple of seconds to start data flowing
+    # wait a couple of seconds before starting data flow
     #   time for setting up the pipeline and L1 receiver (setting parameters, creating buffers, etc)
     #   simulator testing is often done on Laura's laptop, which can need a few seconds here if the buffers are ~> 1G
-    time.sleep(5.0)
+    time.sleep(10.0)
+
+    # start sensor checnking in tmux pane
+    sensor_pane = create_pane('sensors',tmserver,keep_session=opts.keep_sessions)
+    sensor_pane.cmd('send-keys','sim_check_sensors.py')
+    sensor_pane.enter()
 
     # start data flow in tmux pane
     #   wait 60 seconds from the end of one data transmission to the starrt of the next
