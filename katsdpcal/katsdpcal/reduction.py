@@ -63,7 +63,8 @@ def get_tracks(data, ts, logger=logger):
     --------
     list of slices for each track in the buffer
     """
-    max_indx = data['max_index'][0]
+    # get final accumulation index
+    max_indx = data['current_index'][0]
 
     # get track start and stop indices from each antenna activity sensor
     starts, stops = [], []
