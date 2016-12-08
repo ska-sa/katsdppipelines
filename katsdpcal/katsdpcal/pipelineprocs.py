@@ -26,9 +26,9 @@ def clear_ts(ts):
     """
     Clear the TS.
 
-    Inputs
-    ======
-    ts: Telescope State
+    Parameters
+    ----------
+    ts : Telescope State
     """
     try:
         for key in ts.keys():
@@ -44,11 +44,11 @@ def init_ts(ts, param_dict, clear=False):
     Parameters from the parameter dictionary are only added to the TS the
     the parameter is not already in the TS.
 
-    Inputs
-    ======
-    ts : Telescope State
+    Parameters
+    ----------
+    ts         : Telescope State
     param_dict : dictionary of parameters
-    clear : clear ts before initialising
+    clear      : clear ts before initialising
     """
 
     if clear:
@@ -67,13 +67,13 @@ def ts_from_file(ts, filename):
     Initialises the telescope state from parameter file.
     Note: parameters will be returned as ints, floats or strings (not lists)
 
-    Inputs
-    ======
-    ts : Telescope State
+    Parameters
+    ----------
+    ts       : Telescope State
     filename : parameter file
 
     Notes
-    =====
+    -----
     * Parameter file uses colons (:) for delimiters
     * Parameter file uses hashes (#) for comments
     * Missing parameters are set to empty strings ''
@@ -103,13 +103,13 @@ def setup_ts(ts, logger=logger):
     In general, the calibration parameters are mutable.
     Only subarray characteristics (e.g. antenna_mask) are immutable.
 
-    Inputs
-    ======
-    ts : Telescope State
+    Parameters
+    ----------
+    ts     : Telescope State
     logger : logger
 
     Notes
-    =====
+    -----
     Assumed starting ts entries:
     antenna_mask
 
@@ -171,13 +171,13 @@ def setup_ts(ts, logger=logger):
             logger.info('Requested reference antenna not present in subarray. Change to reference antenna: {0}'.format(ts.cal_refant,))
 
 
-def csv_to_list(ts,keyname):
+def csv_to_list(ts, keyname):
     """
     Cange Telescope State entry for immutable key from csv string to list of strings
 
-    Inputs
-    ======
-    ts : Telescope State
+    Parameters
+    ----------
+    ts     : Telescope State
     keyval : key to change
 
     """
@@ -192,13 +192,13 @@ def get_model(name, lsm_dir_list=[]):
     Get a sky model from a text file.
     The name of the text file must incorporate the name of the source.
 
-    Inputs
-    ======
+    Parameters
+    ----------
     name : name of source, string
     lsm_dir : directory containing the source model txt file
 
     Returns
-    =======
+    -------
     model_components : numpy recarray of sky model component parameters
     model_file : name of model component file used
     """
@@ -234,17 +234,16 @@ def setup_observation_logger(log_name, log_path='.'):
     """
     Set up a pipeline logger to file.
 
-    Inputs
-    ======
-    log_path : str
-        path in which log file will be written
+    Parameters
+    ----------
+    log_path : path in which log file will be written, str
     """
     log_path = os.path.abspath(log_path)
 
     # logging to file
     # set format
     formatter = logging.Formatter('%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s')
-    formatter.datefmt='%Y-%m-%d %H:%M:%S'
+    formatter.datefmt = '%Y-%m-%d %H:%M:%S'
 
     obs_log = logging.FileHandler('{0}/{1}'.format(log_path,log_name))
     obs_log.setFormatter(formatter)
@@ -252,8 +251,15 @@ def setup_observation_logger(log_name, log_path='.'):
     return obs_log
 
 
-def stop_observation_logger(obs_log):
-    logging.getLogger('').removeHandler(obs_log)
+def stop_logger(log):
+    """
+    Remove logger handler
+
+    Parameters
+    ----------
+    log : log file
+    """
+    logging.getLogger('').removeHandler(log)
 
 
 def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
@@ -267,8 +273,8 @@ def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
     ----------
     ts          : telescope state
     report_path : path for pipeline report
-    obs_log     : log for observation
-    full_log    : log for the full run of the pipeline
+    obs_log     : log file for observation
+    full_log    : log file for the full run of the pipeline
     """
 
     # get observation end time
@@ -313,7 +319,7 @@ def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
     # copy log of this observation into the report directory
     if obs_log is not None:
         shutil.move(obs_log.baseFilename, '{0}/pipeline_{1}.log'.format(current_obs_dir, experiment_id))
-        stop_observation_logger(obs_log)
+        stop_logger(obs_log)
         if full_log is not None:
             shutil.copy(full_log, '{0}/.'.format(current_obs_dir,))
 
