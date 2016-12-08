@@ -3,7 +3,12 @@ Pipeline procedures for MeerKAT calibration pipeline
 ====================================================
 """
 
+from .report import make_cal_report
+
 import numpy as np
+import os
+import shutil
+import time
 
 # for model files
 import glob
@@ -11,8 +16,9 @@ import glob
 import logging
 logger = logging.getLogger(__name__)
 
+
 # -------------------------------------------------------------------------------------------------
-# --- Telescope State interactions
+# --- General pipleline functions
 # -------------------------------------------------------------------------------------------------
 
 
@@ -89,6 +95,7 @@ def ts_from_file(ts, filename):
         param_dict[key.strip()] = param_value
 
     init_ts(ts, param_dict)
+
 
 def setup_ts(ts, logger=logger):
     """
@@ -179,6 +186,7 @@ def csv_to_list(ts,keyname):
         ts.delete(keyname)
         ts.add(keyname,keyvallist,immutable=True)
 
+
 def get_model(name, lsm_dir_list=[]):
     """
     Get a sky model from a text file.
@@ -220,3 +228,94 @@ def get_model(name, lsm_dir_list=[]):
         ('a0','f16'),('a1','f16'),('a2','f16'),('a3','f16'),('fq','f16'),('fu','f16'),('fv','f16')]
         model_components = np.genfromtxt(model_file, delimiter=',', dtype=model_dtype)
     return model_components, model_file
+
+
+def setup_observation_logger(log_name, log_path='.'):
+    """
+    Set up a pipeline logger to file.
+
+    Inputs
+    ======
+    log_path : str
+        path in which log file will be written
+    """
+    log_path = os.path.abspath(log_path)
+
+    # logging to file
+    # set format
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03dZ %(name)-24s %(levelname)-8s %(message)s')
+    formatter.datefmt='%Y-%m-%d %H:%M:%S'
+
+    obs_log = logging.FileHandler('{0}/{1}'.format(log_path,log_name))
+    obs_log.setFormatter(formatter)
+    logging.getLogger('').addHandler(obs_log)
+    return obs_log
+
+
+def stop_observation_logger(obs_log):
+    logging.getLogger('').removeHandler(obs_log)
+
+
+def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
+    """
+    Housekeeping for end of observation:
+     - create directory for observation
+     - save logs in the directory
+     - create pipeline report in the directory
+
+    Parameters
+    ----------
+    ts          : telescope state
+    report_path : path for pipeline report
+    obs_log     : log for observation
+    full_log    : log for the full run of the pipeline
+    """
+
+    # get observation end time
+    if ts.has_key('cal_obs_end_time'):
+        obs_end = ts.cal_obs_end_time
+    else:
+        logger.info('Unknown observation end time')
+        obs_end = time.time()
+
+    # get experiment_id and start time
+    try:
+        obs_params = ts.get_range('obs_params', st=0, et=obs_end, return_format='recarray')
+        obs_keys = obs_params['value']
+        obs_times = obs_params['time']
+        # choose most recent experiment id (last entry in the list), if there are more than one
+        experiment_id_string = [x for x in obs_keys if 'experiment_id' in x][-1]
+        experiment_id = eval(experiment_id_string.split()[-1])
+        obs_start = [t for x, t in zip(obs_keys, obs_times) if 'experiment_id' in x][-1]
+    except (TypeError, KeyError, AttributeError):
+        # TypeError, KeyError because this isn't properly implimented yet
+        # AttributeError in case this key isnt in the telstate for whatever reason
+        experiment_id = '{0}_unknown_project'.format(int(time.time()),)
+        obs_start = None
+    # get subarray ID
+    subarray_id = ts['subarray_product_id'] if ts.has_key('subarray_product_id') else 'unknown_subarray'
+
+    # make directory for this observation, for logs and report
+    report_path = os.path.abspath(report_path)
+    obs_dir = '{0}/{1}_{2}_{3}'.format(report_path, int(time.time()), subarray_id, experiment_id)
+    current_obs_dir = '{0}-current'.format(obs_dir,)
+    try:
+        os.mkdir(current_obs_dir)
+    except OSError:
+        logger.warning('Experiment ID directory {} already exits'.format(current_obs_dir,))
+
+    # create pipeline report (very basic at the moment)
+    try:
+        make_cal_report(ts, current_obs_dir, experiment_id, st=obs_start, et=obs_end)
+    except Exception, e:
+        logger.info('Report generation failed: {0}'.format(e,))
+
+    # copy log of this observation into the report directory
+    if obs_log is not None:
+        shutil.move(obs_log.baseFilename, '{0}/pipeline_{1}.log'.format(current_obs_dir, experiment_id))
+        stop_observation_logger(obs_log)
+        if full_log is not None:
+            shutil.copy(full_log, '{0}/.'.format(current_obs_dir,))
+
+    # change report and log directory to final name for archiving
+    shutil.move(current_obs_dir, obs_dir)
