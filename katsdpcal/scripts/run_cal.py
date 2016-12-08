@@ -73,8 +73,8 @@ def parse_opts():
     parser.add_argument('--l1-spectral-spead', type=endpoint.endpoint_parser(7202), default='127.0.0.1:7202', help='destination for spectral L1 output. [default=%(default)s]', metavar='ENDPOINT')
     parser.add_argument('--l1-rate', type=float, default=5e7, help='L1 spead transmission rate. For laptops, recommend rate of 5e7. Default: 5e7')
     parser.add_argument('--l1_level', default=0, help='Data to transmit to L1: 0 - none, 1 - target only, 2 - all [default: 0]')
-    parser.add_argument('--notthreading', action='store_false', help='Use threading to control pipeline and accumulator [default: False (to use multiprocessing)]')
-    parser.set_defaults(notthreading=True)
+    parser.add_argument('--mproc', action='store_true', help='Use multiprocessing to control pipeline and accumulator [default: False (to use threading)]')
+    parser.set_defaults(mproc=False)
     parser.add_argument('--parameter-file', type=str, default='', help='Default pipeline parameter file (will be over written by TelescopeState.')
     parser.add_argument('--report-path', type=str, default='/var/kat/data', help='Path under which to save pipeline report. [default: /var/kat/data]')
     parser.add_argument('--log-path', type=str, default=os.path.abspath('.'), help='Path under which to save pipeline logs. [default: current directory]')
@@ -278,12 +278,12 @@ if __name__ == '__main__':
     log_file = setup_logger(log_name, log_path)
 
     # threading or multiprocessing imports
-    if opts.notthreading is True:
-        logger.info("Using multiprocessing")
+    if opts.mproc is True:
+        logger.info("Pipeline control using multiprocessing")
         import multiprocessing as control_method
         from multiprocessing import Process as control_task
     else:
-        logger.info("Using threading")
+        logger.info("Pipeline control using threading")
         import threading as control_method
         from threading import Thread as control_task
 
@@ -291,5 +291,5 @@ if __name__ == '__main__':
            cbf_n_chans=opts.cbf_channels, antenna_mask=opts.antenna_mask,
            num_buffers=opts.num_buffers, buffer_maxsize=opts.buffer_maxsize, auto=not(opts.no_auto),
            l0_endpoint=opts.l0_spectral_spead[0], l1_endpoint=opts.l1_spectral_spead,
-           l1_rate=opts.l1_rate, l1_level=opts.l1_level, mproc=opts.notthreading,
+           l1_rate=opts.l1_rate, l1_level=opts.l1_level, mproc=opts.mproc,
            param_file=opts.parameter_file, report_path=opts.report_path, log_path=log_path, full_log=log_file)
