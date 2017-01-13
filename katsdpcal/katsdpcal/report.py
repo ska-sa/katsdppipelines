@@ -104,8 +104,9 @@ def write_summary(report,ts,st=None,et=None):
     # telescope state values
     write_bullet_if_present(report,ts,'Int time','sdp_l0_int_time')
     write_bullet_if_present(report,ts,'Channels','cbf_n_chans')
-    write_bullet_if_present(report,ts,'Antennas','antenna_mask',transform=len)
-    write_bullet_if_present(report,ts,'Antenna list','antenna_mask')
+    write_bullet_if_present(report,ts,'Polarisation products','cbf_n_pols')
+    write_bullet_if_present(report,ts,'Antennas','cal_antlist',transform=len)
+    write_bullet_if_present(report,ts,'Antenna list','cal_antlist')
     report.writeln()
 
     report.writeln('Source list:')
@@ -145,10 +146,12 @@ def write_table_timerow(report,colnames,times,data):
     report.writeln(" ".join([h.ljust(col_width) for h in header])) 
     report.writeln(col_header*n_entries)
 
+    timestrings = [time.strftime("%d %X",time.gmtime(t)) for t in times]
+
     # add each time row to the table
-    for t, d in zip(times,data):
+    for t, d in zip(timestrings,data):
         data_string = " ".join(["{:.3f}".format(di.real,).ljust(col_width) for di in np.atleast_1d(d)])
-        report.write("{:.3f}".format(t,).ljust(col_width+1))
+        report.write("{}".format(t,).ljust(col_width+1))
         report.writeln(data_string)  
 
     # table footer
