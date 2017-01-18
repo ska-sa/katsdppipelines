@@ -22,7 +22,7 @@ class TaskLoggingAdapter(logging.LoggerAdapter):
     'connid' key, whose value in brackets is prepended to the log message.
     """
     def process(self, msg, kwargs):
-        return '[%s] %s' % (self.extra['connid'], msg), kwargs
+        return '[{0}] {1}'.format(self.extra['connid'], msg), kwargs
 
 
 # ---------------------------------------------------------------------------------------
@@ -116,22 +116,36 @@ class CalibrationServer(DeviceServer):
         # set up conditions on the buffers
         self.conditions = [self.control_method.Condition() for i in range(num_buffers)]
 
-    def start(self, *args):
+    @request(Str(), Str(), Str())
+    @return_reply(Str())
+    def request_start(self, req, ts, num_buffers, data_shape):
         """
         Start the server running and initialise the calibration system
+
+        Parameters
+        ----------
+        ts          : telescope state
+        num_buffers : number of buffers
+        data_shape  : shape of the vis, weight, flag data
         """
         super(CalibrationServer, self).start()
-        self._initialise(*args)
+        self._initialise(ts, num_buffers, data_shape)
+        return ('ok','Calibration pipeline server started sucessfully')
 
-    def join(self, *args):
+    @request()
+    @return_reply(Str())
+    def request_join(self, req):
         """
-        Start the server running and initialise the calibration system
+        Stop sensor thread and stop server
         """
         # end accumulator sensor polling thread
         self.run_accumulator_sensor_thread = False
         super(CalibrationServer, self).join()
+        return ('ok','Calibration pipeline server stopped sucessfully')
 
-    def capture_start(self):
+    @request()
+    @return_reply(Str())
+    def request_capture_start(self, req):
         """
         Start the accumulator and pipelines running, in anticipation of data flowing
         """
@@ -154,11 +168,15 @@ class CalibrationServer(DeviceServer):
             # run tasks until the observation has ended
             while all_alive([self.accumulator]+self.pipelines) and not self.accumulator.obs_finished():
                 time.sleep(0.1)
-        except Exception, e:
-            self.logger.error('Unknown error: {}'.format(e,))
+        except Exception as e:
+            self.logger.exception('Unknown error: {0}'.format(e,))
             force_shutdown(self.accumulator, self.pipelines)
 
-    def capture_done(self):
+        return ('ok','Accumulator and pipelines started successfully')
+
+    @request()
+    @return_reply(Str())
+    def request_capture_done(self, req):
         """
         Shut down calibration system
         """
@@ -187,6 +205,8 @@ class CalibrationServer(DeviceServer):
             end_transmit(self.spead_params['l1_endpoint'].host, self.spead_params['l1_endpoint'].port)
             self.logger.info('L1 stream ended')
         self.logger.info('Observation closed')
+
+        return ('ok','Accumulator and pipelines sucessfully shut down')
 
 
 def create_buffer_arrays(num_buffers, buffer_shape, control_method=None):
@@ -390,17 +410,17 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
                 current_buffer = (current_buffer+1)%self.num_buffers
 
                 self.data_conditions[current_buffer].acquire()
-                self.accumulator_logger.info('data_condition %d acquired by %s' %(current_buffer, self.name,))
+                self.accumulator_logger.info('data_condition {0} acquired by {1}'.format(current_buffer, self.name))
 
                 # accumulate data scan by scan into buffer arrays
-                self.accumulator_logger.info('max buffer length %d' %(self.max_length,))
-                self.accumulator_logger.info('accumulating into buffer %d' %(current_buffer,))
+                self.accumulator_logger.info('max buffer length {0}'.format(self.max_length,))
+                self.accumulator_logger.info('accumulating into buffer {0}'.format(current_buffer,))
                 try:
                     self.accumulate(rx, current_buffer)
-                except Exception, e:
+                except Exception as e:
                     # if something goes wrong give up on this accumulator run
                     self.accumulator_logger.error('>>>>> stopping accumulator run <<<<<')
-                    self.accumulator_logger.error('Exception: {}'.format(e,))
+                    self.accumulator_logger.exception('Exception: {0}'.format(e,))
                     # print full traceback for debug purposes
                     traceback.print_exc()
 
@@ -409,10 +429,10 @@ def init_accumulator_control(control_method, control_task, buffers, buffer_shape
 
                 # awaken pipeline task that was waiting for condition lock
                 self.data_conditions[current_buffer].notify()
-                self.accumulator_logger.info('data_condition %d notification sent by %s' %(current_buffer, self.name,))
+                self.accumulator_logger.info('data_condition {0} notification sent by {1}'.format(current_buffer, self.name))
                 # release pipeline task that was waiting for condition lock
                 self.data_conditions[current_buffer].release()
-                self.accumulator_logger.info('data_condition %d released by %s' %(current_buffer, self.name,))
+                self.accumulator_logger.info('data_condition {0} released by {1]'.format(current_buffer, self.name))
 
                 time.sleep(0.2)
 
@@ -714,17 +734,17 @@ def init_pipeline_control(control_method, control_task, data, data_shape, data_c
             """
             while not self._stop.is_set():
                 # acquire condition on data
-                self.pipeline_logger.info('data_condition acquire by %s' %(self.name,))
+                self.pipeline_logger.info('data_condition acquire by {0}'.format(self.name,))
                 self.data_condition.acquire()
 
                 # release lock and wait for notify from accumulator
-                self.pipeline_logger.info('data_condition release and wait by %s' %(self.name,))
+                self.pipeline_logger.info('data_condition release and wait by {0}'.format(self.name,))
                 self.data_condition.wait()
 
                 try:
                     if not self._stop.is_set():
                         # after notify from accumulator, condition lock re-aquired
-                        self.pipeline_logger.info('data_condition acquire by %s' %(self.name,))
+                        self.pipeline_logger.info('data_condition acquire by {0}'.format(self.name,))
                         # run the pipeline
                         self.pipeline_logger.info('Pipeline run start on accumulated data')
 
@@ -733,16 +753,16 @@ def init_pipeline_control(control_method, control_task, data, data_shape, data_c
 
                         # run the pipeline
                         self.run_pipeline()
-                except Exception, e:
+                except Exception as e:
                     # if something goes wrong give up on this pipeline run
                     self.pipeline_logger.error('>>>>> stopping pipeline run <<<<<')
-                    self.pipeline_logger.error('Exception: {}'.format(e,))
+                    self.pipeline_logger.exception('Exception: {0}'.format(e,))
                     # print full traceback for debug purposes
                     traceback.print_exc()
 
                 # release condition after pipeline run finished
                 self.data_condition.release()
-                self.pipeline_logger.info('data_condition release by %s' %(self.name,))
+                self.pipeline_logger.info('data_condition release by {0}'.formt(self.name,))
 
         def stop(self):
             """
