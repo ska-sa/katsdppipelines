@@ -274,6 +274,7 @@ def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
     except (TypeError, KeyError, AttributeError):
         # TypeError, KeyError because this isn't properly implimented yet
         # AttributeError in case this key isnt in the telstate for whatever reason
+        logger.warning('Unknown experiment ID')
         experiment_id = '{0}_unknown_project'.format(int(time.time()),)
         obs_start = None
     # get subarray ID
@@ -291,7 +292,7 @@ def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
     # create pipeline report (very basic at the moment)
     try:
         make_cal_report(ts, current_obs_dir, experiment_id, st=obs_start, et=obs_end)
-    except Exception, e:
+    except Exception as e:
         logger.info('Report generation failed: {0}'.format(e,))
 
     # copy log of this observation into the report directory
