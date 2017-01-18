@@ -293,7 +293,7 @@ def finalise_observation(ts, report_path='.', obs_log=None, full_log=None):
     try:
         make_cal_report(ts, current_obs_dir, experiment_id, st=obs_start, et=obs_end)
     except Exception as e:
-        logger.info('Report generation failed: {0}'.format(e,))
+        logger.exception('Report generation failed: {0}'.format(e,))
 
     # copy log of this observation into the report directory
     if obs_log is not None:
