@@ -22,23 +22,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------------------------------
 
 
-def clear_ts(ts):
-    """
-    Clear the TS.
-
-    Parameters
-    ----------
-    ts : Telescope State
-    """
-    try:
-        for key in ts.keys():
-            ts.delete(key)
-    except AttributeError:
-        # the Telescope State is empty
-        pass
-
-
-def init_ts(ts, param_dict, clear=False):
+def init_ts(ts, param_dict):
     """
     Initialises the telescope state from parameter dictionary.
     Parameters from the parameter dictionary are only added to the TS the
@@ -48,13 +32,7 @@ def init_ts(ts, param_dict, clear=False):
     ----------
     ts         : Telescope State
     param_dict : dictionary of parameters
-    clear      : clear ts before initialising
     """
-
-    if clear:
-        # start with empty Telescope State
-        clear_ts(ts)
-
     # populate ts with parameters
     #   parameter only added if it is missing from the TS
     for key in param_dict.keys():

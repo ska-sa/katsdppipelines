@@ -113,6 +113,21 @@ def init_simdata(file_name, wait=0.0, **kwargs):
             data_class.__init__(self, file_name, **kwargs)
             self.wait = wait
 
+        def clear_ts(self, ts):
+            """
+            Clear the TS.
+
+            Parameters
+            ----------
+            ts : Telescope State
+            """
+            try:
+                for key in ts.keys():
+                    ts.delete(key)
+            except AttributeError:
+                # the Telescope State is empty
+                pass
+
         def setup_ts(self, ts):
             """
             Add key value pairs from file to the Telescope State
