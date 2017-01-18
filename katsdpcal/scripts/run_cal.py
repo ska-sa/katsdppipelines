@@ -241,7 +241,7 @@ def run_katsdpcal(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=N
     # start calibration pipeline server
     server = control.CalibrationServer('', 5000, control_method, control_task, spead_params)
     logger.info('Starting calibration pipeline server')
-    server.start(ts, num_buffers, buffer_shape)
+    server.request_start(ts, num_buffers, buffer_shape)
     try:
         manhole.install(oneshot_on='USR1', locals={'ts':ts, 'server':server})
     # allow remote debug connections and expose telescope state, accumulator and pipelines
@@ -257,16 +257,16 @@ def run_katsdpcal(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=N
         logger.info('Ready to receive L0 data on port {0}'.format(spead_params['l0_endpoint'].port,))
         logger.info('===========================')
         logger.info('   Starting new observation')
-        server.capture_start()
+        server.request_capture_start()
         logger.info('capture done')
-        server.capture_done()
+        server.request_capture_done()
 
         # write report, copy log of this observation into the report directory
         finalise_observation(ts, report_path, obs_log, full_log)
         logger.info('   Observation finalised')
         logger.info('===========================')
     # close down everything
-    server.join()
+    server.request_join()
 
 if __name__ == '__main__':
 
