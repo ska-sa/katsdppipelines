@@ -151,7 +151,7 @@ def setup_ts(ts, logger=logger):
 
 def csv_to_list(ts, keyname):
     """
-    Cange Telescope State entry for immutable key from csv string to list of strings
+    Change Telescope State entry for immutable key from csv string to list of strings
 
     Parameters
     ----------
