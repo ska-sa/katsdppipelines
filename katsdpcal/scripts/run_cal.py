@@ -146,7 +146,7 @@ def run_katsdpcal(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=N
     """
 
     def force_exit(_signo=None, _stack_frame=None):
-        logger.info("Forced exit on signal {0}".format(_signo,))
+        logger.warning("Forced exit on signal {0}".format(_signo,))
         os.kill(os.getpid(), signal.SIGKILL)
 
     # SIGTERM exit needed for Docker use since this process runs as PID 1
@@ -241,14 +241,13 @@ def run_katsdpcal(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=N
     # start calibration pipeline server
     server = control.CalibrationServer('', 5000, control_method, control_task, spead_params)
     logger.info('Starting calibration pipeline server')
-    server.request_start(ts, num_buffers, buffer_shape)
+    server.start(ts, num_buffers, buffer_shape)
     try:
         manhole.install(oneshot_on='USR1', locals={'ts':ts, 'server':server})
     # allow remote debug connections and expose telescope state, accumulator and pipelines
     except manhole.AlreadyInstalled:
         pass
 
-    # run calibration pipeline
     while True:
         # set up the logger specific to this observation
         observation_log = '{0}_pipeline.log'.format(int(time.time()),)
@@ -257,16 +256,29 @@ def run_katsdpcal(ts, cbf_n_chans, antenna_mask, num_buffers=2, buffer_maxsize=N
         logger.info('Ready to receive L0 data on port {0}'.format(spead_params['l0_endpoint'].port,))
         logger.info('===========================')
         logger.info('   Starting new observation')
-        server.request_capture_start()
+
+        # NOTE -------------------------------------------------------------------------------------
+        # I know that this code below is wrong but I'm not quite sure what to do here now
+        #  -- was going to copy some of the filewriter code but I don't want to do it in a rush
+        # Better for someone who understands it better to do it properly.
+        #
+        # so leaving this for now!
+        #
+        # Also the finalise_observation call might have to be moved into code which calls the server
+        # (or moved into the server?)
+        #
+        # Also need to add a section to the simulator to simulate a katcp client calling capture_start and capture_done
+        server.capture_start()
         logger.info('capture done')
-        server.request_capture_done()
+        server.capture_done()
 
         # write report, copy log of this observation into the report directory
         finalise_observation(ts, report_path, obs_log, full_log)
+        # ------------------------------------------------------------------------------------------
         logger.info('   Observation finalised')
         logger.info('===========================')
     # close down everything
-    server.request_join()
+    server.join()
 
 if __name__ == '__main__':
 
