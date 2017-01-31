@@ -6,6 +6,8 @@ from .reduction import pipeline
 from . import calprocs
 
 from katcp import DeviceServer, Sensor
+from katcp.kattypes import request, return_reply, Str
+
 import tornado.gen
 import tornado.ioloop
 import numpy as np
@@ -116,9 +118,7 @@ class CalibrationServer(DeviceServer):
         # set up conditions on the buffers
         self.conditions = [self.control_method.Condition() for i in range(num_buffers)]
 
-    @request(Str(), Str(), Str())
-    @return_reply(Str())
-    def request_start(self, req, ts, num_buffers, data_shape):
+    def start(self, ts, num_buffers, data_shape):
         """
         Start the server running and initialise the calibration system
 
@@ -130,11 +130,10 @@ class CalibrationServer(DeviceServer):
         """
         super(CalibrationServer, self).start()
         self._initialise(ts, num_buffers, data_shape)
+        self.logger.info('Calibration pipeline server started')
         return ('ok','Calibration pipeline server started sucessfully')
 
-    @request()
-    @return_reply(Str())
-    def request_join(self, req):
+    def join(self):
         """
         Stop sensor thread and stop server
         """
