@@ -646,9 +646,12 @@ class GridDegrid(accel.Operation):
         the subpixel U and V coordinates.
     **w_plane** : array of int16
         W plane index per visibility, clamped to the range of allocated w planes
+    **weights** : array of float32 × pols
+        Statistical weights for visibilities. 
     **vis** : array of complex64 × pols
-        Visibilities. For gridding these are pre-multiplied by weights (input),
-        while for degridding they are unweighted (output).
+        Visibilities, which are pre-multiplied by statistical weights. For
+        gridding this are inputs.  For degridding these are visibilities on
+        input and residual visibilities on output.
 
     Parameters
     ----------
@@ -704,6 +707,28 @@ class GridDegrid(accel.Operation):
                 n, self.max_vis))
         self._num_vis = n
 
+    def set_coordinates(self, uv, sub_uv, w_plane):
+        """Set the UVW coordinates.
+
+        Before calling, first set :attr:`num_vis`.
+        """
+        N = self.num_vis
+        if len(uv) != N or len(sub_uv) != N or len(w_plane) != N:
+            raise ValueError('Lengths do not match')
+        self.buffer('uv')[:N, 0:2] = uv
+        self.buffer('uv')[:N, 2:4] = sub_uv
+        self.buffer('w_plane')[:N] = w_plane
+
+    def set_vis(self, vis):
+        """Set input visibilities.
+
+        Before calling, first set :attr:`num_vis`.
+        """
+        N = self.num_vis
+        if len(vis) != N:
+            raise ValueError('Lengths do not match')
+        self.buffer('vis')[:N] = vis
+
     def parameters(self):
         return {
             'grid_parameters': self.template.grid_parameters,
@@ -720,19 +745,6 @@ class Gridder(GridDegrid):
         super(Gridder, self).__init__(*args, **kwargs)
         self.slots['weights_grid'] = accel.IOSlot(self.slots['grid'].shape, np.float32)
         self._kernel = self.template.program.get_kernel('grid')
-
-    def grid(self, uv, sub_uv, w_plane, vis):
-        """Add visibilities to the grid, with convolutional gridding using the
-        anti-aliasing filter."""
-        N = len(uv)
-        if len(sub_uv) != N or len(w_plane) != N or len(vis) != N:
-            raise ValueError('Lengths do not match')
-        self.num_vis = N
-        self.buffer('uv')[:N, 0:2] = uv
-        self.buffer('uv')[:N, 2:4] = sub_uv
-        self.buffer('w_plane')[:N] = w_plane
-        self.buffer('vis')[:N] = vis
-        return self()
 
     @classmethod
     def static_run(cls, command_queue, kernel,
@@ -863,6 +875,7 @@ class DegridderTemplate(object):
         bin_size = 32
         grid, weights_grid, uv, w_plane, vis, convolve_kernel = _autotune_arrays(
                 queue, oversample, real_dtype, num_polarizations, bin_size, 3)
+        weights = accel.DeviceArray(context, vis.shape, np.complex64)
         num_vis = uv.shape[0]
 
         def generate(multi_x, multi_y, wgs_x, wgs_y, wgs_z):
@@ -906,7 +919,7 @@ class DegridderTemplate(object):
                 Degridder.static_run(
                         queue, kernel, wgs_x, wgs_y, wgs_z, bin_size,
                         num_vis, uv_bias,
-                        grid, uv, w_plane, vis, convolve_kernel)
+                        grid, uv, w_plane, weights, vis, convolve_kernel)
             return tune.make_measure(queue, fn)
 
         return tune.autotune(
@@ -924,29 +937,36 @@ class DegridderTemplate(object):
 class Degridder(GridDegrid):
     """Instantiation of :class:`DegridderTemplate`. See :class:`GridDegrid` for
     details.
+
+    .. rubric:: Slots
+
+    In addition to this documented in :class:`GridDegrid`:
+
+    **weights** : array of float32 × pols
+        Gridding weights
     """
 
     def __init__(self, *args, **kwargs):
         super(Degridder, self).__init__(*args, **kwargs)
+        num_polarizations = len(self.template.image_parameters.polarizations)
+        self.slots['weights'] = accel.IOSlot(
+            (self.max_vis, accel.Dimension(num_polarizations, exact=True)), np.float32)
         self._kernel = self.template.program.get_kernel('degrid')
 
-    def degrid(self, uv, sub_uv, w_plane, vis):
-        """Degrid visibilities into `vis`."""
-        N = len(uv)
-        if len(sub_uv) != N or len(w_plane) != N or len(vis) != N:
+    def set_weights(self, weights):
+        """Set statistical weights on visibilities.
+
+        Before calling, set :attr:`num_vis`.
+        """
+        N = self.num_vis
+        if len(weights) != N:
             raise ValueError('Lengths do not match')
-        self.num_vis = N
-        self.buffer('uv')[:N, 0:2] = uv
-        self.buffer('uv')[:N, 2:4] = sub_uv
-        self.buffer('w_plane')[:N] = w_plane
-        self()
-        self.command_queue.finish()
-        vis[:] = self.buffer('vis')[:N]
+        self.buffer('weights')[:N] = weights
 
     @classmethod
     def static_run(cls, command_queue, kernel,
                    wgs_x, wgs_y, wgs_z, bin_size, num_vis, uv_bias,
-                   grid, uv, w_plane, vis, convolve_kernel):
+                   grid, uv, w_plane, weights, vis, convolve_kernel):
         if num_vis == 0:
             return
         batch_size = wgs_x * wgs_y
@@ -960,6 +980,7 @@ class Degridder(GridDegrid):
                 np.int32(grid.padded_shape[1] * grid.padded_shape[2]),
                 uv.buffer,
                 w_plane.buffer,
+                weights.buffer,
                 vis.buffer,
                 convolve_kernel.buffer,
                 np.int32(uv_bias),
@@ -984,6 +1005,7 @@ class Degridder(GridDegrid):
             self.buffer('grid'),
             self.buffer('uv'),
             self.buffer('w_plane'),
+            self.buffer('weights'),
             self.buffer('vis'),
             self.template.convolve_kernel.padded_data)
 
@@ -1011,7 +1033,8 @@ def _grid(kernel, grid, weights_grid, uv, sub_uv, w_plane, vis, sample):
                     grid[pol, int(v0 + j), int(u0 + k)] += sample[pol] * weight
 
 
-class GridderHost(object):
+class GridDegridHost(object):
+    """Common code shared by :class:`GridderHost` and :class:`DegridderHost`."""
     def __init__(self, image_parameters, grid_parameters):
         self.image_parameters = image_parameters
         self.grid_parameters = grid_parameters
@@ -1019,13 +1042,26 @@ class GridderHost(object):
         pixels = image_parameters.pixels
         shape = (len(image_parameters.polarizations), pixels, pixels)
         self.values = np.empty(shape, image_parameters.complex_dtype)
-        self.weights_grid = np.empty(shape, np.float32)
+        self._num_vis = 0
+        self.uv = None
+        self.sub_uv = None
+        self.w_plane = None
+        self.vis = None
 
-    def clear(self):
-        self.values.fill(0)
+    @property
+    def num_vis(self):
+        return self._num_vis
 
-    def grid(self, uv, sub_uv, w_plane, vis):
-        """Add visibilities to the grid, with convolutional gridding.
+    @num_vis.setter
+    def num_vis(self, value):
+        self._num_vis = value
+        self.uv = None
+        self.sub_uv = None
+        self.w_plane = None
+        self.vis = None
+
+    def set_coordinates(self, uv, sub_uv, w_plane):
+        """Set UVW coordinates for the visibilities.
 
         Parameters
         ----------
@@ -1035,17 +1071,47 @@ class GridderHost(object):
             Preprocessed grid UV sub-pixel coordinates
         w_plane : 1D array, integer
             Preprocessed grid W plane coordinates
+        """
+        N = self.num_vis
+        if len(uv) != N or len(sub_uv) != N or len(w_plane) != N:
+            raise ValueError('Lengths do not match')
+        self.uv = uv
+        self.sub_uv = sub_uv
+        self.w_plane = w_plane
+
+    def set_vis(self, vis):
+        """Set input visibility data.
+
         vis : 2D ndarray of complex or real
             Visibility data, indexed by sample and polarization, and
             pre-multiplied by all weights
         """
+        if len(vis) != self.num_vis:
+            raise ValueError('Lengths do not match')
+        self.vis = vis
+
+
+class GridderHost(GridDegridHost):
+    def __init__(self, image_parameters, grid_parameters):
+        super(GridderHost, self).__init__(image_parameters, grid_parameters)
+        self.weights_grid = np.empty(self.values.shape, np.float32)
+
+    def clear(self):
+        self.values.fill(0)
+
+    def __call__(self):
+        """Add visibilities to the grid, with convolutional gridding.
+
+        Parameters
+        ----------
+        """
         _grid(self.kernel.data, self.values, self.weights_grid,
-              uv, sub_uv, w_plane, vis,
-              np.empty((vis.shape[1],), self.values.dtype))
+              self.uv, self.sub_uv, self.w_plane, self.vis,
+              np.empty((self.vis.shape[1],), self.values.dtype))
 
 
 @numba.jit(nopython=True)
-def _degrid(kernel, values, uv, sub_uv, w_plane, vis, sample):
+def _degrid(kernel, values, uv, sub_uv, w_plane, weights, vis, sample):
     ksize = kernel.shape[2]
     uv_bias = (ksize - 1) // 2 - values.shape[2] // 2
     for row in range(uv.shape[0]):
@@ -1060,22 +1126,29 @@ def _degrid(kernel, values, uv, sub_uv, w_plane, vis, sample):
                 for pol in range(values.shape[0]):
                     sample[pol] += weight * values[pol, v0 + j, u0 + k]
         for i in range(vis.shape[1]):
-            vis[row, i] = sample[i]
+            vis[row, i] -= weights[row, i] * sample[i]
 
 
-class DegridderHost(object):
+class DegridderHost(GridDegridHost):
     def __init__(self, image_parameters, grid_parameters):
-        self.image_parameters = image_parameters
-        self.grid_parameters = grid_parameters
-        self.kernel = ConvolutionKernel(image_parameters, grid_parameters)
-        pixels = image_parameters.pixels
-        shape = (len(image_parameters.polarizations), pixels, pixels)
-        self.values = np.empty(shape, image_parameters.complex_dtype)
+        super(DegridderHost, self).__init__(image_parameters, grid_parameters)
+        self.weights = None
 
-    def degrid(self, uv, sub_uv, w_plane, vis):
+    @GridDegridHost.num_vis.setter
+    def num_vis(self, value):
+        GridDegridHost.num_vis.fset(self, value)
+        self.weights = None
+
+    def set_weights(self, weights):
+        """Set statistical weights"""
+        if len(weights) != self.num_vis:
+            raise ValueError('Lengths do not match')
+        self.weights = weights
+
+    def __call__(self):
         """Compute visibilities from the grid. See :meth:`GridderHost.grid`
         for details of the parameters.
         """
         _degrid(self.kernel.data, self.values,
-                uv, sub_uv, w_plane, vis,
-                np.empty((vis.shape[1],), self.values.dtype))
+                self.uv, self.sub_uv, self.w_plane, self.weights, self.vis,
+                np.empty((self.vis.shape[1],), self.values.dtype))

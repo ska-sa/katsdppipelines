@@ -109,6 +109,15 @@ class Imaging(accel.OperationSequence):
     def __call__(self):
         raise NotImplementedError()
 
+    @property
+    def num_vis(self):
+        return self._gridder.num_vis
+
+    @num_vis.setter
+    def num_vis(self, value):
+        self._gridder.num_vis = value
+        self._degridder.num_vis = value
+
     def clear_weights(self):
         self.ensure_all_bound()
         self._weights.clear()
@@ -133,13 +142,30 @@ class Imaging(accel.OperationSequence):
         self.ensure_all_bound()
         self.buffer('model').zero(self.command_queue)
 
-    def grid(self, *args, **kwargs):
+    def set_coordinates(self, *args, **kwargs):
         self.ensure_all_bound()
-        self._gridder.grid(*args, **kwargs)
+        # The gridder and degridder share their coordinates, so we can use
+        # either here.
+        self._gridder.set_coordinates(*args, **kwargs)
 
-    def degrid(self, *args, **kwargs):
+    def set_vis(self, *args, **kwargs):
         self.ensure_all_bound()
-        self._degridder.degrid(*args, **kwargs)
+        # The gridder and degridder share their visibilities, so we can use
+        # either here.
+        self._gridder.set_vis(*args, **kwargs)
+
+    def set_degridder_weights(self, *args, **kwargs):
+        """Set statistical weights for degridding"""
+        self.ensure_all_bound()
+        self._degridder.set_weights(*args, **kwargs)
+
+    def grid(self):
+        self.ensure_all_bound()
+        self._gridder()
+
+    def degrid(self):
+        self.ensure_all_bound()
+        self._degridder()
 
     def grid_to_image(self, w):
         self.ensure_all_bound()
@@ -204,6 +230,15 @@ class ImagingHost(object):
     def buffer(self, name):
         return self._buffer[name]
 
+    @property
+    def num_vis(self):
+        return self._gridder.num_vis
+
+    @num_vis.setter
+    def num_vis(self, value):
+        self._gridder.num_vis = value
+        self._degridder.num_vis = value
+
     def clear_weights(self):
         self._weights_grid.fill(0)
 
@@ -222,11 +257,22 @@ class ImagingHost(object):
     def clear_model(self):
         self._model.fill(0)
 
-    def grid(self, *args, **kwargs):
-        self._gridder.grid(*args, **kwargs)
+    def set_coordinates(self, *args, **kwargs):
+        self._gridder.set_coordinates(*args, **kwargs)
+        self._degridder.set_coordinates(*args, **kwargs)
 
-    def degrid(self, *args, **kwargs):
-        self._degridder.degrid(*args, **kwargs)
+    def set_vis(self, *args, **kwargs):
+        self._gridder.set_vis(*args, **kwargs)
+        self._degridder.set_vis(*args, **kwargs)
+
+    def set_degridder_weights(self, *args, **kwargs):
+        self._degridder.set_weights(*args, **kwargs)
+
+    def grid(self):
+        self._gridder()
+
+    def degrid(self):
+        self._degridder()
 
     def grid_to_image(self, w):
         self._grid_to_image.set_w(w)
