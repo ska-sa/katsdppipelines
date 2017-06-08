@@ -15,10 +15,14 @@ from . import lsm_dir
 
 import pickle
 import os
-
 import time
-
 import logging
+
+from katdal.sensordata import TelstateSensorData, SensorCache
+from katdal.categorical import CategoricalData
+from katdal.h5datav3 import SENSOR_PROPS
+
+
 logger = logging.getLogger(__name__)
 
 class ThreadLoggingAdapter(logging.LoggerAdapter):
@@ -50,63 +54,42 @@ def rfi(s,thresholds,av_blocks,pipeline_logger):
     threshold_avg_flagging(s.vis,s.flags,thresholds,blocks=av_blocks,transform=np.abs)
     pipeline_logger.info('  - New flags:   {0:.3f}%'.format(np.sum(s.flags.view(np.bool))/total_size,))
 
-def get_tracks(data, ts, logger=logger):
-    """
-    Determines start and end indices of each track in the data buffer
+
+def get_tracks(data, ts, dump_period):
+    """Determine the start and end indices of each track segment in data buffer.
 
     Inputs
     ------
-    data : data buffer, dictionary
-    ts : telescope state, TelescopeState
+    data : dict
+        Data buffer
+    ts : :class:`katsdptelstate.TelescopeState`
+        The telescope state associated with this pipeline
+    dump_period : float
+        Dump period in seconds
 
     Returns
     -------
-    list of slices for each track in the buffer
+    segments : list of slice objects
+        List of slices indicating dumps associated with each track in buffer
+
     """
-    max_indx = data['max_index'][0]
-
-    # get track start and stop indices from each antenna activity sensor
-    starts, stops = [], []
+    # Collect all receptor activity sensors from telstate
+    cache = {}
     for ant in ts.cal_antlist:
-        activity_key = '{0}_activity'.format(ant,)
-        activity = ts.get_range(activity_key,st=data['times'][0],et=data['times'][max_indx],include_previous=True)
+        sensor_name = '{}_activity'.format(ant)
+        cache[sensor_name] = TelstateSensorData(ts, sensor_name)
+    num_dumps = data['max_index'][0] + 1
+    timestamps = data['times'][:num_dumps]
+    sensors = SensorCache(cache, timestamps, dump_period, props=SENSOR_PROPS)
+    # Interpolate onto data timestamps and find dumps where all receptors track
+    tracking = np.ones(num_dumps, dtype=bool)
+    for activity in sensors:
+        tracking &= (np.array(sensors[activity]) == 'track')
+    # Convert sequence of flags into segments and return the ones that are True
+    all_tracking = CategoricalData(tracking, range(num_dumps + 1))
+    all_tracking.remove_repeats()
+    return [segment for (segment, track) in all_tracking.segments() if track]
 
-        # NOTE: stop indices are always the final index+1
-        start_indx, stop_indx = [], []
-        prev_state = ''
-        for state, statetime in activity:
-            nearest_time_indx = np.abs(statetime - data['times'][0:max_indx+1]).argmin()
-            if 'track' in state:
-                start_indx.append(nearest_time_indx)
-                if 'track' in prev_state:
-                    stop_indx.append(nearest_time_indx)
-            if 'track' in prev_state:
-                stop_indx.append(nearest_time_indx)
-            prev_state = state
-
-        # remove first slew time from stop indices
-        if len(stop_indx) > 0:
-            if stop_indx[0] == -1: stop_indx = stop_indx[1:]
-        # add max index in buffer to stop indices if necessary
-        if len(stop_indx) < len(start_indx): stop_indx.append(max_indx+1)
-
-        starts.append(start_indx)
-        stops.append(stop_indx)
-
-    # return the minimum slice indices where all antennas were in track
-
-    starts = np.array(starts)
-    stops = np.array(stops)
-    # if the start/stop arrays have different lengths, the numpy array will be an object
-    if (starts.dtype == np.object) or (stops.dtype == np.object):
-        # Something is going wrong with the tracking:
-        # inconsistent number of tracks across antennas - deal with this better later
-        logger.warning('Inconsistent number of tracks across antennas - will not process this accumulation block.')
-        return []
-
-    reduced_starts = np.max(starts,axis=0)
-    reduced_stops = np.min(stops,axis=0)
-    return [slice(start, stop) for start, stop in zip(reduced_starts, reduced_stops)]
 
 def get_solns_to_apply(s,ts,sol_list,logger,time_range=[]):
     """
@@ -240,22 +223,15 @@ def pipeline(data, ts, task_name='pipeline'):
     #    iterate backwards in time through the scans,
     #    for the case where a gains need to be calculated from a gain scan after a target scan,
     #    for application to the target scan
-    track_slices = get_tracks(data,ts,logger=pipeline_logger)
+    track_slices = get_tracks(data, ts, dump_period)
     target_slices = []
 
     for scan_slice in reversed(track_slices):
         # start time, end time
         t0 = data['times'][scan_slice.start]
         t1 = data['times'][scan_slice.stop-1]
-
-        # if we only have one or two timestamps in the scan, ignore it
-        #  (a single timestamp can happen when there is no slew between tracks so we catch the first dump of the next track)
         n_times = scan_slice.stop - scan_slice.start
-        if n_times < 3: continue
 
-        # extract scan info from the TS
-        # add the dump period here to account for scan start and activity change being closely timed
-        scan_state = ts.get_range(activity_key,et=t0+dump_period)[0][0]
         #  target string contains: 'target name, tags, RA, DEC'
         target = ts.get_range(target_key,et=t0)[0][0]
         target_list = target.split(',')
@@ -272,6 +248,12 @@ def pipeline(data, ts, task_name='pipeline'):
             pipeline_logger.info('  Tags:   None')
             continue
         pipeline_logger.info('  Tags:       {0}'.format(taglist,))
+
+        # if we only have one or two timestamps in the scan, ignore it
+        #  (a single timestamp can happen when there is no slew between tracks so we catch the first dump of the next track)
+        if n_times < 3:
+            pipeline_logger.info('Scan too short (only 1 or 2 timestamps) - ignored')
+            continue
 
         # ---------------------------------------
         # set up scan
