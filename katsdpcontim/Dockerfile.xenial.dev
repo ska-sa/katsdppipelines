@@ -1,0 +1,62 @@
+FROM ubuntu:xenial-20170619
+MAINTAINER simon.perkins@gmail.com
+
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV PACKAGES \
+    software-properties-common \
+    python-software-properties \
+    python-pip \
+    curl \
+    git \
+    subversion \
+    autotools-dev \
+    automake \
+    build-essential \
+    cmake \
+    gfortran \
+    g++ \
+    libglib2.0-dev \
+    libncurses5-dev \
+    libreadline-dev \
+    flex \
+    bison \
+    libblas-dev \
+    liblapacke-dev \
+    libcfitsio3-dev \
+    # Needs GSL 1.x but xenial has 2.x
+    # Manually download and install below
+    # libgsl0-dev \
+    wcslib-dev \
+    libhdf5-serial-dev \
+    libfftw3-dev \
+    python-numpy \
+    libmotif-dev \
+    # Without libcurl Obit pretends it can't find an external xmlrpc
+    libcurl4-openssl-dev \
+    libxmlrpc-core-c3-dev \
+    libxmlrpc-c++8-dev \
+    libboost-all-dev \
+    # Required by bnmin1
+    swig \
+    zlib1g-dev \
+    libpython3.5-dev \
+    libpython2.7-dev
+
+# enable universe, multiverse, restricted with world wide mirrors
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y $PACKAGES && \
+    add-apt-repository -y ppa:radio-astro/main && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN cd /src && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.9.tar.gz | tar xzvf - && \
+    cd gsl-1.9 && \
+    ./configure --prefix=/usr && \
+    make install -j 8
+
+RUN pip install -U pip setuptools wheel
+
+ENTRYPOINT ["/bin/bash"]

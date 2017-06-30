@@ -1,0 +1,31 @@
+version: "2.0"
+services:
+  obit-trusty-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.trusty.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: obit-trust-dev
+    image: sjperkins/obit:trusty-dev
+    network_mode: bridge
+    restart: "no"
+    volumes:
+      - ./output:/output:rw
+      - ./Obit:/src/Obit:rw
+
+  obit-xenial-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.xenial.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: obit-xenial-dev
+    image: sjperkins/obit:xenial-dev
+    network_mode: bridge
+    restart: "no"
+    volumes:
+      - ./output:/output:rw
+      - ./Obit:/src/Obit:rw
