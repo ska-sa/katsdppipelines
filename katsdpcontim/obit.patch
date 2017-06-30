@@ -109,6 +109,15 @@ Index: trunk/ObitSystem/Obit/lib/Makefile
  SHTARGETS = libObit.so
  
  # list of object modules
+@@ -51,7 +51,7 @@
+ #  build shared Obit library, put in dependencies library
+ libObit.so: ${OBJECTS}
+ 	gcc -shared -o libObit.so  ${OBJECTS}
+-	cp libObit.so ../../../deps/lib
++	#cp libObit.so ../../../deps/lib
+ 
+ clean:
+ 	rm -f $(TARGETS) $(SHTARGETS)
 Index: trunk/ObitSystem/Obit/python/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/python/Makefile.in	(revision 567)
@@ -131,7 +140,7 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  CFLAGS = @CFLAGS@
  LDFLAGS = @LDFLAGS@
  
-@@ -50,33 +50,37 @@
+@@ -50,33 +50,38 @@
  	@PYTHON_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @PYTHON_CPPFLAGS@ \
  	@PLPLOT_CPPFLAGS@ @PGPLOT_CPPFLAGS@ @DEFS@
  ALL_CFLAGS = $(CFLAGS) @GLIB_CFLAGS@ @GSL_CFLAGS@ @PLPLOT_CFLAGS@ \
@@ -142,15 +151,15 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
 +	@PLPLOT_LDFLAGS@ @PGPLOT_LDFLAGS@ @PYTHON_LDFLAGS@
  
 -LIBS = ../lib/libObit.a @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
--	@GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ @LIBS@ @FLIBS@ @GTHREAD_LIBS@
 +# Static library option
 +# OBIT_LIB = ../lib/libObit.a
 +# Shared library option
 +OBIT_LIB = -L../lib -lObit
++
++LIBS = $(OBIT_LIB) @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
+ 	@GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ @LIBS@ @FLIBS@ @GTHREAD_LIBS@
  
 -CLIENT_CPPFLAGS = $(ALL_CPPFLAGS) @XMLRPC_CLIENT_CPPFLAGS@ 
-+LIBS = $(OBIT_LIB) @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
-+
 +CLIENT_CPPFLAGS = $(ALL_CPPFLAGS) @XMLRPC_CLIENT_CPPFLAGS@
  CLIENT_CFLAGS = $(ALL_CFLAGS) @ZLIB_CFLAGS@
 -CLIENT_LDFLAGS = $(ALL_LDFLAGS) @XMLRPC_CLIENT_LDFLAGS@ @ZLIB_LDFLAGS@ 
@@ -181,7 +190,7 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  
  # Build shared library for python interface
  $(TARGETS): setupdata.py $(MYLIBS)
-@@ -84,6 +88,10 @@
+@@ -84,6 +89,10 @@
  	python makesetup.py
  	python setup.py build install --install-lib=.
  
@@ -192,7 +201,7 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  # Build python/Obit interface
  interface: Obit_wrap.c
  	echo "rebuild Obit/python interface"
-@@ -104,5 +112,5 @@
+@@ -104,5 +113,5 @@
  	echo "LIBS='$(CLIENT_LIBS) $(SERVER_LIBS)'">>setupdata.py
  
  clean:
