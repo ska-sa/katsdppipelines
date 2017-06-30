@@ -1,7 +1,16 @@
-#!/bin/sh
-cd /src/Obit
-patch -p0 < /obit.patch
+#!/bin/bash
+OBIT_BASE_PATH=/src/Obit
 
-cd /src/Obit/trunk/ObitSystem/Obit
+cd $OBIT_BASE_PATH
+patch -p0 -N --dry-run --silent < /obit.patch 2>/dev/null
+#If the patch has not been applied then the $? which is the exit status
+#for last command would have a success status code = 0
+if [ $? -eq 0 ];
+then
+    #apply the patch
+    patch -p0 -N < /obit.patch
+fi
+
+cd $OBIT_BASE_PATH/trunk/ObitSystem/Obit
 ./configure --prefix=/usr --without-plplot --without-wvr
 make -j 8
