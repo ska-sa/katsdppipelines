@@ -12,7 +12,7 @@ services:
     network_mode: bridge
     restart: "no"
     volumes:
-      - ./build_obit.sh:/build_obit.sh:ro
+      - ./setup_obit.sh:/setup_obit.sh:ro
       - ./obit.patch:/obit.patch:ro
       - ./output:/output:rw
       - ./Obit:/src/Obit:rw
@@ -29,7 +29,7 @@ services:
     network_mode: bridge
     restart: "no"
     volumes:
-      - ./build_obit.sh:/build_obit.sh:ro
+      - ./setup_obit.sh:/setup_obit.sh:ro
       - ./obit.patch:/obit.patch:ro
       - ./output:/output:rw
       - ./Obit:/src/Obit:rw
