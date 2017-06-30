@@ -14,3 +14,7 @@ fi
 cd $OBIT_BASE_PATH/trunk/ObitSystem/Obit
 ./configure --prefix=/usr --without-plplot --without-wvr
 make -j 8
+
+export LD_LIBRARY_PATH=$OBIT_BASE_PATH/trunk/ObitSystem/Obit/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=$OBIT_BASE_PATH/trunk/ObitSystem/Obit/python:$PYTHONPATH
+
