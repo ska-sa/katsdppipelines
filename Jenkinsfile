@@ -14,6 +14,7 @@ else {
 katsdp.standardBuild(
     subdir: 'katsdpimager',
     cuda: true,
+    python3: true,
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
 katsdp.mail(maintainer)

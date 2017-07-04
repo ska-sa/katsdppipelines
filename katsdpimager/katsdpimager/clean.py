@@ -13,13 +13,14 @@ to put in a threshold later. It should still be possible to do batches of
 minor cycles if the launch overheads become an issue.
 """
 
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 import math
 import numpy as np
 from katsdpimager import numba
 import katsdpsigproc.accel as accel
 import katsdpimager.types
 import pkg_resources
+from six.moves import range
 
 #: Use only Stokes I to find peaks
 CLEAN_I = 0
@@ -136,8 +137,8 @@ class PsfPatch(accel.Operation):
         # Turn distances from the centre into a symmetric bounding box size.
         box = 2 * np.max(self._bound_host, axis=(0, 1)) + 1
         return (self.template.num_polarizations,
-                min(box[1], psf.shape[1]),
-                min(box[0], psf.shape[2]))
+                int(min(box[1], psf.shape[1])),
+                int(min(box[0], psf.shape[2])))
 
 
 def metric_to_power(mode, metric):
@@ -785,7 +786,7 @@ class Clean(accel.OperationSequence):
         dirty = self.buffer('dirty')
         self._update_tiles(0, 0, dirty.shape[2], dirty.shape[1])
 
-    def __call__(self, psf_patch, threshold=0):
+    def __call__(self, psf_patch, threshold=0.0):
         """Run a single minor CLEAN cycle.
 
         Parameters
@@ -813,6 +814,7 @@ class Clean(accel.OperationSequence):
             self.command_queue.finish()
         peak_value = peak_value_device.get_async(self.command_queue, self._peak_value_host)
         peak_pos = peak_pos_device.get_async(self.command_queue, self._peak_pos_host)
+        peak_pos = [int(x) for x in peak_pos]
         self.command_queue.finish()
         if peak_value[0] < threshold:
             return None
@@ -983,7 +985,7 @@ class CleanHost(object):
             for x in range(self._tile_max.shape[1]):
                 self._update_tile(y, x)
 
-    def __call__(self, psf_patch, threshold=0):
+    def __call__(self, psf_patch, threshold=0.0):
         """Execute a single CLEAN minor cycle."""
         peak_tile = np.unravel_index(np.argmax(self._tile_max), self._tile_max.shape)
         peak_pos = self._tile_pos[peak_tile]

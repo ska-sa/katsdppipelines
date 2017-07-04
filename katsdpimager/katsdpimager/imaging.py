@@ -1,7 +1,7 @@
 """Top-level objects for accelerated imaging, that glue the lower-level
 objects together."""
 
-from __future__ import print_function, division
+from __future__ import division, print_function, absolute_import
 import numpy as np
 from katsdpsigproc import accel
 from . import grid, weight, image, clean
@@ -211,7 +211,7 @@ class Imaging(accel.OperationSequence):
         self.ensure_all_bound()
         self._clean.reset()
 
-    def clean_cycle(self, psf_patch, threshold=None):
+    def clean_cycle(self, psf_patch, threshold=0.0):
         self.ensure_all_bound()
         return self._clean(psf_patch, threshold)
 
@@ -322,5 +322,5 @@ class ImagingHost(object):
     def clean_reset(self):
         self._clean.reset()
 
-    def clean_cycle(self, psf_patch, threshold=None):
+    def clean_cycle(self, psf_patch, threshold=0.0):
         return self._clean(psf_patch, threshold)

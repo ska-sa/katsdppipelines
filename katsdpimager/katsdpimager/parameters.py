@@ -5,7 +5,7 @@ specifying any specific units.
 Most formulae are taken from SKA-TEL-SDP-0000003.
 """
 
-from __future__ import division
+from __future__ import division, print_function, absolute_import
 import astropy.units as units
 import math
 import numpy as np
@@ -101,7 +101,7 @@ class ImageParameters(object):
         self.polarizations = polarizations
 
     def __str__(self):
-        import polarization
+        from . import polarization
         return """\
 Pixel size: {:.3f}
 Pixels: {}
