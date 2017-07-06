@@ -7,8 +7,8 @@ services:
       args:
         HTTP_PROXY: "http://localhost:3128"
 
-    container_name: obit-trust-dev
-    image: sjperkins/obit:trusty-dev
+    container_name: obit-trusty-dev
+    image: obit:trusty-dev
     network_mode: bridge
     restart: "no"
     volumes:
@@ -25,7 +25,7 @@ services:
         HTTP_PROXY: "http://localhost:3128"
 
     container_name: obit-xenial-dev
-    image: sjperkins/obit:xenial-dev
+    image: obit:xenial-dev
     network_mode: bridge
     restart: "no"
     volumes:
