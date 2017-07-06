@@ -17,6 +17,30 @@ services:
       - ./output:/output:rw
       - ./Obit:/src/Obit:rw
 
+  aips-trusty-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.trusty.aips.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: aips-trusty-dev
+    entrypoint: /bin/bash
+    image: aips:trusty-dev
+    network_mode: bridge
+    environment:
+      - AIPSMOUNT=/root/aips
+      - DISPLAY
+    restart: "no"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./aips:/root/aips:rw
+      - ./setup_obit.sh:/setup_obit.sh:ro
+      - ./obit.patch:/obit.patch:ro
+      - ./output:/output:rw
+      - ./Obit:/src/Obit:rw
+
+
   obit-xenial-dev:
     build:
       context: .
