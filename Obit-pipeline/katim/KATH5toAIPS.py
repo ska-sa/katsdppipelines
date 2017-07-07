@@ -574,8 +574,8 @@ def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1):
         # Fetch data
         tm = katdata.timestamps[:]
         vs = katdata.vis[:]
-        wt = katdata.weights()[:]
-        fg = katdata.flags()[:]
+        wt = katdata.weights[:]
+        fg = katdata.flags[:]
         if timeav>1:
             vs,wt,fg,tm=AverageTime(vs,wt,fg,tm,int(timeav))
             #Lets average the data!!!
