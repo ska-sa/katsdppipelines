@@ -20,6 +20,7 @@ description = "Write uvfits file from h5 file"
 parser = OptionParser( usage=usage, description=description)
 parser.add_option("--write-flags", action="store_true", default=False, help="Write flags into uvfits file (this negates weights and cannot be undone inside AIPS!!)")
 parser.add_option("--channel-range", default=None, help="Range of frequency channels to keep (zero-based inclusive 'first_chan,last_chan', default is all channels)")
+parser.add_option("--obit", action="store_true", default=False, help="Write data as a FITAB format file suitable for input to Obit.")
 (options, args) = parser.parse_args()
 
 h5file=args[0]
@@ -85,7 +86,10 @@ obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0, sto
 
 uv.Header(err)
 
-KATCal.KATUVFITS(uv, filebase+'.uvfits', 0, err)
+if options.obit:
+    KATCal.KATUVFITab(uv, filebase+'.uv', 0, err)
+else:
+    KATCal.KATUVFITS(uv, filebase+'.uvfits', 0, err)
 
 if os.path.exists(os.environ['DA00']): shutil.rmtree(os.environ['DA00'])
 for disk in ObitTalkUtil.AIPSDir.AIPSdisks:
