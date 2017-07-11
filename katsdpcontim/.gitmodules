@@ -1,0 +1,12 @@
+[submodule "katpoint"]
+	path = katpoint
+	url = git@github.com:ska-sa/katpoint.git
+[submodule "katdal"]
+	path = katdal
+	url = git@github.com:ska-sa/katdal.git
+[submodule "katsdpresearch"]
+	path = katsdpresearch
+	url = git@github.com:ska-sa/katsdpresearch.git
+[submodule "katsdppipelines"]
+	path = katsdppipelines
+	url = git@github.com:ska-sa/katsdppipelines.git
