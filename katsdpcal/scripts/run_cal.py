@@ -1,22 +1,27 @@
 #! /usr/bin/env python
-import numpy as np
 import time
 import os
 import signal
+import logging
 import manhole
+import numpy as np
+
 import trollius
 from trollius import From
+from tornado.platform.asyncio import AsyncIOMainLoop, to_asyncio_future
+import concurrent.futures
 
 from katsdptelstate import endpoint
 import katsdpservices
 
 from katsdpcal.control import (
-    Accumulator, init_pipeline_control, init_report_writer, shared_empty)
+    Accumulator, Pipeline, ReportWriter, shared_empty,
+    CalDeviceServer, SensorReadingEvent, StopEvent)
 from katsdpcal.pipelineprocs import ts_from_file, setup_ts
 
 from katsdpcal import param_dir, rfi_dir
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,10 +50,10 @@ def log_dict(dictionary, ident='', braces=1):
 
     for key, value in dictionary.iteritems():
         if isinstance(value, dict):
-            logger.info('{0}{1}{2}{3}'.format(ident, braces * '[', key, braces*']'))
+            logger.info('%s%s%s%s', ident, braces * '[', key, braces * ']')
             log_dict(value, ident+'  ', braces+1)
         else:
-            logger.info('{0}{1} = {2}'.format(ident, key, value))
+            logger.info('%s%s = %s', ident, key, value)
 
 
 def comma_list(type_):
@@ -103,10 +108,9 @@ def parse_opts():
         '--l1_level', default=0,
         help='Data to transmit to L1: 0 - none, 1 - target only, 2 - all [default: 0]')
     parser.add_argument(
-        '--notthreading', action='store_false',
+        '--threading', action='store_true',
         help='Use threading to control pipeline and accumulator '
-        + '[default: False (to use multiprocessing)]')
-    parser.set_defaults(notthreading=True)
+        + '[default: use multiprocessing]')
     parser.add_argument(
         '--parameter-file', type=str, default='',
         help='Default pipeline parameter file (will be over written by TelescopeState.')
@@ -116,7 +120,10 @@ def parse_opts():
     parser.add_argument(
         '--log-path', type=str, default=os.path.abspath('.'),
         help='Path under which to save pipeline logs. [default: current directory]')
-    # parser.set_defaults(telstate='localhost')
+    parser.add_argument(
+        '--port', '-p', type=int, default=2048, help='katcp host port [%(default)s]')
+    parser.add_argument(
+        '--host', '-a', type=str, default='', help='katcp host address [all hosts]')
     return parser.parse_args()
 
 
@@ -146,22 +153,6 @@ def setup_logger(log_name, log_path='.'):
     logging.getLogger('').addHandler(handler)
 
 
-def all_alive(process_list):
-    """
-    Check if all of the process in process list are alive and return True
-    if they are or False if they are not.
-
-    Inputs
-    ======
-    process_list:  list of multpirocessing.Process objects
-    """
-
-    alive = True
-    for process in process_list:
-        alive = alive and process.is_alive()
-    return alive
-
-
 def create_buffer_arrays(buffer_shape, mproc=True):
     """
     Create empty buffer record using specified dimensions
@@ -180,34 +171,20 @@ def create_buffer_arrays(buffer_shape, mproc=True):
     return data
 
 
-def force_shutdown(accumulator, pipelines, report_writer):
-    # Kill off all the tasks. This is done in reverse order, to avoid
-    # triggering a report writing only to kill it half-way.
-    # TODO: this may need to become semi-graceful at some point, to avoid
-    # corrupting an in-progress report.
-    for task in [report_writer] + pipelines:
-        task.terminate()
-        task.join()
-    accumulator.stop()
-
-
-def kill_shutdown():
-    # brutal kill (for threading)
-    os.kill(os.getpid(), signal.SIGKILL)
-
-
-def force_exit():
-    logger.info("Exiting katsdpcal on SIGTERM")
-    raise SystemExit
-
-
-def graceful_exit(accumulator):
-    logger.info('Graceful exit requested')
-    accumulator.stop()
+def queue_forward(mp_queue, asyncio_queue, loop):
+    """Forwards from a multiprocessing.Queue to a trollius.Queue. This is run
+    in a separate thread, since the multiprocessing queue accesses are blocking.
+    """
+    while True:
+        event = mp_queue.get()
+        logger.debug('Received event %r', event)
+        loop.call_soon_threadsafe(asyncio_queue.put_nowait, event)
+        if isinstance(event, StopEvent):
+            break
 
 
 @trollius.coroutine
-def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
+def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, host, port, num_buffers=2,
                 buffer_maxsize=None, auto=True,
                 l0_endpoint=':7200', l0_interface=None,
                 l1_endpoint='127.0.0.1:7202', l1_rate=5.0e7, l1_level=0,
@@ -228,6 +205,10 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
         The number of polarisations in the data stream
     antenna_mask : list of strings
         List of antennas present in the data stream
+    host : str
+        Bind hostname for katcp server
+    port : int
+        Bind port for katcp server
     num_buffers : int
         The number of buffers to use- this will create a pipeline thread for each buffer
         and an extra accumulator thread to read the spead stream.
@@ -257,9 +238,9 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
     """
 
     logger.info('Pipeline system input parameters')
-    logger.info('   - antenna mask: {0}'.format(antenna_mask,))
-    logger.info('   - number of channels: {0}'.format(cbf_n_chans,))
-    logger.info('   - number of polarisation products: {0}'.format(cbf_n_pols,))
+    logger.info('   - antenna mask: %s', antenna_mask)
+    logger.info('   - number of channels: %d', cbf_n_chans)
+    logger.info('   - number of polarisation products: %d', cbf_n_pols)
 
     # threading or multiprocessing imports
     if mproc:
@@ -277,7 +258,7 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
         raise RuntimeError("No antenna_mask set.")
     if len(ts.antenna_mask) < 4:
         # if we have less than four antennas, no katsdpcal necessary
-        logger.info('Only {0} antenna present - stopping katsdpcal'.format(len(ts.antenna_mask,)))
+        logger.info('Only %d antenna(s) present - stopping katsdpcal', len(ts.antenna_mask))
         return
 
     # deal with required input parameters
@@ -298,26 +279,26 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
         if ts.cbf_n_chans == 4096:
             param_filename = 'pipeline_parameters_meerkat_ar1_4k.txt'
             param_file = os.path.join(param_dir, param_filename)
-            logger.info('Parameter file for 4k mode: {0}'.format(param_file,))
+            logger.info('Parameter file for 4k mode: %s', param_file)
             rfi_filename = 'rfi_mask.pickle'
             rfi_file = os.path.join(rfi_dir, rfi_filename)
-            logger.info('RFI mask file for 4k mode: {0}'.format(rfi_file,))
+            logger.info('RFI mask file for 4k mode: %s', rfi_file)
         else:
             param_filename = 'pipeline_parameters_meerkat_ar1_32k.txt'
             param_file = os.path.join(param_dir, param_filename)
-            logger.info('Parameter file for 32k mode: {0}'.format(param_file,))
+            logger.info('Parameter file for 32k mode: %s', param_file)
             rfi_filename = 'rfi_mask32K.pickle'
             rfi_file = os.path.join(rfi_dir, rfi_filename)
-            logger.info('RFI mask file for 32k mode: {0}'.format(rfi_file,))
+            logger.info('RFI mask file for 32k mode: %s', rfi_file)
     else:
-        logger.info('Parameter file: {0}'.format(param_file))
+        logger.info('Parameter file: %s', param_file)
     logger.info('Inputting Telescope State parameters from parameter file.')
     ts_from_file(ts, param_file, rfi_file)
     # telescope state logs for debugging
     logger.info('Telescope state parameters:')
     for keyval in ts.keys():
         if keyval not in ['sdp_l0_bls_ordering', 'cbf_channel_freqs']:
-            logger.info('{0} : {1}'.format(keyval, ts[keyval]))
+            logger.info('%s : %s', keyval, ts[keyval])
     logger.info('Telescope state config graph:')
     log_dict(ts.config)
 
@@ -349,15 +330,15 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
     time_factor = 8. + 0.1  # time + 0.1 for good measure (indiced)
     array_length = buffer_maxsize/((scale_factor*ts.cbf_n_chans*ts.cbf_n_pols*nbl) + time_factor)
     array_length = np.int(np.ceil(array_length))
-    logger.info('Buffer size : {0} G'.format(buffer_maxsize/1.e9,))
-    logger.info('Max length of buffer array : {0}'.format(array_length,))
+    logger.info('Buffer size : %f GB', buffer_maxsize / 1e9)
+    logger.info('Max length of buffer array : %d', array_length)
 
     # Set up empty buffers
     buffer_shape = [array_length, ts.cbf_n_chans, ts.cbf_n_pols, nbl]
     buffers = [create_buffer_arrays(buffer_shape, mproc=mproc) for i in range(num_buffers)]
 
-    logger.info('Receiving L0 data from {0} via {1}'.format(
-        l0_endpoint, 'default interface' if l0_interface is None else l0_interface))
+    logger.info('Receiving L0 data from %s via %s',
+                l0_endpoint, 'default interface' if l0_interface is None else l0_interface)
     l0_interface_address = katsdpservices.get_interface_address(l0_interface)
 
     # set up inter-task synchronisation primitives.
@@ -365,67 +346,103 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
     accum_pipeline_queues = [multiprocessing.Queue() for i in range(num_buffers)]
     # signalled when the pipeline is finished with a buffer
     pipeline_accum_sems = [multiprocessing.Semaphore(value=1) for i in range(num_buffers)]
-    # signalled by pipelines when they shut down
+    # signalled by pipelines when they shut down or finish an observation
     pipeline_report_queue = multiprocessing.Queue()
+    # other tasks send up sensor updates
+    master_queue = multiprocessing.Queue()
 
-    # Set up the accumulator
-    accumulator = Accumulator(multiprocessing, buffers,
-                              buffer_shape,
-                              accum_pipeline_queues, pipeline_accum_sems,
-                              l0_endpoint, l0_interface_address, ts)
     # Set up the pipelines (one per buffer)
-    pipelines = [init_pipeline_control(
-        multiprocessing, multiprocessing.Process,
-        buffers[i], buffer_shape,
-        accum_pipeline_queues[i], pipeline_accum_sems[i], pipeline_report_queue, i,
-        l1_endpoint, l1_level, l1_rate, ts) for i in range(num_buffers)]
+    pipelines = [Pipeline(
+        multiprocessing.Process, buffers[i], buffer_shape,
+        accum_pipeline_queues[i], pipeline_accum_sems[i], pipeline_report_queue, master_queue,
+        i, l1_endpoint, l1_level, l1_rate, ts) for i in range(num_buffers)]
     # Set up the report writer
-    report_writer = init_report_writer(
-        multiprocessing, multiprocessing.Process, pipeline_report_queue, ts, num_buffers,
+    report_writer = ReportWriter(
+        multiprocessing.Process, pipeline_report_queue, master_queue, ts, num_buffers,
         l1_endpoint, l1_level, report_path, log_path, full_log)
-
-    # allow remote debug connections and expose telescope state and tasks
-    manhole.install(oneshot_on='USR1', locals={
-        'ts': ts,
-        'accumulator': accumulator,
-        'pipelines': pipelines,
-        'report_writer': report_writer})
 
     # Suppress SIGINT, so that the children inherit SIG_IGN. This ensures that
     # pressing Ctrl-C in a terminal will only deliver SIGINT to the parent.
     # There is a small window here where pressing Ctrl-C will have no effect at
     # all, which could be fixed in Python 3 with signal.pthread_sigmask.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # Start the child tasks.
+    for task in [report_writer] + pipelines:
+        if not mproc:
+            task.daemon = True    # Make sure it doesn't prevent process exit
+        task.start()
 
-    # Start the child tasks
-    report_writer.start()
-    map(lambda x: x.start(), pipelines)
+    # Set up the accumulator. This is done after the other processes are
+    # started, because it creates a ThreadPoolExecutor, and threads and fork()
+    # don't play nicely together.
+    accumulator = Accumulator(buffers, buffer_shape,
+                              accum_pipeline_queues, pipeline_accum_sems,
+                              l0_endpoint, l0_interface_address, ts)
+
+    ioloop = AsyncIOMainLoop()
+    ioloop.install()
+    server = CalDeviceServer(accumulator, pipelines, report_writer, master_queue, host, port)
+    ioloop.add_callback(server.start)
+
+    # allow remote debug connections and expose telescope state and tasks
+    manhole.install(oneshot_on='USR1', locals={
+        'ts': ts,
+        'accumulator': accumulator,
+        'pipelines': pipelines,
+        'report_writer': report_writer,
+        'server': server
+    })
 
     # Now install the signal handlers (which won't be inherited).
     loop = trollius.get_event_loop()
-    loop.add_signal_handler(signal.SIGTERM, force_exit)
-    loop.add_signal_handler(signal.SIGINT, graceful_exit, accumulator)
+
+    def signal_handler(signum, force):
+        loop.remove_signal_handler(signum)
+        # If we were asked to do a graceful shutdown, the next attempt should
+        # be to try a hard kill, before going back to the default handler.
+        if not force:
+            loop.add_signal_handler(signum, signal_handler, signum, True)
+        trollius.ensure_future(server.shutdown(force=force))
+    loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM, True)
+    loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT, False)
     logger.info('katsdpcal started')
 
-    # Run the accumulator, then wait for everything to shut down
-    try:
-        yield From(accumulator.run())
-        logger.info('Accumulator stopped')
-        for pipeline in pipelines:
-            pipeline.join()
-        logger.info('Pipelines stopped')
-        report_writer.join()
-        logger.info('Report writer stopped')
-        return
-    except SystemExit:
-        logger.info('Received interrupt! Quitting threads.')
-    except Exception as e:
-        logger.error('Unknown error: %s', e, exc_info=True)
+    # Start forwarding the events from the master queue
+    for sensor in pipelines[0].get_sensors():
+        server.add_sensor(sensor)
+    for sensor in report_writer.get_sensors():
+        server.add_sensor(sensor)
+    executor = concurrent.futures.ThreadPoolExecutor(1)
+    asyncio_queue = trollius.Queue()
+    queue_forward_task = loop.run_in_executor(
+        executor, queue_forward, master_queue, asyncio_queue, loop)
 
-    if mproc:
-        force_shutdown(accumulator, pipelines, report_writer)
-    else:
-        kill_shutdown()
+    # Process incoming events.
+    try:
+        while True:
+            event = yield From(asyncio_queue.get())
+            if isinstance(event, StopEvent):
+                break
+            elif isinstance(event, SensorReadingEvent):
+                try:
+                    sensor = server.get_sensor(event.name)
+                except ValueError:
+                    logger.warn('Received update for unknown sensor %s', event.name)
+                else:
+                    sensor.set(event.reading.timestamp,
+                               event.reading.status,
+                               event.reading.value)
+            else:
+                logger.warn('Unknown event %r', event)
+    except Exception as error:
+        logger.error('Unknown error: %s', error, exc_info=True)
+        yield From(server.shutdown(True))       # Ensure that queue_forward_task can exit
+
+    yield From(queue_forward_task)
+    logger.info('Joined queue_forward_task')
+    executor.shutdown()
+    yield From(to_asyncio_future(server.stop()))
+    logger.info('Server stopped')
 
 
 @trollius.coroutine
@@ -434,10 +451,10 @@ def main():
 
     # set up logging. The Formatter class is replaced so that all log messages
     # show the process/thread name.
-    if opts.notthreading:
-        logging.Formatter = ProcessLogFormatter
-    else:
+    if opts.threading:
         logging.Formatter = ThreadLogFormatter
+    else:
+        logging.Formatter = ProcessLogFormatter
     log_name = 'pipeline.log'
     log_path = os.path.abspath(opts.log_path)
     setup_logger(log_name, log_path)
@@ -445,13 +462,15 @@ def main():
     yield From(run_threads(
         opts.telstate,
         cbf_n_chans=opts.cbf_channels, cbf_n_pols=opts.cbf_pols, antenna_mask=opts.antenna_mask,
+        host=opts.host, port=opts.port,
         num_buffers=opts.num_buffers, buffer_maxsize=opts.buffer_maxsize, auto=not(opts.no_auto),
         l0_endpoint=opts.l0_spectral_spead[0], l0_interface=opts.l0_spectral_interface,
         l1_endpoint=opts.l1_spectral_spead,
-        l1_rate=opts.l1_rate, l1_level=opts.l1_level, mproc=opts.notthreading,
+        l1_rate=opts.l1_rate, l1_level=opts.l1_level, mproc=not opts.threading,
         param_file=opts.parameter_file,
         report_path=opts.report_path, log_path=log_path, full_log=log_name))
 
 
 if __name__ == '__main__':
     trollius.get_event_loop().run_until_complete(main())
+    trollius.get_event_loop().close()
