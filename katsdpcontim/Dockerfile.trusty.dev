@@ -50,5 +50,3 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN pip install -U pip setuptools wheel
-
-ENTRYPOINT ["/bin/bash"]
