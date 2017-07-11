@@ -1,36 +1,9 @@
 #!/bin/bash
-export OBIT_BASE_PATH=/src/Obit
-export OBIT=$OBIT_BASE_PATH/trunk/ObitSystem/Obit
-export OBITINSTALL=$OBIT_BASE_PATH/trunk
-export OBITSD=$OBIT_BASE_PATH/trunk/ObitSystem/ObitSD
-export OBIT_EXEC=$OBIT
 
-cd $OBIT_BASE_PATH
-patch -p0 -N --dry-run --silent < /obit.patch 2>/dev/null
-#If the patch has not been applied then the $? which is the exit status
-#for last command would have a success status code = 0
-if [ $? -eq 0 ];
-then
-    #apply the patch
-    patch -p0 -N < /obit.patch
-fi
-
-cd $OBIT_BASE_PATH/trunk/ObitSystem/Obit
-./configure --prefix=/usr --without-plplot --without-wvr
-make clean
-make -j 8
-
-# This makes no sense yet, because we don't create anything in /bin
-#export PATH=$OBIT_BASE_PATH/trunk/bin:$PATH
-export PATH=$OBIT_BASE_PATH/trunk/ObitSystem/Obit/bin:$PATH
-
-# So we can import libObit.so
-export LD_LIBRARY_PATH=$OBIT_BASE_PATH/trunk/ObitSystem/Obit/lib:$LD_LIBRARY_PATH
-# So we can import Obit.so and OTObit.py
-export PYTHONPATH=$OBIT_BASE_PATH/trunk/ObitSystem/Obit/python:$PYTHONPATH
-export PYTHONPATH=$OBIT_BASE_PATH/trunk/ObitSystem/ObitSD/python:$PYTHONPATH
-# So OTObit.py can import AIPS.py
-export PYTHONPATH=$OBIT_BASE_PATH/trunk/ObitSystem/ObitTalk/python:$PYTHONPATH
+# For future reference, the following are the environment variables
+# created by setup.sh, in turn created by calling InstallObit.sh
+# This may be instructive in illustrating the concrete environment
+# variables created below
 
 # OBIT=/src/Obit/trunk/ObitSystem/Obit; export OBIT
 # OBITSD=/src/Obit/trunk/ObitSystem/ObitSD; export OBITSD
@@ -38,3 +11,24 @@ export PYTHONPATH=$OBIT_BASE_PATH/trunk/ObitSystem/ObitTalk/python:$PYTHONPATH
 # PATH="/src/Obit/trunk/bin:$PATH"; export PATH
 # OBITINSTALL=/src/Obit/trunk; export OBITINSTALL
 # PLPLOT_DRV_DIR=/src/Obit/trunk/other/lib/plplot5.8.0/drivers; export PLPLOT_DRV_DIR
+
+export OBIT_BASE_PATH=/usr/local/Obit
+export OBIT=$OBIT_BASE_PATH/ObitSystem/Obit
+export OBITINSTALL=$OBIT_BASE_PATH
+export OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
+export OBIT_EXEC=$OBIT
+
+# This makes no sense yet, because we don't copy anything to /bin
+#export PATH=$OBIT_BASE_PATH/bin:$PATH
+
+# Add OBIT's bin directory
+export PATH=$OBIT_BASE_PATH/ObitSystem/Obit/bin:$PATH
+
+# So we can import libObit.so
+export LD_LIBRARY_PATH=$OBIT_BASE_PATH/ObitSystem/Obit/lib:$LD_LIBRARY_PATH
+# So we can import Obit.so and OTObit.py
+export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/Obit/python:$PYTHONPATH
+export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/ObitSD/python:$PYTHONPATH
+# So OTObit.py can import AIPS.py
+export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/ObitTalk/python:$PYTHONPATH
+
