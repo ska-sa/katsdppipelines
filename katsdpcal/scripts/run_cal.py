@@ -4,12 +4,14 @@ import time
 import os
 import signal
 import manhole
+import trollius
+from trollius import From
 
 from katsdptelstate import endpoint
 import katsdpservices
 
 from katsdpcal.control import (
-    init_accumulator_control, init_pipeline_control, init_report_writer, shared_empty)
+    Accumulator, init_pipeline_control, init_report_writer, shared_empty)
 from katsdpcal.pipelineprocs import ts_from_file, setup_ts
 
 from katsdpcal import param_dir, rfi_dir
@@ -18,15 +20,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def print_dict(dictionary, ident='', braces=1):
-    """ Recursively prints nested dictionaries."""
+class TaskLogFormatter(logging.Formatter):
+    """Injects the thread/process name into log messages.
 
-    for key, value in dictionary.iteritems():
-        if isinstance(value, dict):
-            print '{0}{1}{2}{3}'.format(ident, braces * '[', key, braces * ']')
-            print_dict(value, ident+'  ', braces+1)
-        else:
-            print '{0}{1} = {2}'.format(ident, key, value)
+    This must be subclassed to provide the TASKNAME property.
+    """
+    def __init__(self, fmt=None, datefmt=None):
+        if fmt is None:
+            fmt = '%(message)s'
+        fmt = fmt.replace('%(message)s', '[%(' + self.TASKNAME + ')s] %(message)s')
+        super(TaskLogFormatter, self).__init__(fmt, datefmt)
+
+
+class ProcessLogFormatter(TaskLogFormatter):
+    TASKNAME = 'processName'
+
+
+class ThreadLogFormatter(TaskLogFormatter):
+    TASKNAME = 'threadName'
 
 
 def log_dict(dictionary, ident='', braces=1):
@@ -114,8 +125,8 @@ def setup_logger(log_name, log_path='.'):
     Set up the pipeline logger.
     The logger writes to a pipeline.log file and to stdout.
 
-    Inputs
-    ======
+    Parameters
+    ----------
     log_path : str
         path in which log file will be written
     log_name : str
@@ -174,9 +185,10 @@ def force_shutdown(accumulator, pipelines, report_writer):
     # triggering a report writing only to kill it half-way.
     # TODO: this may need to become semi-graceful at some point, to avoid
     # corrupting an in-progress report.
-    for task in [report_writer] + pipelines + [accumulator]:
+    for task in [report_writer] + pipelines:
         task.terminate()
         task.join()
+    accumulator.stop()
 
 
 def kill_shutdown():
@@ -184,6 +196,17 @@ def kill_shutdown():
     os.kill(os.getpid(), signal.SIGKILL)
 
 
+def force_exit():
+    logger.info("Exiting katsdpcal on SIGTERM")
+    raise SystemExit
+
+
+def graceful_exit(accumulator):
+    logger.info('Graceful exit requested')
+    accumulator.stop()
+
+
+@trollius.coroutine
 def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
                 buffer_maxsize=None, auto=True,
                 l0_endpoint=':7200', l0_interface=None,
@@ -237,6 +260,14 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
     logger.info('   - antenna mask: {0}'.format(antenna_mask,))
     logger.info('   - number of channels: {0}'.format(cbf_n_chans,))
     logger.info('   - number of polarisation products: {0}'.format(cbf_n_pols,))
+
+    # threading or multiprocessing imports
+    if mproc:
+        logger.info("Using multiprocessing")
+        import multiprocessing
+    else:
+        logger.info("Using threading")
+        import multiprocessing.dummy as multiprocessing
 
     # extract data shape parameters
     #   argument parser traversed TS config to find these
@@ -325,112 +356,93 @@ def run_threads(ts, cbf_n_chans, cbf_n_pols, antenna_mask, num_buffers=2,
     buffer_shape = [array_length, ts.cbf_n_chans, ts.cbf_n_pols, nbl]
     buffers = [create_buffer_arrays(buffer_shape, mproc=mproc) for i in range(num_buffers)]
 
-    # account for forced shutdown possibilities
-    #  due to SIGTERM, keyboard interrupt, or unknown error
-    forced_shutdown = False
-
     logger.info('Receiving L0 data from {0} via {1}'.format(
         l0_endpoint, 'default interface' if l0_interface is None else l0_interface))
     l0_interface_address = katsdpservices.get_interface_address(l0_interface)
-    while not forced_shutdown:
-        logger.info('===========================')
-        logger.info('   Starting new observation')
 
-        # set up inter-task synchronisation primitives.
-        # passed events to indicate buffer transfer, end-of-observation, or stop
-        accum_pipeline_queues = [control_method.Queue() for i in range(num_buffers)]
-        # signalled when the pipeline is finished with a buffer
-        pipeline_accum_sems = [control_method.Semaphore(value=1) for i in range(num_buffers)]
-        # signalled by pipelines when they shut down
-        pipeline_report_queue = control_method.Queue()
+    # set up inter-task synchronisation primitives.
+    # passed events to indicate buffer transfer, end-of-observation, or stop
+    accum_pipeline_queues = [multiprocessing.Queue() for i in range(num_buffers)]
+    # signalled when the pipeline is finished with a buffer
+    pipeline_accum_sems = [multiprocessing.Semaphore(value=1) for i in range(num_buffers)]
+    # signalled by pipelines when they shut down
+    pipeline_report_queue = multiprocessing.Queue()
 
-        # Set up the accumulator
-        accumulator = init_accumulator_control(control_method, control_task, buffers,
-                                               buffer_shape,
-                                               accum_pipeline_queues, pipeline_accum_sems,
-                                               l0_endpoint, l0_interface_address, ts)
-        # Set up the pipelines (one per buffer)
-        pipelines = [init_pipeline_control(
-            control_method, control_task,
-            buffers[i], buffer_shape,
-            accum_pipeline_queues[i], pipeline_accum_sems[i], pipeline_report_queue, i,
-            l1_endpoint, l1_level, l1_rate, ts) for i in range(num_buffers)]
-        # Set up the report writer
-        report_writer = init_report_writer(
-            control_method, control_task, pipeline_report_queue, ts, num_buffers,
-            l1_endpoint, l1_level, report_path, log_path, full_log)
+    # Set up the accumulator
+    accumulator = Accumulator(multiprocessing, buffers,
+                              buffer_shape,
+                              accum_pipeline_queues, pipeline_accum_sems,
+                              l0_endpoint, l0_interface_address, ts)
+    # Set up the pipelines (one per buffer)
+    pipelines = [init_pipeline_control(
+        multiprocessing, multiprocessing.Process,
+        buffers[i], buffer_shape,
+        accum_pipeline_queues[i], pipeline_accum_sems[i], pipeline_report_queue, i,
+        l1_endpoint, l1_level, l1_rate, ts) for i in range(num_buffers)]
+    # Set up the report writer
+    report_writer = init_report_writer(
+        multiprocessing, multiprocessing.Process, pipeline_report_queue, ts, num_buffers,
+        l1_endpoint, l1_level, report_path, log_path, full_log)
 
-        try:
-            manhole.install(oneshot_on='USR1', locals={
-                'ts': ts, 'accumulator': accumulator, 'pipelines': pipelines})
-        # allow remote debug connections and expose telescope state, accumulator and pipelines
-        except manhole.AlreadyInstalled:
-            pass
+    # allow remote debug connections and expose telescope state and tasks
+    manhole.install(oneshot_on='USR1', locals={
+        'ts': ts,
+        'accumulator': accumulator,
+        'pipelines': pipelines,
+        'report_writer': report_writer})
 
-        # Start the tasks
-        report_writer.start()
-        map(lambda x: x.start(), pipelines)
-        accumulator.start()
-        logger.info('Waiting for L0 data')
+    # Suppress SIGINT, so that the children inherit SIG_IGN. This ensures that
+    # pressing Ctrl-C in a terminal will only deliver SIGINT to the parent.
+    # There is a small window here where pressing Ctrl-C will have no effect at
+    # all, which could be fixed in Python 3 with signal.pthread_sigmask.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        # wait until the everything has shut down
-        try:
-            accumulator.join()
-            logger.info('Accumulator stopped')
-            for pipeline in pipelines:
-                pipeline.join()
-            logger.info('Pipelines stopped')
-            report_writer.join()
-            logger.info('Report writer stopped')
-        except (KeyboardInterrupt, SystemExit):
-            logger.info('Received interrupt! Quitting threads.')
-            force_shutdown(accumulator, pipelines, report_writer) if mproc else kill_shutdown()
-            forced_shutdown = True
-        except Exception as e:
-            logger.error('Unknown error: %s', e, exc_info=True)
-            force_shutdown(accumulator, pipelines, report_writer)
-            forced_shutdown = True
+    # Start the child tasks
+    report_writer.start()
+    map(lambda x: x.start(), pipelines)
+
+    # Now install the signal handlers (which won't be inherited).
+    loop = trollius.get_event_loop()
+    loop.add_signal_handler(signal.SIGTERM, force_exit)
+    loop.add_signal_handler(signal.SIGINT, graceful_exit, accumulator)
+    logger.info('katsdpcal started')
+
+    # Run the accumulator, then wait for everything to shut down
+    try:
+        yield From(accumulator.run())
+        logger.info('Accumulator stopped')
+        for pipeline in pipelines:
+            pipeline.join()
+        logger.info('Pipelines stopped')
+        report_writer.join()
+        logger.info('Report writer stopped')
+        return
+    except SystemExit:
+        logger.info('Received interrupt! Quitting threads.')
+    except Exception as e:
+        logger.error('Unknown error: %s', e, exc_info=True)
+
+    if mproc:
+        force_shutdown(accumulator, pipelines, report_writer)
+    else:
+        kill_shutdown()
 
 
-if __name__ == '__main__':
-
+@trollius.coroutine
+def main():
     opts = parse_opts()
 
-    # set up logging
+    # set up logging. The Formatter class is replaced so that all log messages
+    # show the process/thread name.
+    if opts.notthreading:
+        logging.Formatter = ProcessLogFormatter
+    else:
+        logging.Formatter = ThreadLogFormatter
     log_name = 'pipeline.log'
     log_path = os.path.abspath(opts.log_path)
     setup_logger(log_name, log_path)
 
-    # threading or multiprocessing imports
-    if opts.notthreading is True:
-        logger.info("Using multiprocessing")
-        import multiprocessing as control_method
-
-        class control_task(control_method.Process):
-            def start(self):
-                # Block SIGINT while spawning the child, so that the child
-                # won't get a KeyboardInterrupt if Ctrl-C is pressed. There
-                # is a race condition where a Ctrl-C while in this function
-                # would be lost, but since SIGINT is only intended for
-                # interactive use, the user can just push it again. With Python
-                # 3 it would be possible to fix this with
-                # signal.pthread_sigmask to block rather than ignore the
-                # signal.
-                orig = signal.signal(signal.SIGINT, signal.SIG_IGN)
-                super(control_task, self).start()
-                signal.signal(signal.SIGINT, orig)
-    else:
-        logger.info("Using threading")
-        import multiprocessing.dummy as control_method
-        from multiprocessing.dummy import Process as control_task
-
-    def force_exit(_signo=None, _stack_frame=None):
-        logger.info("Exiting katsdpcal on SIGTERM")
-        raise SystemExit
-
-    signal.signal(signal.SIGTERM, force_exit)
-
-    run_threads(
+    yield From(run_threads(
         opts.telstate,
         cbf_n_chans=opts.cbf_channels, cbf_n_pols=opts.cbf_pols, antenna_mask=opts.antenna_mask,
         num_buffers=opts.num_buffers, buffer_maxsize=opts.buffer_maxsize, auto=not(opts.no_auto),
@@ -438,4 +450,8 @@ if __name__ == '__main__':
         l1_endpoint=opts.l1_spectral_spead,
         l1_rate=opts.l1_rate, l1_level=opts.l1_level, mproc=opts.notthreading,
         param_file=opts.parameter_file,
-        report_path=opts.report_path, log_path=log_path, full_log=log_name)
+        report_path=opts.report_path, log_path=log_path, full_log=log_name))
+
+
+if __name__ == '__main__':
+    trollius.get_event_loop().run_until_complete(main())

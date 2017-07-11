@@ -31,7 +31,7 @@ setup(
     zip_safe=False,
     setup_requires=["katversion"],
     install_requires=[
-        "numpy>=1.8", "scipy>=0.17", "manhole",
+        "numpy>=1.8", "scipy>=0.17", "manhole", "trollius",
         "katpoint", "katdal", "katsdptelstate", "spead2"
     ],
     tests_require=["nose"],
