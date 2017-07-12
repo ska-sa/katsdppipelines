@@ -25,7 +25,6 @@ services:
         HTTP_PROXY: "http://localhost:3128"
 
     container_name: aips-trusty-dev
-    #entrypoint: /bin/bash
     image: aips:trusty-dev
     network_mode: bridge
     environment:
@@ -35,8 +34,6 @@ services:
     volumes:
       - ./aips:/root/aips:rw
       - ./output:/output:rw
-      - ./Obit:/src/Obit:rw
-      - ./work:/work
 
   obit-xenial-dev:
     build:
