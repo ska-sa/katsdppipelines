@@ -10,13 +10,13 @@ import spead2.recv.trollius
 import spead2.send
 
 import katcp
-from katcp.kattypes import request, return_reply
+from katcp.kattypes import request, return_reply, concurrent_reply, Bool
 
 import numpy as np
 import trollius
 from trollius import From, Return
 import tornado.gen
-import katsdpservices.asyncio
+from katsdpservices.asyncio import to_tornado_future
 import concurrent.futures
 
 import katsdpcal
@@ -149,7 +149,7 @@ def _run_task(task):
 class Accumulator(object):
     """Manages accumulation of L0 data into buffers"""
 
-    def __init__(self, buffers, buffer_shape,
+    def __init__(self, buffers,
                  accum_pipeline_queues, pipeline_accum_sems,
                  l0_endpoint, l0_interface_address, telstate):
         self.buffers = buffers
@@ -177,7 +177,7 @@ class Accumulator(object):
         self._current_buffer = -1
 
         # Get data shape
-        self.buffer_shape = buffer_shape
+        buffer_shape = buffers[0]['vis'].shape
         self.max_length = buffer_shape[0]
         self.nchan = buffer_shape[1]
         self.npol = buffer_shape[2]
@@ -457,9 +457,17 @@ class Accumulator(object):
             except spead2.Stopped:
                 obs_stopped = True
                 break
-            ig.update(heap)
-            if len(ig.keys()) < 1:
+            updated = ig.update(heap)
+            if not updated:
                 logger.info('==== empty heap received ====')
+                continue
+            have_items = True
+            for key in ('timestamp', 'correlator_data', 'flags', 'weights', 'weights_channel'):
+                if key not in updated:
+                    logger.warn('heap received without %s', key)
+                    have_items = False
+                    break
+            if not have_items:
                 continue
 
             # get activity and target tag from telescope state
@@ -580,7 +588,7 @@ class Pipeline(Task):
     Task (Process or Thread) which runs pipeline
     """
 
-    def __init__(self, task_class, data, data_shape,
+    def __init__(self, task_class, data,
                  accum_pipeline_queue, pipeline_accum_sem, pipeline_report_queue, master_queue,
                  pipenum, l1_endpoint, l1_level, l1_rate, telstate):
         super(Pipeline, self).__init__(task_class, master_queue, 'Pipeline_' + str(pipenum))
@@ -589,7 +597,6 @@ class Pipeline(Task):
         self.pipeline_accum_sem = pipeline_accum_sem
         self.pipeline_report_queue = pipeline_report_queue
         self.telstate = telstate
-        self.data_shape = data_shape
         self.l1_level = l1_level
         self.l1_rate = l1_rate
         self.l1_endpoint = l1_endpoint
@@ -860,7 +867,18 @@ class CalDeviceServer(katcp.server.AsyncDeviceServer):
     def setup_sensors(self):
         for sensor in self.accumulator.sensors.values():
             self.add_sensor(sensor)
-        # Other sensors get added from run_cal.py.
+        for sensor in self.pipelines[0].get_sensors():
+            self.add_sensor(sensor)
+        for sensor in self.report_writer.get_sensors():
+            self.add_sensor(sensor)
+
+    def start(self):
+        self._run_queue_task = trollius.ensure_future(self._run_queue())
+        super(CalDeviceServer, self).start()
+
+    @trollius.coroutine
+    def join(self):
+        yield From(self._run_queue_task)
 
     @request()
     @return_reply()
@@ -875,19 +893,21 @@ class CalDeviceServer(katcp.server.AsyncDeviceServer):
 
     @request()
     @return_reply()
+    @concurrent_reply
     @tornado.gen.coroutine
     def request_capture_done(self, msg):
         """Stop the current observation"""
         if not self.accumulator.capturing:
             raise tornado.gen.Return(('fail', 'no capture in progress'))
-        yield katsdpservices.asyncio.to_tornado_future(self.accumulator.capture_done())
+        yield to_tornado_future(self.accumulator.capture_done())
         raise tornado.gen.Return(('ok',))
 
     @trollius.coroutine
     def shutdown(self, force=False):
-        """Shut down the children and prevent any new captures being started.
+        """Shut down the server.
 
-        The device server is left in place.
+        This is a potentially long-running operation, particularly if `force`
+        is used. While it is running, no new capture sessions can be started.
         """
         loop = trollius.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor(1) as executor:
@@ -916,3 +936,116 @@ class CalDeviceServer(katcp.server.AsyncDeviceServer):
             else:
                 logger.warn('Cannot force kill tasks, because they are threads')
         self.master_queue.put(StopEvent())
+        # Wait until all pending sensor updates have been applied
+        yield From(self.join())
+
+    @request(Bool(optional=True, default=False))
+    @return_reply()
+    @concurrent_reply
+    @tornado.gen.coroutine
+    def request_shutdown(self, msg, force=False):
+        """Shut down the server.
+
+        This is a potentially long-running operation, particularly if `force`
+        is used. While it is running, no new capture sessions can be started.
+        It is possible to make concurrent requests while this request is in
+        progress, but it will not be possible to start new observations.
+
+        This does not directly stop the server, but it does cause
+        :meth:`_run_queue` to exit, which causes :file:`run_cal.py` to shut down.
+
+        Parameters
+        ----------
+        force : bool, optional
+            If true, terminate processes immediately rather than waiting for
+            them to finish pending work. This can cause data loss!
+        """
+        yield to_tornado_future(trollius.ensure_future(self.shutdown(force)))
+        raise tornado.gen.Return(('ok',))
+
+    @trollius.coroutine
+    def _run_queue(self):
+        """Process all events sent to the master queue, until stopped by :meth:`shutdown`."""
+        loop = trollius.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(1) as executor:
+            while True:
+                event = yield From(loop.run_in_executor(executor, self.master_queue.get))
+                if isinstance(event, StopEvent):
+                    break
+                elif isinstance(event, SensorReadingEvent):
+                    try:
+                        sensor = self.get_sensor(event.name)
+                    except ValueError:
+                        logger.warn('Received update for unknown sensor %s', event.name)
+                    else:
+                        sensor.set(event.reading.timestamp,
+                                   event.reading.status,
+                                   event.reading.value)
+                else:
+                    logger.warn('Unknown event %r', event)
+
+
+def create_buffer_arrays(buffer_shape, use_multiprocessing=True):
+    """
+    Create empty buffer record using specified dimensions
+    """
+    if use_multiprocessing:
+        factory = shared_empty
+    else:
+        factory = np.empty
+    data = {}
+    data['vis'] = factory(buffer_shape, dtype=np.complex64)
+    data['flags'] = factory(buffer_shape, dtype=np.uint8)
+    data['weights'] = factory(buffer_shape, dtype=np.float32)
+    data['times'] = factory(buffer_shape[0], dtype=np.float)
+    data['max_index'] = factory([1], dtype=np.int32)
+    data['max_index'][0] = 0
+    return data
+
+
+def create_server(use_multiprocessing, host, port, buffers,
+                  l0_endpoint, l0_interface_address,
+                  l1_endpoint, l1_level, l1_rate, telstate,
+                  report_path, log_path, full_log):
+    # threading or multiprocessing imports
+    if use_multiprocessing:
+        logger.info("Using multiprocessing")
+        import multiprocessing
+    else:
+        logger.info("Using threading")
+        import multiprocessing.dummy as multiprocessing
+
+    num_buffers = len(buffers)
+    # set up inter-task synchronisation primitives.
+    # passed events to indicate buffer transfer, end-of-observation, or stop
+    accum_pipeline_queues = [multiprocessing.Queue() for i in range(num_buffers)]
+    # signalled when the pipeline is finished with a buffer
+    pipeline_accum_sems = [multiprocessing.Semaphore(value=1) for i in range(num_buffers)]
+    # signalled by pipelines when they shut down or finish an observation
+    pipeline_report_queue = multiprocessing.Queue()
+    # other tasks send up sensor updates
+    master_queue = multiprocessing.Queue()
+
+    # Set up the pipelines (one per buffer)
+    pipelines = [Pipeline(
+        multiprocessing.Process, buffers[i],
+        accum_pipeline_queues[i], pipeline_accum_sems[i], pipeline_report_queue, master_queue,
+        i, l1_endpoint, l1_level, l1_rate, telstate) for i in range(num_buffers)]
+    # Set up the report writer
+    report_writer = ReportWriter(
+        multiprocessing.Process, pipeline_report_queue, master_queue, telstate, num_buffers,
+        l1_endpoint, l1_level, report_path, log_path, full_log)
+
+    # Start the child tasks.
+    for task in [report_writer] + pipelines:
+        if not use_multiprocessing:
+            task.daemon = True    # Make sure it doesn't prevent process exit
+        task.start()
+
+    # Set up the accumulator. This is done after the other processes are
+    # started, because it creates a ThreadPoolExecutor, and threads and fork()
+    # don't play nicely together.
+    accumulator = Accumulator(buffers,
+                              accum_pipeline_queues, pipeline_accum_sems,
+                              l0_endpoint, l0_interface_address, telstate)
+    return CalDeviceServer(accumulator, pipelines, report_writer, master_queue, host, port)
