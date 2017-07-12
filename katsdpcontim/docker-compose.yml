@@ -25,6 +25,7 @@ services:
         HTTP_PROXY: "http://localhost:3128"
 
     container_name: aips-trusty-dev
+    hostname: aips-obit
     image: aips:trusty-dev
     network_mode: bridge
     environment:
