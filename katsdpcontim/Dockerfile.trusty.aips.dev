@@ -54,7 +54,7 @@ RUN pip install /src/katsdppipelines/Obit-pipeline
 # Install continuum-subtract
 ADD katsdpresearch /src/katsdpresearch
 
-RUN pip install scipy pyfits
+RUN pip install scipy pyfits matplotlib
 
 RUN apt-get update && apt-get install -y python-tk
 
