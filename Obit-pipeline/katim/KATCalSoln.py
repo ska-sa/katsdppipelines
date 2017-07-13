@@ -7,6 +7,7 @@
 import numpy as np
 import scipy
 import multiprocessing as mp
+import pickle
 
 class CalibrationReadError(RuntimeError):
     """An error occurred in loading calibration values from file"""
@@ -209,22 +210,21 @@ class cal_solution():
         K = np.exp(self._K_solns(timestamps) * delay_to_phase)
         B = self._B_solns(timestamps)
         G = self._G_solns(timestamps)
-        p=mp.Pool()
-        async_results=[]
         for idx,cp in enumerate(self._cp_lookup):
-             async_results.append(p.apply_async(apply_KBG,(vis[:,:,idx],
-                 (K[:,:,cp[0][1],cp[0][0]],K[:,:,cp[1][1],cp[1][0]].conj()),
-                 (B[:, :, cp[0][1],cp[0][0]],B[:, :, cp[1][1],cp[1][0]].conj()),
-                 (G[:, :, cp[0][1],cp[0][0]],G[:, :, cp[1][1],cp[1][0]].conj()),
-                 weights[:,:,idx])))
-        p.close()
-        p.join()
-        for i,result in enumerate(async_results):
+            #K
+            vis[:,:,idx] *= K[:,:,cp[0][1],cp[0][0]] * K[:,:,cp[1][1],cp[1][0]].conj()
+            #B
+            scale = B[:, :, cp[0][1],cp[0][0]] * B[:, :, cp[1][1],cp[1][0]].conj()
+            vis[:,:,idx] /= B[:, :, cp[0][1],cp[0][0]] * B[:, :, cp[1][1],cp[1][0]].conj()
             if weights is not None:
-                vis[...,i],weights[...,i]=result.get()
-            else:
-                vis[...,i],weights=result.get()
-        return vis
+                weights[:,:,idx] *= scale.real**2 + scale.imag**2
+            #G
+            scale = G[:, :, cp[0][1],cp[0][0]] * G[:, :, cp[1][1],cp[1][0]].conj()
+            vis[:,:,idx] *= np.reciprocal(scale)
+            if weights is not None:
+                weights[:,:,idx] *= scale.real**2 + scale.imag**2
+
+        return vis,weights
 
 def apply_KBG(vis,K,B,G,weights=None):
     """

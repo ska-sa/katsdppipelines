@@ -99,7 +99,7 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
     WriteSUTable (outUV, meta, err)
 
     # Convert data
-    ConvertKATData(outUV, katdata, meta, err, stop_w=kwargs.get('stop_w',False), timeav=kwargs.get('timeav',1). apply_cal=kwargs.get('apply_cal',False))
+    ConvertKATData(outUV, katdata, meta, err, stop_w=kwargs.get('stop_w',False), timeav=kwargs.get('timeav',1), apply_cal=kwargs.get('apply_cal',False))
 
     # Index data
     OErr.PLog(err, OErr.Info, "Indexing data")
@@ -574,7 +574,11 @@ def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1, apply_cal=
     #Shall we apply cal?
     cal_soln=None
     if apply_cal:
-        cal_soln=katcalsoln.cal_solution(katdata)
+        msg = "Applying calibration from input file"
+        OErr.PLog(err, OErr.Info, msg)
+        OErr.printErr(err)
+        print msg
+        cal_soln=KATCalSoln.cal_solution(katdata)
     for scan, state, target in katdata.scans():
         # Fetch data
         tm = katdata.timestamps[:]
