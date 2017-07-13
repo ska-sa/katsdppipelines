@@ -21,6 +21,7 @@ parser = OptionParser( usage=usage, description=description)
 parser.add_option("--write-flags", action="store_true", default=False, help="Write flags into uvfits file (this negates weights and cannot be undone inside AIPS!!)")
 parser.add_option("--channel-range", default=None, help="Range of frequency channels to keep (zero-based inclusive 'first_chan,last_chan', default is all channels)")
 parser.add_option("--obit", action="store_true", default=False, help="Write data as a FITAB format file suitable for input to Obit.")
+parser.add_option("--apply-cal", action="store_true", default=False, help="Look for calibration tables in the input h5 file amd apply them before writing uvfits.")
 (options, args) = parser.parse_args()
 
 h5file=args[0]
@@ -82,7 +83,7 @@ newuvfits.writeto(filebase+'.uvfits',clobber=True)
 
 uv=OTObit.uvlod(filebase+'.uvfits',0,nam,cls,disk,seq,err)
 
-obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0, stop_w=False)
+obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0, stop_w=False, apply_cal=options.apply_cal)
 
 uv.Header(err)
 

@@ -45,6 +45,7 @@ from OTObit import day2dhms
 import numpy
 import itertools
 import pyfits
+import KATCalSoln
 
 def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
               calInt=1.0, **kwargs):
@@ -98,7 +99,7 @@ def KAT2AIPS (katdata, outUV, disk, fitsdisk, err, \
     WriteSUTable (outUV, meta, err)
 
     # Convert data
-    ConvertKATData(outUV, katdata, meta, err, stop_w=kwargs.get('stop_w',False), timeav=kwargs.get('timeav',1))
+    ConvertKATData(outUV, katdata, meta, err, stop_w=kwargs.get('stop_w',False), timeav=kwargs.get('timeav',1). apply_cal=kwargs.get('apply_cal',False))
 
     # Index data
     OErr.PLog(err, OErr.Info, "Indexing data")
@@ -505,7 +506,7 @@ def StopFringes(visData,freqData,wData,polProd):
     return outVisData
 
 
-def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1):
+def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1, apply_cal=False):
     """
     Read KAT HDF data and write Obit UV
 
@@ -570,12 +571,19 @@ def ConvertKATData(outUV, katdata, meta, err, stop_w=False, timeav=1):
         OErr.PLog(err, OErr.Info, msg)
         OErr.printErr(err)
         print msg
+    #Shall we apply cal?
+    cal_soln=None
+    if apply_cal:
+        cal_soln=katcalsoln.cal_solution(katdata)
     for scan, state, target in katdata.scans():
         # Fetch data
         tm = katdata.timestamps[:]
         vs = katdata.vis[:]
         wt = katdata.weights[:]
         fg = katdata.flags[:]
+        #Apply cal if requested and rescale weights
+        if cal_soln is not None:
+            vs,wt=cal_soln.apply_solutions(vs,tm,wt)
         if timeav>1:
             vs,wt,fg,tm=AverageTime(vs,wt,fg,tm,int(timeav))
             #Lets average the data!!!
