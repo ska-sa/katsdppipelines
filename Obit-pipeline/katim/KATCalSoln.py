@@ -225,27 +225,3 @@ class cal_solution():
                 weights[:,:,idx] *= scale.real**2 + scale.imag**2
 
         return vis,weights
-
-def apply_KBG(vis,K,B,G,weights=None):
-    """
-    Apply the solutions storued in the tuples K,B,G to vis, and resscale the weights
-    for a single baseline.
-    The tuples should contain soln for ant 1 and conjugate of soln for ant 2 corresponding
-    to the array in vis and weights.
-    This is mainly useful for parallelising the application of the solution
-    across the baseline axis.
-    """
-    
-    #K
-    vis *= K[0] * K[1]
-    #B
-    scale = B[0] * B[1]
-    vis /= scale
-    if weights is not None:
-        weights *= scale.real**2 + scale.imag**2
-    #G
-    scale = G[0] * G[1]
-    vis[:,:] *= np.reciprocal(scale)
-    if weights is not None:
-        weights *= scale.real**2 + scale.imag**2
-    return vis,weights
