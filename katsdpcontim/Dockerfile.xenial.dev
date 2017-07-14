@@ -1,0 +1,126 @@
+FROM ubuntu:xenial-20170619
+MAINTAINER simon.perkins@gmail.com
+
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV PACKAGES \
+    software-properties-common \
+    python-software-properties \
+    python-pip \
+    curl \
+    wget \
+    git \
+    cvs \
+    subversion \
+    autotools-dev \
+    automake \
+    build-essential \
+    cmake \
+    gfortran \
+    g++ \
+    libglib2.0-dev \
+    libncurses5-dev \
+    libreadline-dev \
+    flex \
+    bison \
+    libblas-dev \
+    liblapacke-dev \
+    libcfitsio3-dev \
+    # Needs GSL 1.x but xenial has 2.x
+    # Manually download and install below
+    # libgsl0-dev \
+    wcslib-dev \
+    libhdf5-serial-dev \
+    libfftw3-dev \
+    python-numpy \
+    libmotif-dev \
+    # Without libcurl Obit pretends it can't find an external xmlrpc
+    libcurl4-openssl-dev \
+    libxmlrpc-core-c3-dev \
+    libxmlrpc-c++8-dev \
+    libboost-all-dev \
+    # Required by bnmin1
+    swig \
+    zlib1g-dev \
+    libpython3.5-dev \
+    libpython2.7-dev \
+    python-tk
+
+# enable universe, multiverse, restricted with world wide mirrors
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y $PACKAGES && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN mkdir -p /src && \
+    cd /src && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
+    cd gsl-1.16 && \
+    ./configure --prefix=/usr && \
+    make -j 8 all && \
+    make -j 8 install
+
+RUN pip install -U pip setuptools wheel
+RUN pip install -U scipy pyfits matplotlib
+
+WORKDIR /usr/local/AIPS
+
+RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC16/install.pl
+
+# Remove root user check:
+RUN sed -i -e '455,461d' install.pl
+
+## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
+RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
+
+# Replace /etc/services with those required by aips
+ADD katsdpcontim/services /etc/services
+
+ENV OBIT_BASE_PATH /usr/local/Obit
+
+# Add the Obit source code
+ADD katsdpcontim/Obit/trunk $OBIT_BASE_PATH
+
+# Add OBIT patch
+ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
+
+# Apply OBIT patch
+RUN cd $OBIT_BASE_PATH && \
+    patch -p1 -N  < obit.patch 2>/dev/null
+
+# Compile OBIT
+RUN cd $OBIT_BASE_PATH/ObitSystem/Obit && \
+    ./configure --prefix=/usr --without-plplot --without-wvr && \
+    make clean && \
+    make -j 8
+
+# Install master katpoint
+ADD katsdpcontim/katpoint /src/katpoint
+RUN pip install /src/katpoint
+
+# Install master katdal
+ADD katsdpcontim/katdal /src/katdal
+RUN pip install /src/katdal
+
+# Install katim
+ADD . /src/katsdppipelines
+RUN pip install /src/katsdppipelines/Obit-pipeline
+
+# Add OBIT setup script
+ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
+
+# Add the AIPS running script
+ADD katsdpcontim/aipsrunner.sh /bin/aipsrunner.sh
+
+# Create a script that sources .bashrc and the above scripts
+RUN echo "#!/bin/bash" > /run.sh
+RUN echo "" >> /run.sh
+RUN echo "source $HOME/.bashrc" >> /run.sh
+RUN echo "source /bin/setup_obit.sh" >> /run.sh
+RUN echo "source /bin/aipsrunner.sh" >> /run.sh
+RUN echo "export PYTHONPATH=/src/katsdpresearch:\$PYTHONPATH" >> /run.sh
+RUN chmod a+x /run.sh
+
+# Run run.sh and then go to interactive shell
+CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]

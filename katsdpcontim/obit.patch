@@ -1,0 +1,298 @@
+Index: trunk/ObitSystem/Obit/Makefile.in
+===================================================================
+--- trunk/ObitSystem/Obit/Makefile.in	(revision 567)
++++ trunk/ObitSystem/Obit/Makefile.in	(working copy)
+@@ -56,7 +56,7 @@
+ DIRN = @PACKAGE_NAME@
+ 
+ #------------------------------------------------------------------------
+-TARGETS = versionupdate cfitsioupdate xmlrpcupdate srcupdate libupdate \
++TARGETS = cfitsioupdate xmlrpcupdate srcupdate libupdate \
+ 	pythonupdate taskupdate
+ 
+ all:  $(TARGETS)
+@@ -74,35 +74,35 @@
+ 	cd dummy_xmlrpc; $(MAKE)
+ 
+ # update tables from documentation directory
+-tableupdate: 
++tableupdate:
+ 	perl bin/ObitTables.pl
+ 
+ # update documentation directory
+-docupdate: 
++docupdate:
+ 	cd doc; $(MAKE)
+ 
+ # update source/object directory
+-srcupdate: 
++srcupdate:
+ 	cd src; $(MAKE)
+ 
+ # update library directory
+-libupdate: 
+-	cd lib; $(MAKE) RANLIB="$(RANLIB)"
++libupdate: srcupdate
++	cd lib; $(MAKE) RANLIB="$(RANLIB)" CC="$(CC)"
+ 
+ # update test software directory
+-testupdate: 
++testupdate: libupdate
+ 	cd test; $(MAKE)
+ 
+ # update task software directory
+-taskupdate: 
++taskupdate: libupdate
+ 	cd tasks; $(MAKE)
+ 
+ # update work directory
+-work: 
++work:
+ 	cd src/work; $(MAKE) CC="$(CC)" CFLAGS="$(CFLAGS)" LIB="$(LIB)"
+ 
+ # update python directory
+-pythonupdate: 
++pythonupdate: libupdate
+ 	cd python; $(MAKE)
+ 
+ # update from cvs repository
+@@ -121,7 +121,7 @@
+ 	echo "Testing not yet implemented"
+ 
+ # make gzipped tar backup of directory
+-backup:	
++backup:
+ 	cd ..;rm -f $(ARCHIVE).tgz
+ 	cd ..;gtar czvf $(ARCHIVE).tgz \
+ 		$(DIRN)/bin/*.pl  \
+@@ -152,7 +152,7 @@
+ 		$(DIRN)/include/CVS/* $(DIRN)/lib/CVS/*
+ 
+ # make gzipped tar distribution
+-distrib:	
++distrib:
+ 	cd ..;rm -f $(DISTRIB).tgz
+ 	cd ..;gtar czvf $(DISTRIB).tgz \
+ 		$(DIRN)/README $(DIRN)/LICENSE           \
+@@ -178,10 +178,10 @@
+ 		$(DIRN)/dummy_xmlrpc/*.c $(DIRN)/dummy_xmlrpc/*.h \
+ 		$(DIRN)/dummy_xmlrpc/Make* $(DIRN)/dummy_xmlrpc/README \
+ 		$(DIRN)/config* $(DIRN)/aclocal.m4 $(DIRN)/install-sh \
+-		$(DIRN)/mkinstalldirs $(DIRN)/missing $(DIRN)/m4/* 
++		$(DIRN)/mkinstalldirs $(DIRN)/missing $(DIRN)/m4/*
+ 
+ # make gzipped tar distribution of only software
+-copy:	
++copy:
+ 	cd ..;rm -f $(DISTRIB)Src.tgz
+ 	cd ..;gtar czvf $(DISTRIB)Src.tgz \
+ 		$(DIRN)/README $(DIRN)/LICENSE           \
+@@ -204,7 +204,7 @@
+ 		$(DIRN)/dummy_xmlrpc/*.c $(DIRN)/dummy_xmlrpc/*.h \
+ 		$(DIRN)/dummy_xmlrpc/Make* $(DIRN)/dummy_xmlrpc/README \
+ 		$(DIRN)/tasks/Makefile* $(DIRN)/tasks/*.h   \
+-		$(DIRN)/tasks/*.c  $(DIRN)/tasks/*.doc $(DIRN)/TDF/*.TDF 
++		$(DIRN)/tasks/*.c  $(DIRN)/tasks/*.doc $(DIRN)/TDF/*.TDF
+ 
+ clean:
+ 	cd src;  $(MAKE) clean
+Index: trunk/ObitSystem/Obit/lib/Makefile
+===================================================================
+--- trunk/ObitSystem/Obit/lib/Makefile	(revision 567)
++++ trunk/ObitSystem/Obit/lib/Makefile	(working copy)
+@@ -34,7 +34,7 @@
+ #
+ #------------------------------------------------------------------------
+ # targets to build
+-TARGETS =  libObit.a
++TARGETS =  libObit.a libObit.so
+ SHTARGETS = libObit.so
+ 
+ # list of object modules
+@@ -51,7 +51,7 @@
+ #  build shared Obit library, put in dependencies library
+ libObit.so: ${OBJECTS}
+ 	gcc -shared -o libObit.so  ${OBJECTS}
+-	cp libObit.so ../../../deps/lib
++	#cp libObit.so ../../../deps/lib
+ 
+ clean:
+ 	rm -f $(TARGETS) $(SHTARGETS)
+Index: trunk/ObitSystem/Obit/python/Makefile.in
+===================================================================
+--- trunk/ObitSystem/Obit/python/Makefile.in	(revision 567)
++++ trunk/ObitSystem/Obit/python/Makefile.in	(working copy)
+@@ -29,7 +29,7 @@
+ #    Makefile to build library routines
+ #    Obit software
+ #
+-#   Expects CC, CFLAGS, to be set by either environment variable 
++#   Expects CC, CFLAGS, to be set by either environment variable
+ #   or Make argument
+ #     CC is the compiler to use
+ #     CFLAGS is compile options
+@@ -42,7 +42,7 @@
+ 
+ CC = @CC@
+ #CPPFLAGS = @CPPFLAGS@
+-CPPFLAGS = 
++CPPFLAGS =
+ CFLAGS = @CFLAGS@
+ LDFLAGS = @LDFLAGS@
+ 
+@@ -50,33 +50,38 @@
+ 	@PYTHON_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @PYTHON_CPPFLAGS@ \
+ 	@PLPLOT_CPPFLAGS@ @PGPLOT_CPPFLAGS@ @DEFS@
+ ALL_CFLAGS = $(CFLAGS) @GLIB_CFLAGS@ @GSL_CFLAGS@ @PLPLOT_CFLAGS@ \
+-	@PGPLOT_CFLAGS@ 
++	@PGPLOT_CFLAGS@
+ ALL_LDFLAGS = $(LDFLAGS) @CFITSIO_LDFLAGS@ @FFTW_LDFLAGS@  @FFTW3_LDFLAGS@  @GSL_LDFLAGS@ \
+-	@PLPLOT_LDFLAGS@ @PGPLOT_LDFLAGS@ @PYTHON_LDFLAGS@ 
++	@PLPLOT_LDFLAGS@ @PGPLOT_LDFLAGS@ @PYTHON_LDFLAGS@
+ 
+-LIBS = ../lib/libObit.a @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
++# Static library option
++# OBIT_LIB = ../lib/libObit.a
++# Shared library option
++OBIT_LIB = -L../lib -lObit
++
++LIBS = $(OBIT_LIB) @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
+ 	@GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ @LIBS@ @FLIBS@ @GTHREAD_LIBS@
+ 
+-CLIENT_CPPFLAGS = $(ALL_CPPFLAGS) @XMLRPC_CLIENT_CPPFLAGS@ 
++CLIENT_CPPFLAGS = $(ALL_CPPFLAGS) @XMLRPC_CLIENT_CPPFLAGS@
+ CLIENT_CFLAGS = $(ALL_CFLAGS) @ZLIB_CFLAGS@
+-CLIENT_LDFLAGS = $(ALL_LDFLAGS) @XMLRPC_CLIENT_LDFLAGS@ @ZLIB_LDFLAGS@ 
+-CLIENT_LIBS = $(LIBS) @ZLIB_LIBS@ @XMLRPC_CLIENT_LIBS@ 
++CLIENT_LDFLAGS = $(ALL_LDFLAGS) @XMLRPC_CLIENT_LDFLAGS@ @ZLIB_LDFLAGS@
++CLIENT_LIBS = $(LIBS) @ZLIB_LIBS@ @XMLRPC_CLIENT_LIBS@
+ 
+ SERVER_CPPFLAGS = @XMLRPC_SERVER_CPPFLAGS@
+-SERVER_CFLAGS = 
++SERVER_CFLAGS =
+ SERVER_LDFLAGS = $(LDFLAGS) @XMLRPC_SERVER_LDFLAGS@
+-SERVER_LIBS =  @XMLRPC_SERVER_LIBS@ 
++SERVER_LIBS =  @XMLRPC_SERVER_LIBS@
+ 
+ # Must use SWIG v1.1-883
+ SWIG = @SWIG@
+ 
+ # Libraries in case they've changed
+-MYLIBS := $(wildcard ../lib/lib*.a)
++MYLIBS := $(wildcard ../lib/lib*.so)
+ 
+ # Do everything in one big module
+-TARGETS := Obit.so 
++TARGETS := Obit.so
+ 
+-all: $(TARGETS)
++all: install
+ 
+ # Build shared library for python interface
+ $(TARGETS): setupdata.py $(MYLIBS)
+@@ -84,6 +89,10 @@
+ 	python makesetup.py
+ 	python setup.py build install --install-lib=.
+ 
++install: $(TARGETS)
++	mkdir -p build/site-packages
++	cp *.py $(TARGETS) build/site-packages
++
+ # Build python/Obit interface
+ interface: Obit_wrap.c
+ 	echo "rebuild Obit/python interface"
+@@ -104,5 +113,5 @@
+ 	echo "LIBS='$(CLIENT_LIBS) $(SERVER_LIBS)'">>setupdata.py
+ 
+ clean:
+-	rm -f Obit.i *.o *.so *.pyc	
++	rm -f Obit.i *.o *.so *.pyc
+ 	rm -rf build
+Index: trunk/ObitSystem/Obit/python/makesetup.py
+===================================================================
+--- trunk/ObitSystem/Obit/python/makesetup.py	(revision 567)
++++ trunk/ObitSystem/Obit/python/makesetup.py	(working copy)
+@@ -59,7 +59,7 @@
+ for x in t:
+     if x[0:2]=='-I':
+         incDirs.append(x[2:])
+-        
++
+ tt = setupdata.CPPFLAGS
+ tt=tt.replace("\n","_"); tt=tt.replace("\\ ","_");
+ t = tt.split()
+@@ -109,6 +109,6 @@
+ outfile.write('                              extra_compile_args='+str(compileArgs)+','+os.linesep)
+ outfile.write('                              library_dirs='+str(libDirs)+','+os.linesep)
+ outfile.write('                              libraries='+str(libs)+','+os.linesep)
+-outfile.write('                              runtime_library_dirs='+str(runtimeLibDirs)+')],'+os.linesep)
+-outfile.write('       include_dirs='+str(incDirs)+os.linesep)
++outfile.write('                              runtime_library_dirs='+str(runtimeLibDirs)+','+os.linesep)
++outfile.write('       include_dirs='+str(incDirs)+')]'+os.linesep)
+ outfile.write(')')
+Index: trunk/ObitSystem/Obit/tasks/Makefile.in
+===================================================================
+--- trunk/ObitSystem/Obit/tasks/Makefile.in	(revision 567)
++++ trunk/ObitSystem/Obit/tasks/Makefile.in	(working copy)
+@@ -43,15 +43,15 @@
+ LDFLAGS = @LDFLAGS@
+ 
+ SERVER_CPPFLAGS = @XMLRPC_SERVER_CPPFLAGS@
+-SERVER_CFLAGS = 
++SERVER_CFLAGS =
+ SERVER_LDFLAGS = $(LDFLAGS) @XMLRPC_SERVER_LDFLAGS@
+-SERVER_LIBS =  @XMLRPC_SERVER_LIBS@ 
++SERVER_LIBS =  @XMLRPC_SERVER_LIBS@
+ 
+ CLIENT_CPPFLAGS = @XMLRPC_CLIENT_CPPFLAGS@
+ CLIENT_CFLAGS = @ZLIB_CFLAGS@
+-CLIENT_LDFLAGS = @XMLRPC_CLIENT_LDFLAGS@ @ZLIB_LDFLAGS@ 
++CLIENT_LDFLAGS = @XMLRPC_CLIENT_LDFLAGS@ @ZLIB_LDFLAGS@
+ CLIENT_LIBS = @XMLRPC_LIBS@  @GSL_LIBS@ @ZLIB_LIBS@  \
+-        @XMLRPC_CLIENT_LIBS@ 
++        @XMLRPC_CLIENT_LIBS@
+ 
+ ALL_CPPFLAGS = $(CPPFLAGS) -I$(top_srcdir)/include @CFITSIO_CPPFLAGS@ \
+ 	@FFTW_CPPFLAGS@  @FFTW3_CPPFLAGS@  $(CLIENT_CPPFLAGS) $(SERVER_CPPFLAGS) @PLPLOT_CPPFLAGS@ \
+@@ -63,10 +63,16 @@
+ 	 @GSL_LDFLAGS@ @PLPLOT_LDFLAGS@ @PGPLOT_LDFLAGS@ @WVR_LDFLAGS@ \
+ 	$(CLIENT_LDFLAGS) $(SERVER_LDFLAGS)
+ 
+-LIBS = ../lib/libObit.a @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
+-	@GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ $(CLIENT_LIBS) $(SERVER_LIBS) \
+-	@LIBS@ @FLIBS@ @GTHREAD_LIBS@ @WVR_LIBS@
++# Static library option
++# OBIT_LIB_TARGET = ../lib/libObit.a
++# OBIT_LIB = ../lib/libObit.a
++# Shared library option
++OBIT_LIB_TARGET = ../lib/libObit.so
++OBIT_LIB = -L../lib -lObit
+ 
++LIBS = $(OBIT_LIB) @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
++        @GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ $(CLIENT_LIBS) $(SERVER_LIBS) \
++        @LIBS@ @FLIBS@ @GTHREAD_LIBS@ @WVR_LIBS@
+ 
+ # get list of all c source files (*.c) files
+ AllC    := $(wildcard *.c)
+@@ -76,13 +82,13 @@
+ all: $(TARGETS)
+ 
+ # generic C compile/link
+-$(TARGETS): $(BINDIR)% : %.c ../lib/libObit.a  
++$(TARGETS): $(BINDIR)% : %.c $(OBIT_LIB_TARGET)
+ 	echo "compile $*.c"
+ 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $*.c -o $* $(LIBS)
+ 	mv $* $(BINDIR)
+ 
+ # For specific executables
+-$(EXECU): % : %.c ../lib/libObit.a  
++$(EXECU): % : %.c $(OBIT_LIB_TARGET)
+ 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $< -o $* $(LIBS)
+ 	mv $* $(BINDIR)
+ 
+@@ -89,4 +95,5 @@
+ clean:
+ 	rm -f $(TARGETS)
+ 	rm -f *.o
++	rm -f *.so
+ 

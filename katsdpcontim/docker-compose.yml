@@ -1,0 +1,41 @@
+version: "2.0"
+services:
+  trusty-obit-dev:
+    build:
+      context: ..
+      dockerfile: katsdpcontim/Dockerfile.trusty.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: trusty-obit-dev
+    image: trusty/obit:dev
+    network_mode: bridge
+    restart: "no"
+    hostname: trusty-obit
+    environment:
+      - AIPSMOUNT=/root/aips
+      - DISPLAY
+    volumes:
+      - ./aips:/root/aips:rw
+      - ./output:/output:rw
+      - ./src:/scripts:rw
+
+  xenial-obit-dev:
+    build:
+      context: ..
+      dockerfile: katsdpcontim/Dockerfile.xenial.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: xenial-obit-dev
+    image: xenial/obit:dev
+    network_mode: bridge
+    restart: "no"
+    hostname: xenial-obit
+    environment:
+      - AIPSMOUNT=/root/aips
+      - DISPLAY
+    volumes:
+      - ./aips:/root/aips:rw
+      - ./output:/output:rw
+      - ./src:/scripts:rw
