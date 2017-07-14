@@ -7,7 +7,7 @@ import os.path
 
 import six
 
-from katim import AIPSSetup
+import AIPSSetup
 
 import OErr
 import OTObit
