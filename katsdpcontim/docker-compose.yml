@@ -18,6 +18,7 @@ services:
     volumes:
       - ./aips:/root/aips:rw
       - ./output:/output:rw
+      - ./src:/scripts:rw
 
   xenial-obit-dev:
     build:
@@ -37,3 +38,4 @@ services:
     volumes:
       - ./aips:/root/aips:rw
       - ./output:/output:rw
+      - ./src:/scripts:rw
