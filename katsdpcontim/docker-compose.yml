@@ -1,73 +1,39 @@
 version: "2.0"
 services:
-  obit-trusty-dev:
+  trusty-obit-dev:
     build:
       context: .
       dockerfile: Dockerfile.trusty.dev
       args:
         HTTP_PROXY: "http://localhost:3128"
 
-    container_name: obit-trusty-dev
-    image: obit:trusty-dev
+    container_name: trusty-obit-dev
+    image: trusty/obit:dev
     network_mode: bridge
     restart: "no"
-    volumes:
-      - ./setup_obit.sh:/setup_obit.sh:ro
-      - ./obit.patch:/obit.patch:ro
-      - ./output:/output:rw
-      - ./Obit:/src/Obit:rw
-
-  aips-trusty-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.trusty.aips.dev
-      args:
-        HTTP_PROXY: "http://localhost:3128"
-
-    container_name: aips-trusty-dev
-    hostname: aips-obit
-    image: aips:trusty-dev
-    network_mode: bridge
+    hostname: trusty-obit
     environment:
       - AIPSMOUNT=/root/aips
       - DISPLAY
-    restart: "no"
     volumes:
       - ./aips:/root/aips:rw
       - ./output:/output:rw
 
-  obit-xenial-dev:
+  xenial-obit-dev:
     build:
       context: .
       dockerfile: Dockerfile.xenial.dev
       args:
         HTTP_PROXY: "http://localhost:3128"
 
-    container_name: obit-xenial-dev
-    image: obit:xenial-dev
+    container_name: xenial-obit-dev
+    image: xenial/obit:dev
     network_mode: bridge
     restart: "no"
-    volumes:
-      - ./setup_obit.sh:/setup_obit.sh:ro
-      - ./obit.patch:/obit.patch:ro
-      - ./output:/output:rw
-      - ./Obit:/src/Obit:rw
-
-  aips-xenial-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.xenial.aips.dev
-      args:
-        HTTP_PROXY: "http://localhost:3128"
-
-    container_name: aips-xenial-dev
-    hostname: aips-obit
-    image: aips:xenial-dev
-    network_mode: bridge
+    hostname: xenial-obit
     environment:
       - AIPSMOUNT=/root/aips
       - DISPLAY
-    restart: "no"
     volumes:
       - ./aips:/root/aips:rw
       - ./output:/output:rw
