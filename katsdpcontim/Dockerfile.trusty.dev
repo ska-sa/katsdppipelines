@@ -66,15 +66,15 @@ RUN sed -i -e '455,461d' install.pl
 RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
 
 # Replace /etc/services with those required by aips
-COPY services /etc/services
+ADD katsdpcontim/services /etc/services
 
 ENV OBIT_BASE_PATH /usr/local/Obit
 
 # Add the Obit source code
-ADD Obit/trunk $OBIT_BASE_PATH
+ADD katsdpcontim/Obit/trunk $OBIT_BASE_PATH
 
 # Add OBIT patch
-ADD obit.patch $OBIT_BASE_PATH/obit.patch
+ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
 
 # Apply OBIT patch
 RUN cd $OBIT_BASE_PATH && \
@@ -87,22 +87,22 @@ RUN cd $OBIT_BASE_PATH/ObitSystem/Obit && \
     make -j 8
 
 # Install master katpoint
-ADD katpoint /src/katpoint
+ADD katsdpcontim/katpoint /src/katpoint
 RUN pip install /src/katpoint
 
 # Install master katdal
-ADD katdal /src/katdal
+ADD katsdpcontim/katdal /src/katdal
 RUN pip install /src/katdal
 
 # Install katim
-ADD katsdppipelines /src/katsdppipelines
+ADD . /src/katsdppipelines
 RUN pip install /src/katsdppipelines/Obit-pipeline
 
 # Add OBIT setup script
-ADD setup_obit.sh /bin/setup_obit.sh
+ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
 
 # Add the AIPS running script
-ADD aipsrunner.sh /bin/aipsrunner.sh
+ADD katsdpcontim/aipsrunner.sh /bin/aipsrunner.sh
 
 # Create a script that sources .bashrc and the above scripts
 RUN echo "#!/bin/bash" > /run.sh

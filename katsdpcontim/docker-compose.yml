@@ -2,8 +2,8 @@ version: "2.0"
 services:
   trusty-obit-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.trusty.dev
+      context: ..
+      dockerfile: katsdpcontim/Dockerfile.trusty.dev
       args:
         HTTP_PROXY: "http://localhost:3128"
 
@@ -21,8 +21,8 @@ services:
 
   xenial-obit-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.xenial.dev
+      context: ..
+      dockerfile: katsdpcontim/Dockerfile.xenial.dev
       args:
         HTTP_PROXY: "http://localhost:3128"
 
