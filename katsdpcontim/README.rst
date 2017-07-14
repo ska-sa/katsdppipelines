@@ -14,18 +14,12 @@ You'll need some docker infrastructure:
 Setup
 ~~~~~
 
-Clone this repository:
+Clone the following repositories:
 
 .. code-block:: bash
 
-    $ git clone --recursive git@giturl.com/katsdpcontim.git
-
-The ``--recursive`` option above should initialise and update the various ``kat`` submodules.
-If not, it may be necessary to give them a bit of a push.
-
-.. code-block:: bash
-
-   $ git submodule update --init
+    $ git clone git@github.com:ska-sa/katpoint.git
+    $ git clone git@github.com:ska-sa/katdal.git
 
 Also, checkout the Obit source code @ revision ``567``.
 
