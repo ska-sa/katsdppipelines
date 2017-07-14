@@ -52,3 +52,22 @@ services:
       - ./obit.patch:/obit.patch:ro
       - ./output:/output:rw
       - ./Obit:/src/Obit:rw
+
+  aips-xenial-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.xenial.aips.dev
+      args:
+        HTTP_PROXY: "http://localhost:3128"
+
+    container_name: aips-xenial-dev
+    hostname: aips-obit
+    image: aips:xenial-dev
+    network_mode: bridge
+    environment:
+      - AIPSMOUNT=/root/aips
+      - DISPLAY
+    restart: "no"
+    volumes:
+      - ./aips:/root/aips:rw
+      - ./output:/output:rw
