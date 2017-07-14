@@ -94,6 +94,10 @@ RUN pip install /src/katpoint
 ADD katdal /src/katdal
 RUN pip install /src/katdal
 
+# Install katim
+ADD katsdppipelines /src/katsdppipelines
+RUN pip install /src/katsdppipelines/Obit-pipeline
+
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
 
