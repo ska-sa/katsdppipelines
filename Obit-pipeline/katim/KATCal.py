@@ -1445,7 +1445,7 @@ def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
     """
     Write UV data as FITS file
     
-    Write a UV data set as a FITAB format file
+    Write a UV data set as a uvfits format file suitable for input into CASA/MIRIAD
     History written to header
 
     * inUV       = UV data to copy
@@ -1511,6 +1511,77 @@ def KATUVFITS(inUV, filename, outDisk, err, compress=False, \
 
     # end KATUVFITS
 
+def KATUVFITab(inUV, filename, outDisk, err, compress=False, \
+              exclude=["AIPS HI", "AIPS SL", "AIPS PL"], \
+                  include=["AIPS AN", "AIPS FQ", "AIPS SU"], headHi=False, logfile=""):
+    """
+    Write UV data as FITAB format file suitable for input to Obit.
+
+    Write a UV data set as a FITAB format file
+    History written to header
+
+    * inUV       = UV data to copy
+    * filename   = name of FITS file, any whitespace characters replaced with underscore
+    * outDisk    = FITS directory number
+    * err        = Python Obit Error/message stack
+    * exclude    = List of table types NOT to copy
+      NB: "AIPS HI" isn't really a table and gets copied anyway
+    * include    = List of table types to copy (FQ, AN always done )
+      Exclude has presidence over include
+    * headHi     = if True move history to header, else leave in History table
+
+    returns FITS UV data object
+    """
+    ################################################################
+    mess =  "Write Data to FITS UV data "+filename+" on disk "+str(outDisk)
+    printMess(mess, logfile)
+
+    # Checks
+    if not UV.PIsA(inUV):
+        raise TypeError,"inUV MUST be a Python Obit UV"
+    if not OErr.OErrIsA(err):
+        raise TypeError,"err MUST be an OErr"
+    #
+    # First convert to AIPS (This might not be needed- but just to make sure)
+    # Deblank filename
+    fn = re.sub('\s','_',filename)
+    # Set output
+    outUV = UV.newPAUV("AIPS UV DATA", 'TEMP', 'TEMP', 1, 1, False, err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error creating AIPS data")
+    # Copy
+    UV.PCopy (inUV, outUV, err)
+    if err.isErr:
+        OErr.printErrMsg(err, "Error copying UV data to AIPS")
+    # Copy Tables
+    UV.PCopyTables (inUV, outUV, exclude, include, err)
+
+    # Add output directory to the environment so AIPS can see it
+    if os.path.exists(fn):
+        os.remove(fn)
+    pth,fnn=os.path.split(fn)
+    if not pth:
+        os.environ['FTD']=os.environ['PWD']
+    else:
+        os.environ['FTD']=pth
+
+    #Now use FITTP to write out uv data properly so CASA can read it in.
+    fittp=AIPSTask.AIPSTask("fitab")
+    try:
+        fittp.userno = OSystem.PGetAIPSuser()   # This sometimes gets lost
+    except Exception, exception:
+        pass
+    setname(outUV, fittp)
+
+    fittp.dataout='FTD:'+fnn
+    fittp.g
+    os.unsetenv('FTD')
+    #zap the image
+    outUV.Zap(err)
+    del outUV
+    #return outUV
+
+    # end KATUVFITS
 def EVLAUVFITSTab(inUV, filename, outDisk, err, \
               exclude=["AIPS HI", "AIPS AN", "AIPS FQ", "AIPS SL", "AIPS PL"], \
                   include=[], logfile=""):
