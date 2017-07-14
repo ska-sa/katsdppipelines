@@ -51,12 +51,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN cd /src && \
-    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.9.tar.gz | tar xzvf - && \
-    cd gsl-1.9 && \
+RUN mkdir -p /src && \
+    cd /src && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
+    cd gsl-1.16 && \
     ./configure --prefix=/usr && \
-    make install -j 8
+    make -j 8 all && \
+    make -j 8 install
 
 RUN pip install -U pip setuptools wheel
-
-ENTRYPOINT ["/bin/bash"]
