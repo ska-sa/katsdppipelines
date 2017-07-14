@@ -107,9 +107,6 @@ RUN pip install /src/katdal
 ADD katsdppipelines /src/katsdppipelines
 RUN pip install /src/katsdppipelines/Obit-pipeline
 
-# Install continuum-subtract
-ADD katsdpresearch /src/katsdpresearch
-
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
 
