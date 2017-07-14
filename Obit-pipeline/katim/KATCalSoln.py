@@ -6,6 +6,7 @@
 
 import numpy as np
 import scipy
+import scipy.interpolate
 import multiprocessing as mp
 import pickle
 
