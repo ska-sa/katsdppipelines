@@ -1,4 +1,7 @@
+import logging
 import re
+
+logging.basicConfig(level=logging.INFO)
 
 # Matches expressions of the form
 # $Key = Sources Str (16, 30)
@@ -147,3 +150,75 @@ def parse_aips_config(aips_cfg_file):
         except BaseException as e:
             logging.exception("Parsing Error")
             raise
+
+def aips_disk_config(infile, fitsdir, aipsdir):
+    """
+    Returns an AIPS disk configuration suitable for
+    use with Obit
+    """
+
+    import os
+
+    if infile is None:
+        infile = ""
+        logging.warn("No 'infile' was provided, setting to '%s'" % infile)
+
+    if fitsdir is None:
+        fitsdir = os.getcwd()
+        logging.warn("No 'fitsdir' was provided, setting to '%s'" % fitsdir)
+
+    if aipsdir is None:
+        aipsdir = os.getcwd()
+        logging.warn("No 'aipsdir' was provided, setting to '%s'" % fitsdir)
+
+    # Override AIPS disk configuration options
+    cfg = {
+        "DataType": "FITS",
+        "FITSdirs": [fitsdir],
+        "AIPSdirs": [aipsdir],
+        "inFile": infile,
+        "inDisk": 0,
+        "inSeq": 0,
+        "outFile": ".out.fits",
+        "out2File": ".out.fits",
+    }
+
+    # Set output disk options to input disk options
+    cfg.update({
+        "outDType": cfg["DataType"],
+        "outDisk": cfg["inDisk"],
+        "outSeq": cfg["inSeq"],
+        "out2Disk": cfg["inDisk"],
+        "out2Seq": cfg["inSeq"],
+    })
+
+    return cfg
+
+def aips_user():
+    """ Get the AIPS user """
+    import OSystem
+
+    try:
+        return OSystem.PGetAIPSuser()
+    except Exception as e:
+        logging.exception("Exception getting AIPS User. "
+                          "Returning 105 instead")
+        return 105
+
+def aips_cfg(aips_cfg_file, infile=None, fitsdir=None, aipsdir=None):
+    """ Construct a usable AIPS configuration """
+
+    # Parse the configuration file
+    cfg = parse_aips_config(aips_cfg_file)
+
+    # Set the user file
+    cfg['userno'] = aips_user()
+
+    # Set up some reasonable AIPS disk config
+    cfg.update(aips_disk_config(infile, fitsdir, aipsdir))
+
+    # These don't work with OBIT for some reason
+    for k in ('nFITS','nAIPS', 'AIPSuser'):
+        cfg.pop(k, None)
+
+    return cfg
