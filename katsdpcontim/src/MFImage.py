@@ -1,5 +1,4 @@
 import argparse
-from contextlib import contextmanager
 import logging
 import re
 import os
@@ -7,27 +6,12 @@ import os.path
 
 import six
 
-from katim import AIPSSetup
-
-import OErr
 import OTObit
 import ObitTask
-import OSystem
+
+from aips_context import aips_context
 
 logging.basicConfig(level=logging.INFO)
-
-@contextmanager
-def aips_context():
-    """ Context for creating and shutting down an AIPS context """
-    try:
-        logging.info("Creating AIPS Context")
-        err = OErr.OErr()
-        ObitSys = AIPSSetup.AIPSSetup(err)
-        yield ObitSys, err
-    finally:
-        logging.info("Shutting Down AIPS Context")
-        OErr.printErr(err)
-        OSystem.Shutdown(ObitSys)
 
 def create_parser():
     """ Argument Parser """
