@@ -104,10 +104,10 @@ ADD katsdpcontim/katsdpcontim /src/katsdpcontim
 RUN pip install /src/katsdpcontim
 
 # Add katsdpcontim task configuration files
-ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitrun
+ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitconf
 
-# Set the work directory to /obitrun
-WORKDIR /obitrun
+# Set the work directory to /obitconf
+WORKDIR /obitconf
 
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
@@ -117,11 +117,12 @@ ADD katsdpcontim/aipsrunner.sh /bin/aipsrunner.sh
 
 # Create a script that sources .bashrc and the above scripts
 RUN echo "#!/bin/bash" > /run.sh
-RUN echo "" >> /run.sh
 RUN echo "source $HOME/.bashrc" >> /run.sh
 RUN echo "source /bin/setup_obit.sh" >> /run.sh
 RUN echo "source /bin/aipsrunner.sh" >> /run.sh
 RUN echo "export PYTHONPATH=/src/katsdpresearch:\$PYTHONPATH" >> /run.sh
+RUN echo "echo 'Standard OBIT task configuration files are available in /obitconf'" >> /run.sh
+RUN echo "echo 'You probably want to run the tasks in a mounted volume'" >> /run.sh
 RUN chmod a+x /run.sh
 
 # Run run.sh and then go to interactive shell
