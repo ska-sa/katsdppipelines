@@ -76,12 +76,13 @@ ADD katsdpcontim/Obit/trunk $OBIT_BASE_PATH
 # Add OBIT patch
 ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
 
+WORKDIR $OBIT_BASE_PATH
+
 # Apply OBIT patch
-RUN cd $OBIT_BASE_PATH && \
-    patch -p1 -N  < obit.patch 2>/dev/null
+RUN patch -p1 -N  < obit.patch 2>/dev/null
 
 # Compile OBIT
-RUN cd $OBIT_BASE_PATH/ObitSystem/Obit && \
+RUN cd ObitSystem/Obit && \
     ./configure --prefix=/usr --without-plplot --without-wvr && \
     make clean && \
     make -j 8
@@ -101,6 +102,12 @@ RUN pip install /src/katsdppipelines/Obit-pipeline
 # Install katsdpcontim package
 ADD katsdpcontim/katsdpcontim /src/katsdpcontim
 RUN pip install /src/katsdpcontim
+
+# Add katsdpcontim task configuration files
+ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitrun
+
+# Set the work directory to /obitrun
+WORKDIR /obitrun
 
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
