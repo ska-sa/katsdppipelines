@@ -1,2 +1,5 @@
-nose
 coverage
+funcsigs
+mock
+nose
+pbr
