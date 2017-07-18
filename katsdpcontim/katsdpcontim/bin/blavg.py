@@ -32,6 +32,9 @@ def create_task(args):
     # Obtain configuration options
     cfg = aips_cfg(args.config, args.input)
 
+    # Create a representative log file for this task
+    cfg['taskLog'] = ''.join(('blavg-', base_filename, '.log'))
+
     # Apply configuration options to the task
     apply_cfg_to_task(task, cfg)
 
