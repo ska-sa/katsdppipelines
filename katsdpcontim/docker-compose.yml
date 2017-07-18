@@ -15,8 +15,7 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./output:/output:rw
-      - ./katsdpcontim/katsdpcontim/conf:/conf:ro
+      - ./work:/work:rw
 
   xenial-obit-dev:
     build:
@@ -33,5 +32,4 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./output:/output:rw
-      - ./katsdpcontim/katsdpcontim/conf:/conf:ro
+      - ./work:/work:rw
