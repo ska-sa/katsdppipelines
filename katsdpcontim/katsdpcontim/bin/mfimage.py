@@ -11,7 +11,7 @@ import OTObit
 import ObitTask
 
 from katsdpcontim.aips_context import aips_context
-from katsdpcontim.aips_parser import aips_cfg
+from katsdpcontim.aips_parser import aips_cfg, apply_cfg_to_task
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,22 +22,22 @@ def create_parser():
     parser.add_argument("-c", "--config", required=True)
     return parser
 
-def create_mf_task(args):
+def create_task(args):
     """ Create MF Image """
     task = ObitTask.ObitTask("MFImage")
 
     path, file  = os.path.split(args.input)
     base_filename, ext = os.path.splitext(file)
 
+    # Obtain configuration options
     cfg = aips_cfg(args.config, args.input)
 
-    # Dump configuration options onto the task
-    for k, v in six.iteritems(cfg):
-        setattr(task, k, v)
+    # Apply configuration options to the task
+    apply_cfg_to_task(task, cfg)
 
     return task
 
 with aips_context():
-    task = create_mf_task(create_parser().parse_args())
+    task = create_task(create_parser().parse_args())
     task.g
 

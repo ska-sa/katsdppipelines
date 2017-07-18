@@ -1,5 +1,8 @@
+from collections import OrderedDict
 import logging
 import re
+
+import six
 
 logging.basicConfig(level=logging.INFO)
 
@@ -62,7 +65,7 @@ def parse_aips_config(aips_cfg_file):
         py_dims = None
         py_comment = ""
 
-        D = {}
+        D = OrderedDict()
 
         for line_nr, line in enumerate(f):
             line = line.strip()
@@ -172,25 +175,24 @@ def aips_disk_config(infile, fitsdir, aipsdir):
         logging.warn("No 'aipsdir' was provided, setting to '%s'" % fitsdir)
 
     # Override AIPS disk configuration options
-    cfg = {
-        "DataType": "FITS",
-        "FITSdirs": [fitsdir],
-        "AIPSdirs": [aipsdir],
-        "inFile": infile,
-        "inDisk": 0,
-        "inSeq": 0,
-        "outFile": ".out.fits",
-        "out2File": ".out.fits",
-    }
+    cfg = OrderedDict([
+        ("DataType", "FITS"),
+        ("FITSdirs", [fitsdir]),
+        ("AIPSdirs", [aipsdir]),
+        ("inFile", infile),
+        ("inDisk", 0),
+        ("inSeq", 0),
+        ("outFile", ".out.fits"),
+        ("out2File", ".out.fits")])
 
     # Set output disk options to input disk options
-    cfg.update({
-        "outDType": cfg["DataType"],
-        "outDisk": cfg["inDisk"],
-        "outSeq": cfg["inSeq"],
-        "out2Disk": cfg["inDisk"],
-        "out2Seq": cfg["inSeq"],
-    })
+    cfg.update([
+        ("outDType", cfg["DataType"]),
+        ("outDisk", cfg["inDisk"]),
+        ("outSeq", cfg["inSeq"]),
+        ("out2Disk", cfg["inDisk"]),
+        ("out2Seq", cfg["inSeq"]),
+    ])
 
     return cfg
 
@@ -222,3 +224,22 @@ def aips_cfg(aips_cfg_file, infile=None, fitsdir=None, aipsdir=None):
         cfg.pop(k, None)
 
     return cfg
+
+def apply_cfg_to_task(task, cfg):
+    """
+    Applies supplied configuration to task
+    by setting attributes on the task object.
+
+    Will warn if the attribute does not exist,
+    but will continue
+    """
+    for k, v in six.iteritems(cfg):
+        try:
+            setattr(task, k, v)
+        except AttributeError as e:
+            attr_err = "ObitTask instance has no attribute '{}'".format(k)
+            if attr_err in e.message:
+                logging.warn("Key '{}' is not valid for this "
+                             "task and will be ignored".format(k))
+            else:
+                raise

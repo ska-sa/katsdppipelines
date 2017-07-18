@@ -46,7 +46,8 @@ setup(name=PKG,
     author='Simon Perkins',
     author_email='sperkins@ska.ac.za',
     install_requires=['numpy'],
-    scripts=[pjoin("bin", "mfimage.py")],
+    scripts=[pjoin("bin", "mfimage.py"),
+            pjoin("bin", "blavg.py")],
     packages=find_packages(),
     package_data={PKG: [pjoin('conf', '*.in')]}
 )
