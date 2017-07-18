@@ -34,6 +34,7 @@ def create_task(args):
 
     # Create a representative log file for this task
     cfg['taskLog'] = ''.join(('blavg-', base_filename, '.log'))
+    cfg['outFile'] = ''.join(('blavg-', base_filename, '.fits'))
 
     # Apply configuration options to the task
     apply_cfg_to_task(task, cfg)
