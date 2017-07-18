@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import argparse
 import logging
 import os
@@ -8,8 +10,8 @@ import six
 import OTObit
 import ObitTask
 
-from aips_context import aips_context
-from aips_parser import aips_cfg
+from katsdpcontim.aips_context import aips_context
+from katsdpcontim.aips_parser import aips_cfg
 
 logging.basicConfig(level=logging.INFO)
 

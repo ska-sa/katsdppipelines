@@ -13,12 +13,9 @@ services:
     restart: "no"
     hostname: trusty-obit
     environment:
-      - AIPSMOUNT=/root/aips
       - DISPLAY
     volumes:
-      - ./aips:/root/aips:rw
       - ./output:/output:rw
-      - ./src:/scripts:rw
 
   xenial-obit-dev:
     build:
@@ -33,9 +30,6 @@ services:
     restart: "no"
     hostname: xenial-obit
     environment:
-      - AIPSMOUNT=/root/aips
       - DISPLAY
     volumes:
-      - ./aips:/root/aips:rw
       - ./output:/output:rw
-      - ./src:/scripts:rw

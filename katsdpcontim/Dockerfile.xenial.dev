@@ -107,6 +107,10 @@ RUN pip install /src/katdal
 ADD . /src/katsdppipelines
 RUN pip install /src/katsdppipelines/Obit-pipeline
 
+# Install katsdpcontim package
+ADD katsdpcontim/katsdpcontim /src/katsdpcontim
+RUN pip install /src/katsdpcontim
+
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
 
