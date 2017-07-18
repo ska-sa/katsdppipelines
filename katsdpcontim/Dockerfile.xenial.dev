@@ -112,6 +112,12 @@ RUN pip install /src/katsdppipelines/Obit-pipeline
 ADD katsdpcontim/katsdpcontim /src/katsdpcontim
 RUN pip install /src/katsdpcontim
 
+# Add katsdpcontim task configuration files
+ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitrun
+
+# Set the work directory to /obitrun
+WORKDIR /obitrun
+
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
 
