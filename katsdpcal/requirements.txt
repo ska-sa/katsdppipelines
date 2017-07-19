@@ -6,16 +6,20 @@ colorama==0.3.7         # for libtmux
 cycler==0.9.0           # for matplotlib
 Cython                  # for h5py
 docutils
+enum34                  # for numba
 fakeredis
+funcsigs                # for numba
 future==0.16.0          # for katcp
 futures                 # for trollius
 h5py
 kaptan==0.5.8           # for tmuxp
 libtmux==0.6.0
+llvmlite==0.19.0        # for numba
 manhole
 matplotlib==1.5.1
 netifaces
-numpy
+numba==0.34             # contains some multithreading fixes not in the katsdpdockerbase version yet
+numpy==1.13.1           # needs at least 1.12, which is newer than katsdpdockerbase
 pkginfo
 ply                     # for katcp
 pyephem
