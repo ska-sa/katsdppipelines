@@ -1,4 +1,5 @@
 import codecs
+from glob import glob
 import os
 from os.path import join as pjoin
 import re
@@ -46,8 +47,7 @@ setup(name=PKG,
     author='Simon Perkins',
     author_email='sperkins@ska.ac.za',
     install_requires=['numpy'],
-    scripts=[pjoin("bin", "mfimage.py"),
-            pjoin("bin", "blavg.py")],
+    scripts=glob(pjoin('bin', '*.py')),
     packages=find_packages(),
     package_data={PKG: [pjoin('conf', '*.in')]}
 )
