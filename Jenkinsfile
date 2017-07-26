@@ -4,7 +4,11 @@
 
 def maintainer = 'bmerry@ska.ac.za'
 if (!katsdp.isTegra()) {
-    katsdp.setDependencies(['ska-sa/katsdpdockerbase/master', 'ska-sa/katpoint/master', 'ska-sa/katsdpsigproc/master'])
+    katsdp.setDependencies([
+        'ska-sa/katsdpdockerbase/master',
+        'ska-sa/katpoint/master',
+        'ska-sa/katsdpsigproc/master',
+        'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer tmauch@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
 }
