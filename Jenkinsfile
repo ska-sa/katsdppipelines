@@ -8,6 +8,7 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdpdockerbase/master',
         'ska-sa/katpoint/master',
         'ska-sa/katsdpsigproc/master',
+        'ska-sa/katsdpservices/master',
         'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer tmauch@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
