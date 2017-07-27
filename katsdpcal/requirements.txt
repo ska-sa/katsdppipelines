@@ -5,6 +5,7 @@ certifi                 # for tornado
 colorama==0.3.7         # for libtmux
 cycler                  # for matplotlib
 Cython                  # for h5py
+dask==0.15.1
 docutils
 enum34                  # for numba
 fakeredis
@@ -15,6 +16,7 @@ futures                 # for trollius
 h5py
 katcp
 kaptan==0.5.8           # for tmuxp
+katversion
 libtmux==0.6.0
 llvmlite                # for numba
 manhole
@@ -36,10 +38,10 @@ singledispatch          # for tornado
 six
 spead2
 subprocess32            # for matplotlib
+toolz==0.8.2            # for dask
 tornado                 # for katcp
 trollius
 git+ssh://git@github.com/ska-sa/katdal
 git+ssh://git@github.com/ska-sa/katpoint
 git+ssh://git@github.com/ska-sa/katsdpservices
 git+ssh://git@github.com/ska-sa/katsdptelstate
-git+ssh://git@github.com/ska-sa/katversion

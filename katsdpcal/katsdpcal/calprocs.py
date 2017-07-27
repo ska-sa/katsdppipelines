@@ -5,7 +5,7 @@ Calibration procedures for MeerKAT calibration pipeline
 Solvers and averagers for use in the MeerKAT calibration pipeline.
 """
 
-import copy
+from __future__ import print_function
 import time
 import logging
 
@@ -187,7 +187,63 @@ def get_bl_ant_pairs(corrprod_lookup):
     return antlist1, antlist2
 
 
-def stefcal(rawvis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0,
+@numba.guvectorize(['c8[:], int_[:], int_[:], f4[:], int_[:], c8[:], int_[:], f4[:], c8[:]',
+                    'c16[:], int_[:], int_[:], f8[:], int_[:], c16[:], int_[:], f8[:], c16[:]'],
+                   '(n),(n),(n),(n),(),(a),(),()->(a)', nopython=True)
+def _stefcal_gufunc(rawvis, ant1, ant2, weights, ref_ant, init_gain, num_iters, conv_thresh, g):
+    ref_ant2 = max(ref_ant[0], 0)
+    num_ants = init_gain.shape[0]
+    R = np.zeros((num_ants, num_ants), rawvis.dtype)    # Weighted visibility matrix
+    M = np.zeros((num_ants, num_ants), weights.dtype)   # Weighted model
+    # Convert list of baselines into a covariance matrix
+    for i in range(len(ant1)):
+        a = ant1[i]
+        b = ant2[i]
+        if a != b:
+            weighted_vis = rawvis[i] * weights[i]
+            R[a, b] = weighted_vis
+            R[b, a] = np.conj(weighted_vis)
+            M[a, b] = weights[i]
+            M[b, a] = weights[i]
+    g_old = init_gain.copy()
+    for n in range(num_iters[0]):
+        for p in range(num_ants):
+            gn = g.dtype.type(0)
+            gd = g.real.dtype.type(0)
+            for i in range(num_ants):
+                z = g_old[i] * M[p, i]
+                gn += R[p, i] * z       # exploiting R[p, i] = R[i, p].conj()
+                gd += z.real * z.real + z.imag * z.imag
+            g[p] = gn / gd
+        ref = g[ref_ant2]
+        g *= np.conj(ref) / np.abs(ref)
+        # Salvini & Wijnholds tweak gains every *even* iteration but their counter starts at 1
+        if n % 2:
+            # Check for convergence of relative l_2 norm of change in gain vector
+            dnorm2 = g.real.dtype.type(0)
+            gnorm2 = g.real.dtype.type(0)
+            for i in range(num_ants):
+                delta = g[i] - g_old[i]
+                dnorm2 += delta.real * delta.real + delta.imag * delta.imag
+                gnorm2 += g[i].real * g[i].real + g[i].imag * g[i].imag
+            # The sense of this if test is carefully chosen so that if
+            # g contains nans, the loop will exit (there is no point
+            # continuing, since the nans can only spread.
+            if dnorm2 >= conv_thresh[0] * conv_thresh[0] * gnorm2:
+                # Avoid getting stuck bouncing between two gain vectors by
+                # going halfway in between
+                for i in range(num_ants):
+                    g[i] = (g[i] + g_old[i]) / 2
+            else:
+                break
+        g_old[:] = g
+    if ref_ant[0] < 0:
+        middle_angle = np.median(g.real) - np.median(g.imag) * g.dtype.type(1j)
+        middle_angle /= np.abs(middle_angle)
+        g *= middle_angle
+
+
+def stefcal(rawvis, num_ants, corrprod_lookup, weights=None, ref_ant=0,
             init_gain=None, num_iters=30, conv_thresh=0.0001):
     """Solve for antenna gains using StEFCal.
 
@@ -197,9 +253,6 @@ def stefcal(rawvis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0,
     if the *vis* array has shape (T, F, B) containing *T* dumps / timestamps,
     *F* frequency channels and *B* baselines, the resulting gain array will be
     of shape (T, F, num_ants), where *num_ants* is the number of antennas.
-    In order to get a proper solution it is important to include the conjugate
-    visibilities as well by reversing antenna pairs, e.g. by forming
-    full_vis = np.concatenate((vis, vis.conj()), axis=-1)
 
     Parameters
     ----------
@@ -215,7 +268,7 @@ def stefcal(rawvis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0,
     ref_ant : int, optional
         Reference antenna for which phase will be forced to 0.0. Alternatively,
         if *ref_ant* is -1, the median gain phase will be 0.
-    init_gain : array of complex, shape(num_ants,) or None, optional
+    init_gain : array of complex, shape(num_ants,), optional
         Initial gain vector (all equal to 1.0 by default)
     num_iters : int, optional
         Number of iterations
@@ -239,61 +292,20 @@ def stefcal(rawvis, num_ants, corrprod_lookup, weights=1.0, ref_ant=0,
        alternating direction implicit methods: Analysis and applications," 2014,
        preprint at `<http://arxiv.org/abs/1410.2101>`_
     """
-    # ignore autocorr data
-    antA, antB = get_bl_ant_pairs(corrprod_lookup)
-    xcorr = antA != antB
-    if np.all(xcorr):
-        vis = rawvis
-    else:
-        vis = rawvis[..., xcorr]
-        antA_new = antA[xcorr]
-        antB = antB[xcorr]
-        antA = antA_new
-        # log a warning as the XC visiblilties are copied
-        logger.warning('Autocorr visibilities present in StEFCal solver. '
-                       'Solver running on copy of crosscorr visibilities.')
-
-    # Each row of this array contains the indices of baselines with the same antA
-    baselines_per_antA = np.array([(antA == m).nonzero()[0] for m in range(num_ants)])
-    # Each row of this array contains the corresponding antB indices with the same antA
-    antB_per_antA = antB[baselines_per_antA]
-    weighted_vis = weights * vis
-    weighted_vis = weighted_vis[..., baselines_per_antA]
-    # Initial estimate of gain vector
-    gain_shape = tuple(list(vis.shape[:-1]) + [num_ants])
-    g_curr = np.ones(gain_shape, dtype=rawvis.dtype) if init_gain is None else init_gain
-    logger.debug("StEFCal solving for %s gains from vis with shape %s" %
-                 ('x'.join(str(gs) for gs in gain_shape), vis.shape))
-    for n in range(num_iters):
-        # Basis vector (collection) represents gain_B* times model (assumed 1)
-        g_basis = g_curr[..., antB_per_antA]
-        # Do scalar least-squares fit of basis vector to vis vector for whole collection in parallel
-        g_new = (g_basis * weighted_vis).sum(axis=-1) / (g_basis.conj() * g_basis).sum(axis=-1)
-        # Get gains for reference antenna (or first one, if none given)
-        g_ref = g_new[..., max(ref_ant, 0)][..., np.newaxis].copy()
-        # Force reference gain to have zero phase
-        g_new *= np.abs(g_ref) / g_ref
-        logger.debug("Iteration %d: mean absolute gain change = %f" %
-                     (n + 1, 0.5 * np.abs(g_new - g_curr).mean()))
-        # Salvini & Wijnholds tweak gains every *even* iteration but their counter starts at 1
-        if n % 2:
-            # Check for convergence of relative l_2 norm of change in gain vector
-            error = np.linalg.norm(g_new - g_curr, axis=-1) / np.linalg.norm(g_new, axis=-1)
-            if np.max(error) < conv_thresh:
-                g_curr = g_new
-                break
-            else:
-                # Avoid getting stuck bouncing between two gain vectors by
-                # going halfway in between
-                g_curr = 0.5 * (g_new + g_curr)
-        else:
-            # Normal update every *odd* iteration
-            g_curr = g_new
-    if ref_ant < 0:
-        middle_angle = np.arctan2(np.median(g_curr.imag, axis=-1),
-                                  np.median(g_curr.real, axis=-1))
-        g_curr *= np.exp(-1j * middle_angle)[..., np.newaxis]
-    return g_curr
+    if init_gain is None:
+        init_gain = np.ones(num_ants, rawvis.dtype)
+    if init_gain.shape[-1] != num_ants:
+        raise ValueError('initial gains have wrong length {} for number of antennas {}'.format(
+            init_gain.shape[-1], num_ants))
+    if weights is None:
+        weights = rawvis.real.dtype.type(1.0)
+    if not all(0 <= x < num_ants for x in corrprod_lookup.flat):
+        raise ValueError('invalid antenna index in corrprod_lookup')
+    if ref_ant >= num_ants:
+        raise ValueError('invalid reference antenna')
+    weights = np.broadcast_to(weights, rawvis.shape)
+    return _stefcal_gufunc(rawvis, corrprod_lookup[:, 0], corrprod_lookup[:, 1], weights,
+                           ref_ant, init_gain, num_iters, conv_thresh)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -327,49 +339,8 @@ def g_fit(data, corrprod_lookup, g0=None, refant=0, **kwargs):
     g_array : Array of gain solutions, shape(num_sol, num_ants)
     """
     num_ants = ants_from_bllist(corrprod_lookup)
-
-    # ------------
-    # stefcal needs the visibilities as a list of [vis,vis.conjugate]
-    vis_and_conj = np.concatenate((data, data.conj()), axis=-1)
-    return stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0,
+    return stefcal(data, num_ants, corrprod_lookup, weights=1.0,
                    ref_ant=refant, init_gain=g0, **kwargs)
-
-
-def bp_fit(data, corrprod_lookup, bp0=None, refant=0, normalise=True, **kwargs):
-    """
-    Fit bandpass to visibility data.
-    The bandpass phase is centred on zero.
-
-    Parameters
-    ----------
-    data : array of complex, shape(num_chans, num_pols, baselines)
-    bp0 : array of complex, shape(num_chans, num_pols, num_ants) or None
-    corrprod_lookup : antenna mappings, for first then second antennas in bl pair
-    refant : reference antenna
-    normalise : bool, True to normalise the bandpass amplitude
-
-    Returns
-    -------
-    bpass : Bandpass, shape(num_chans, num_pols, num_ants)
-    """
-
-    n_ants = ants_from_bllist(corrprod_lookup)
-    n_chans = data.shape[0]
-
-    # -----------------------------------------------------
-    # solve for the bandpass over the channel range
-
-    # stefcal needs the visibilities as a list of [vis,vis.conjugate]
-    vis_and_conj = np.concatenate((data, data.conj()), axis=-1)
-    bp = stefcal(vis_and_conj, n_ants, corrprod_lookup, weights=1.0, num_iters=100,
-                 init_gain=bp0, **kwargs)
-    # centre the phase on zero
-    centre_rotation = np.exp(-1.0j * np.nanmedian(np.angle(bp), axis=0))
-    rotated_bp = bp * centre_rotation
-    # normalise bandpasses by dividing through by the average
-    if normalise:
-        rotated_bp /= (np.nansum(np.abs(rotated_bp), axis=0) / n_chans)
-    return rotated_bp
 
 
 def k_fit(data, corrprod_lookup, chans=None, refant=0, chan_sample=1, **kwargs):
@@ -494,9 +465,7 @@ def k_fit(data, corrprod_lookup, chans=None, refant=0, chan_sample=1, **kwargs):
                 v_corrected[ci, vi] = good_pol_data[ci, vi] \
                     * np.exp(-2.0j * np.pi * c * coarse_k[corrprod_lookup[vi, 0]]) \
                     * np.exp(2.0j * np.pi * c * coarse_k[corrprod_lookup[vi, 1]])
-        # stefcal needs the visibilities as a list of [vis,vis.conjugate]
-        vis_and_conj = np.concatenate((v_corrected, v_corrected.conj()), axis=-1)
-        bpass = stefcal(vis_and_conj, num_ants, corrprod_lookup, weights=1.0,
+        bpass = stefcal(v_corrected, num_ants, corrprod_lookup, weights=1.0,
                         num_iters=100, ref_ant=refant, init_gain=None, **kwargs)
 
         # find slope of the residual bandpass
@@ -575,148 +544,16 @@ def kcross_fit(data, flags, chans=None, chan_ave=1):
     return coarse_kcross + delta_kcross
 
 
-@numba.jit(nopython=True)
-def _wavg(data, flags, weights, axis, sum_shape):
-    """Numba implementation :func:`wavg`, for the common cases of 4
-    dimensions and axis of 0 or 1.
+def asbool(arr):
+    """View an array as boolean.
 
-    It computes the sums of weighted visibilities and weights, ignoring
-    entries where the weighted visibility is NaN. The results are written
-    to vis_sum and weights_sum.
-
-    All arrays have the same shape, but vis_sum and weights_sum will have
-    a degenerate axis (i.e. zero stride) so that results accumulate.
+    If possible it simply returns a view, otherwise a copy. It works on both
+    dask and numpy arrays.
     """
-    vis_sum = np.zeros(sum_shape, data.dtype)
-    weights_sum = np.zeros(sum_shape, weights.dtype)
-    for i in range(data.shape[0]):
-        for j in range(data.shape[1]):
-            sum_idx = j if axis == 0 else i
-            for k in range(data.shape[2]):
-                for l in range(data.shape[3]):
-                    idx = (i, j, k, l)
-                    w = np.logical_not(flags[idx]) * weights[idx]
-                    v = data[idx] * w
-                    if not np.isnan(v):
-                        vis_sum[sum_idx, k, l] += v
-                        weights_sum[sum_idx, k, l] += w
-    vis_sum /= weights_sum
-    return vis_sum
-
-
-def _wavg_fallback(data, flags, weights, axis):
-    """Default implementation of :func:`wavg`, for cases where the numba
-    implementation doesn't match.
-    """
-    flagged_weights = np.where(flags, 0.0, weights)
-    weighted_data = data * flagged_weights
-    # Clear the elements that have a nan anywhere
-    isnan = np.isnan(weighted_data)
-    weighted_data[isnan] = 0
-    flagged_weights[isnan] = 0
-    vis = np.sum(weighted_data, axis=axis)
-    vis /= np.sum(flagged_weights, axis=axis)
-    return vis
-
-
-def wavg(data, flags, weights, times=False, axis=0):
-    """
-    Perform weighted average of data, applying flags,
-    over specified axis
-
-    Parameters
-    ----------
-    data    : array of complex
-    flags   : array of uint8 or boolean
-    weights : array of floats
-    times   : array of times. If times are given, average times are returned
-    axis    : axis to average over
-
-    Returns
-    -------
-    vis, times : weighted average of data and, optionally, times
-    """
-    if data.ndim == 4 and axis in (0, 1):
-        sum_shape = data.shape[:axis] + data.shape[axis + 1:]
-        vis = _wavg(*np.broadcast_arrays(data, flags, weights), axis=axis, sum_shape=sum_shape)
+    if arr.dtype in (np.uint8, np.int8, np.bool_):
+        return arr.view(np.bool_)
     else:
-        vis = _wavg_fallback(data, flags, weights, axis)
-    return vis if times is False else (vis, np.average(times, axis=axis))
-
-
-def wavg_full(data, flags, weights, threshold=0.3,
-              av_data=None, av_flags=None, av_weights=None):
-    """
-    Perform weighted average of data, flags and weights,
-    applying flags, over axis 0.
-
-    Parameters
-    ----------
-    data       : array of complex
-    flags      : array of uint8 or boolean
-    weights    : array of floats
-    av_data, av_flags, av_weights : optional output arrays
-
-    Returns
-    -------
-    av_data    : weighted average of data
-    av_flags   : weighted average of flags
-    av_weights : weighted average of weights
-    """
-
-    flagged_weights = np.where(flags, 0.0, weights)
-    weighted_data = data * flagged_weights
-    # Clear the elements that have a nan anywhere
-    isnan = np.isnan(weighted_data)
-    weighted_data[isnan] = 0
-    flagged_weights[isnan] = 0
-    av_data = np.sum(weighted_data, axis=0, out=av_data)
-    av_weights = np.sum(flagged_weights, axis=0, out=av_weights)
-    av_data /= av_weights
-    n_flags = np.count_nonzero(flags, axis=0)
-    av_flags = np.greater(n_flags, flags.shape[0] * threshold, out=av_flags)
-
-    return av_data, av_flags, av_weights
-
-
-def wavg_full_t(data, flags, weights, solint, times=None):
-    """
-    Perform weighted average of data, flags and weights,
-    applying flags, over axis 0, for specified
-    solution interval increments
-
-    Parameters
-    ----------
-    data       : array of complex
-    flags      : array of boolean
-    weights    : array of floats
-    solint     : index interval over which to average, integer
-    times      : optional array of times to average, array of floats
-
-    Returns
-    -------
-    av_data    : weighted average of data
-    av_flags   : weighted average of flags
-    av_weights : weighted average of weights
-    av_times   : optional average of times
-    """
-    # ensure solint is an intager
-    solint = np.int(solint)
-    inc_array = range(0, data.shape[0], solint)
-
-    shape = (len(inc_array),) + data.shape[1:]
-    av_data = np.empty(shape, data.dtype)
-    av_flags = np.empty(shape, np.bool_)
-    av_weights = np.empty(shape, weights.dtype)
-    for i, ti in enumerate(inc_array):
-        w_out = wavg_full(data[ti:ti+solint], flags[ti:ti+solint], weights[ti:ti+solint],
-                          av_data=av_data[i], av_flags=av_flags[i], av_weights=av_weights[i])
-
-    if np.any(times):
-        av_times = np.array([np.average(times[ti:ti+solint], axis=0) for ti in inc_array])
-        return av_data, av_flags, av_weights, av_times
-    else:
-        return av_data, av_flags, av_weights
+        return arr.astype(np.bool_)
 
 
 def solint_from_nominal(solint, dump_period, num_times):
@@ -983,9 +820,16 @@ def get_bls_lookup(antlist, bls_ordering):
 # --- Simulation
 # --------------------------------------------------------------------------------------------------
 
-def fake_vis(nants=7, gains=None, noise=None, random_state=None):
-    """Create fake point source visibilities, corrupted by given or random gains"""
+def fake_vis(shape=(7,), gains=None, noise=None, random_state=None):
+    """Create fake point source visibilities, corrupted by given or random gains. The
+    final dimension of `shape` corresponds to the number of antennas.
+    """
     # create antenna lists
+    if isinstance(shape, (int, long)):
+        shape = (shape,)
+    shape = tuple(shape)
+    nants = shape[-1]
+
     antlist = range(nants)
     list1 = np.array([])
     for a, i in enumerate(range(nants - 1, 0, -1)):
@@ -1004,14 +848,16 @@ def fake_vis(nants=7, gains=None, noise=None, random_state=None):
     if random_state is None:
         random_state = np.random
     if gains is None:
-        gains = random_state.random_sample(nants)
+        gains = random_state.random_sample(shape) + 1j * random_state.random_sample(shape)
+    else:
+        assert shape == gains.shape
 
     # create fake corrupted visibilities
-    nbl = nants * (nants + 1) / 2
-    vis = np.ones([nbl])
+    nbl = nants * (nants + 1) // 2
+    vis = np.ones(tuple(shape[:-1]) + (nbl,), gains.dtype)
     # corrupt vis with gains
-    for i, j in zip(list1, list2):
-        vis[(list1 == i) & (list2 == j)] *= gains[i] * gains[j]
+    for i, (a, b) in enumerate(zip(list1, list2)):
+        vis[..., i] *= gains[..., a] * gains[..., b].conj()
     # if requested, corrupt vis with noise
     if noise is not None:
         vis_noise = random_state.standard_normal(vis.shape) * noise

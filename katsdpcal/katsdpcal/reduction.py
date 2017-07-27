@@ -1,19 +1,18 @@
+import time
+import logging
+
+import numpy as np
+import dask.array as da
+
+from katdal.sensordata import TelstateSensorData, SensorCache
+from katdal.categorical import CategoricalData
+from katdal.h5datav3 import SENSOR_PROPS
 
 from . import calprocs
 from . import pipelineprocs as pp
 from .scan import Scan
 from .rfi import threshold_avg_flagging
-
-import numpy as np
-
 from . import lsm_dir
-
-import time
-import logging
-
-from katdal.sensordata import TelstateSensorData, SensorCache
-from katdal.categorical import CategoricalData
-from katdal.h5datav3 import SENSOR_PROPS
 
 
 logger = logging.getLogger(__name__)
@@ -34,11 +33,14 @@ def rfi(s, thresholds, av_blocks):
         form [time_block, channel_block]
     """
     total_size = np.multiply.reduce(s.flags.shape) / 100.
-    logger.info('  - Start flags: {0:.3f}%'.format(
-        np.sum(s.flags.view(np.bool)) / total_size,))
-    threshold_avg_flagging(s.vis, s.flags, thresholds, blocks=av_blocks, transform=np.abs)
-    logger.info('  - New flags:   {0:.3f}%'.format(
-        np.sum(s.flags.view(np.bool)) / total_size,))
+    logger.info('  - Start flags: %.3f%%',
+                (da.sum(s.flags.view(np.bool)) / total_size).compute())
+    # TODO: push dask into threshold_avg_flagging
+    flags = s.flags.compute()
+    threshold_avg_flagging(s.vis.compute(), flags, thresholds, blocks=av_blocks, transform=np.abs)
+    s.flags = da.from_array(flags, chunks=(1,) + flags.shape[1:], name=False)
+    logger.info('  - New flags:   %.3f%%',
+                (da.sum(calprocs.asbool(s.flags)) / total_size).compute())
 
 
 def get_tracks(data, ts, dump_period):
@@ -64,8 +66,8 @@ def get_tracks(data, ts, dump_period):
     for ant in ts.cal_antlist:
         sensor_name = '{}_activity'.format(ant)
         cache[sensor_name] = TelstateSensorData(ts, sensor_name)
-    num_dumps = data['max_index'][0] + 1
-    timestamps = data['times'][:num_dumps]
+    num_dumps = data['times'].shape[0]
+    timestamps = data['times']
     sensors = SensorCache(cache, timestamps, dump_period, props=SENSOR_PROPS)
     # Interpolate onto data timestamps and find dumps where all receptors track
     tracking = np.ones(num_dumps, dtype=bool)
@@ -155,19 +157,22 @@ def init_ts_params(ts):
         ts.add('cal_channel_freqs', channel_freqs, immutable=True)
 
 
-def pipeline(data, ts, task_name='pipeline'):
+def pipeline(data, ts):
     """
     Pipeline calibration
 
     Inputs
     ------
-    data : data buffer, dictionary
-    ts : telescope state, TelescopeState
-    task_name : name of pipeline task (used for logging), string
+    data : dict
+        Dictionary of data buffers. Keys `vis`, `flags` and `weights` reference
+        :class:`dask.Arrays`, while `times` references a numpy array.
+    ts : :class:`katsdptelstate.TelescopeState`
+        Telescope state
 
     Returns
     -------
-    list of slices for each target track in the buffer
+    slices : list of slice
+        slices for each target track in the buffer
     """
 
     # ----------------------------------------------------------
@@ -277,9 +282,6 @@ def pipeline(data, ts, task_name='pipeline'):
         rfi(s, [3.0, 3.0, 2.0, 1.6], [[3, 1], [3, 5], [3, 8]])
 
         # run_t0 = time.time()
-
-        # prevent accidental modification
-        s.set_writeable(False)
 
         # perform calibration as appropriate, from scan intent tags:
 
@@ -450,10 +452,9 @@ def pipeline(data, ts, task_name='pipeline'):
             # get K, B and G solutions to apply and interpolate it to scan timestamps
             solns_to_apply = get_solns_to_apply(s, ts, ['K', 'B', 'G'],
                                                 time_range=[t0, t1])
-            # apply solutions in-place
-            s.set_writeable(True)
+            # apply solutions
             for soln in solns_to_apply:
-                s.apply(soln, s.vis, out=s.vis)
+                s.vis = s.apply(soln, s.vis)
 
             # accumulate list of target scans to be streamed to L1
             target_slices.append(scan_slice)
