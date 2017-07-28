@@ -1,0 +1,1 @@
+from katdal_adapter import KatdalAdapter
