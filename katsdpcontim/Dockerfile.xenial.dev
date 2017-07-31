@@ -96,6 +96,8 @@ RUN cd ObitSystem/Obit && \
     make clean && \
     make -j 8
 
+RUN pip install -U pip setuptools wheel
+
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
 RUN pip install /src/katpoint
@@ -114,6 +116,9 @@ RUN pip install /src/katsdpcontim
 
 # Add katsdpcontim task configuration files
 ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitconf
+
+# Mount FITS template files in the AIPS FITSDisk
+ADD ./Obit-pipeline/FITS /usr/local/AIPS/FITS
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
