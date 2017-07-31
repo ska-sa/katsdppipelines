@@ -260,6 +260,43 @@ class KatdalAdapter(object):
                 'POLAA': [90.0]}
                     for i, a in enumerate(sorted(self._katds.ants))]
 
+    @boltons.cacheutils.cachedproperty
+    def spw_rows(self):
+        """
+        Returns
+        -------
+        list
+            List of dictionaries describing each
+            spectral window (1 at present),
+            each with the following form:
+
+            .. code-block:: python
+
+                {'CH WIDTH': [208984.375],
+                  'FRQSEL': [1],
+                  'IF FREQ': [-428000000.0],
+                  'NumFields': 7,
+                  'RXCODE': ['L'],
+                  'SIDEBAND': [1],
+                  'TOTAL BANDWIDTH': [856000000.0],
+                  'Table name': 'AIPS FQ',
+                  '_status': [0]}
+        """
+        return [{'FRQSEL': [i+1],
+                'IF FREQ': [sw.channel_freqs[0] - sw.centre_freq],
+                'CH WIDTH': [sw.channel_width],
+                'RXCODE': ['L'],
+                'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
+                'TOTAL BANDWIDTH': [abs(sw.channel_width)*
+                                    len(sw.channel_freqs)],
+                'NumFields': 7,
+                'Table name': 'AIPS FQ',
+                '_status': [0],
+
+                }
+                for i, sw in enumerate(self._katds.spectral_windows)]
+
+
     def uv_descriptor(self):
         """
         Returns
