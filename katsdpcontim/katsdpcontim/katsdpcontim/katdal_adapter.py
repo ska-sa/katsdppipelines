@@ -253,7 +253,7 @@ class KatdalAdapter(object):
                   'DIAMETER': [13.4],
                   'POLAA': [90.0] }
         """
-        return [{'NOSTA': [i],
+        return [{'NOSTA': [i+1],
                 'ANNAME': [a.name],
                 'STABXYZ': list(a.position_ecef),
                 'DIAMETER': [a.diameter],
