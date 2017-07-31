@@ -10,7 +10,7 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdpsigproc/master',
         'ska-sa/katsdpservices/master',
         'ska-sa/katsdptelstate/master'])
-    maintainer = "$maintainer tmauch@ska.ac.za"
+    maintainer = "$maintainer ruby@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
 }
 else {
