@@ -2,26 +2,27 @@
 
 cal_buffer_size : 50.0e9                  # buffer size for single buffer (two created), Bytes
 
-cal_refant : m031
-cal_preferred_refants : m031,m006,m010,m024,m025,m034,m014,m015
+cal_refant : m006                        #not many complaints about m006
+cal_preferred_refants : m006,m010,m024,m025,m034,m014,m015,m031
 
 cal_sideband : 1                          # for frequency calculation
 
 # general data parameters
-cal_sim_bchan : 800                       # first channel to process, int
-cal_sim_echan : 30400                     # last channel to process, int
+cal_sim_bchan : 1416                      # first channel to process, int (1416=892MHz)
+cal_sim_echan : 31198                     # last channel to process, int (31198=1671MHz)
 
 # delay calibration  
-cal_param_k_solint : 5.0                  # nominal pre-k g solution interval, seconds
-cal_param_k_chan_sample : 1               # sample every 10th channel for pre-K BP soln
-cal_param_k_bchan : 4500                 # first channel for K fit, int
-cal_param_k_echan : 5500                 # last channel for K fit, int
-cal_param_kcross_chanave : 1              # number of channels to average together to kcross solution
+cal_param_k_solint : 7.0                  # nominal pre-k g solution interval, seconds
+cal_param_k_chan_sample : 1               # sample every 'n'th channel for pre-K BP soln
+cal_param_k_bchan : 20326                 # first channel for K fit, int
+cal_param_k_echan : 23274                # last channel for K fit, int
+cal_param_kcross_chanave : 5              # number of channels to average together to kcross solution deliberately not a power of 2
 
 # bandpass calibration
-cal_param_bp_solint : 5.0                 # nominal pre-bp g solution interval, seconds
+cal_param_bp_solint : 7.0                 # nominal pre-bp g solution interval, seconds
 
 # gain calibration
-cal_param_g_solint: 5.0                   # nominal g solution interval, seconds
-cal_param_g_bchan : 4500                 # first channel for g fit, int
-cal_param_g_echan : 5500                 # last channel for g fit, int
+cal_param_g_solint: 7.0                   # nominal g solution interval, seconds
+cal_param_g_bchan : 20326                 # first channel for g fit, int
+cal_param_g_echan : 23274                # last channel for g fit, int
+# new channels should range 1387-1464MHz; there is intermittent RFI 1376-1387MHz
