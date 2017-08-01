@@ -9,7 +9,7 @@ from katdal.h5datav3 import SENSOR_PROPS
 
 from katsdpsigproc.rfi.twodflag import SumThresholdFlagger
 
-from . import calprocs
+from . import calprocs, inplace
 from . import pipelineprocs as pp
 from .scan import Scan
 from . import lsm_dir
@@ -465,8 +465,11 @@ def pipeline(data, ts):
             solns_to_apply = get_solns_to_apply(s, ts, ['K', 'B', 'G'],
                                                 time_range=[t0, t1])
             # apply solutions
+            # TODO: also apply to cross-pols once such an apply function exists
+            out_vis = s.vis
             for soln in solns_to_apply:
-                s.vis = s.apply(soln, s.vis)
+                out_vis = s.apply(soln, out_vis)
+            inplace.store_inplace(out_vis, s.vis)
 
             # accumulate list of target scans to be streamed to L1
             target_slices.append(scan_slice)
