@@ -3,6 +3,12 @@ import Table
 
 from obit_context import obit_err, handle_obit_err
 
+def _sanity_check_header(header):
+    """ Sanity check AN and SU header dictionaries """
+    for k in ('RefDate', 'Freq'):
+        if k not in header:
+            raise KeyError("'%s' not in header." % k)
+
 class UVFacade(object):
     """
     Provides a simplified interface to an Obit UV object
@@ -72,10 +78,7 @@ class UVFacade(object):
                   'POLAA': [90.0] }
         """
 
-        # Sanity check header
-        for k in ('RefDate', 'Freq'):
-            if k not in header:
-                raise KeyError("'%s' not in header." % k)
+        _sanity_check_header(header)
 
         err = obit_err()
 
@@ -209,16 +212,13 @@ class UVFacade(object):
                   'SOURCE': 'For A           '},
         """
 
-        # Sanity check header
-        for k in ('RefDate', 'Freq'):
-            if k not in header:
-                raise KeyError("'%s' not in header." % k)
+        _sanity_check_header(header)
 
         err = obit_err()
 
         # Create and open the SU table
         sutab = self._uv.NewTable(Table.READWRITE, "AIPS SU",1,err)
-        handle_obit_err("Error with SU table", err)
+        handle_obit_err("Error creating SU table", err)
         sutab.Open(Table.READWRITE, err)
         handle_obit_err("Error opening SU table", err)
 
@@ -227,7 +227,7 @@ class UVFacade(object):
         Table.PDirty(sutab)
 
         # Read first row of SU table to get a row template
-        row = sutab.ReadRow(1,err)
+        row = sutab.ReadRow(1, err)
         handle_obit_err("Error reading SU table", err)
 
         # Update the rows
