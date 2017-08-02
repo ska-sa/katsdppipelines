@@ -66,6 +66,15 @@ class KatdalAdapter(object):
         """
         return self._katds.observer
 
+
+    """ Map correlations to Data Product Id """
+    DATA_PRODUCT_ID_MAP = {
+        ('h','h'): 0,
+        ('v','v'): 1,
+        ('h','v'): 2,
+        ('v','h'): 3,
+    }
+
     @boltons.cacheutils.cachedmethod('_cache')
     def _data_products(self):
         """
@@ -102,15 +111,9 @@ class KatdalAdapter(object):
             a2 = antenna_map[a2_name]
 
             # Derive the data product id
-            if a1_type == 'h' and a2_type == 'h':
-                dp = 0
-            elif a1_type == 'v' and a2_type == 'v':
-                dp = 1
-            elif a1_type == 'h' and a2_type == 'v':
-                dp = 2
-            elif a1_type == 'v' and a2_type == 'h':
-                dp = 3
-            else:
+            try:
+                dp = self.DATA_PRODUCT_ID_MAP[(a1_type, a2_type)]
+            except KeyError as e:
                 raise ValueError("Invalid Correlator Product "
                                 "['{}', '{}']".format(a1_corr, a2_corr))
 
