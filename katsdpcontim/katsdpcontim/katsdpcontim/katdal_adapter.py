@@ -218,6 +218,16 @@ class KatdalAdapter(object):
         return len(self._katds.spectral_windows)
 
     @property
+    def channel_freqs(self):
+        """
+        Returns
+        -------
+        list or np.ndarray
+            List of channel frequencies
+        """
+        return self._katds.spectral_windows[0].channel_freqs
+
+    @property
     def chinc(self):
         """
         Returns
@@ -240,7 +250,24 @@ class KatdalAdapter(object):
         return self._katds.spectral_windows[0].centre_freq
 
     @boltons.cacheutils.cachedproperty
-    def antenna_rows(self):
+    def uv_antenna_header(self):
+        """
+        Returns
+        -------
+        dict
+            Dictionary containing elements necessary
+            for constructing an AN table header. Of the form:
+
+            .. code-block:: python
+
+                { 'RefDate': self.obsdat,
+                  'Freq': self.channel_freqs[0] }
+        """
+        return { 'RefDate': self.obsdat,
+                 'Freq': self.channel_freqs[0] }
+
+    @boltons.cacheutils.cachedproperty
+    def uv_antenna_rows(self):
         """
         Returns
         -------
@@ -256,15 +283,111 @@ class KatdalAdapter(object):
                   'DIAMETER': [13.4],
                   'POLAA': [90.0] }
         """
-        return [{'NOSTA': [i+1],
+        return [{'NOSTA': [i],
                 'ANNAME': [a.name],
                 'STABXYZ': list(a.position_ecef),
                 'DIAMETER': [a.diameter],
                 'POLAA': [90.0]}
-                    for i, a in enumerate(sorted(self._katds.ants))]
+                    for i, a in enumerate(sorted(self._katds.ants), 1)]
 
     @boltons.cacheutils.cachedproperty
-    def spw_rows(self):
+    def uv_source_header(self):
+        """
+        Returns
+        -------
+        dict
+            Dictionary containing elements necessary
+            for constructing a SU table header. Of the form:
+
+            .. code-block:: python
+
+                { 'RefDate': self.obsdat,
+                  'Freq': self.channel_freqs[0] }
+        """
+        return { 'RefDate': self.obsdat,
+                 'Freq': self.channel_freqs[0] }
+
+    @boltons.cacheutils.cachedproperty
+    def uv_source_rows(self):
+        """
+        Returns
+        -------
+        list
+            List of dictionaries describing sources,
+            each with the following form
+
+            .. code-block:: python
+
+                {'BANDWIDTH': 855791015.625,
+                  'DECAPP': [-37.17505555555555],
+                  'DECEPO': [-37.23916666666667],
+                  'DECOBS': [-37.17505555555555],
+                  'EPOCH': [2000.0],
+                  'ID. NO.': 1,
+                  'RAAPP': [50.81529166666667],
+                  'RAEPO': [50.65166666666667],
+                  'RAOBS': [50.81529166666667],
+                  'SOURCE': 'For A           '},
+
+
+        """
+        targets = []
+        aips_src_index = 0
+        bandwidth = self.channel_freqs[-1] - self.channel_freqs[0]
+
+        for target_index in self._katds.target_indices:
+            target = self._katds.catalogue.targets[target_index]
+
+            # Ignore nothings
+            if "Nothing" == target.name:
+                continue
+
+            aips_src_index += 1
+
+            # Get a valid AIPS Source Name
+            name = _aips_source_name(target.name)
+
+            # AIPS Right Ascension and Declination
+            ras, decs = target.radec()
+            ra  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
+            dec = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
+
+            # AIPS Apparent Right Ascension and Declination
+            ras, decs = target.apparent_radec()
+            raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
+            deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
+
+            targets.append({
+                    'ID. NO.'  : [aips_src_index],
+                    'SOURCE'   : [name],
+                    'RAEPO'    : [ra],
+                    'DECEPO'   : [dec],
+                    'RAOBS'    : [raa],
+                    'DECOBS'   : [deca],
+                    'EPOCH'    : [2000.0],
+                    'RAAPP'    : [raa],
+                    'DECAPP'   : [deca],
+                    'BANDWIDTH': [bandwidth] })
+
+        return targets
+
+    @boltons.cacheutils.cachedproperty
+    def uv_spw_header(self):
+        """
+        Returns
+        -------
+        dict
+            Dictionary used in construction of
+            the FQ table. Currently only contains
+            :code:`{ 'nif' : 1 }`, which is not
+            a key in the FQ table header per se,
+            but used to construct the table itself.
+        """
+        return { 'nif': self.nif }
+
+
+    @boltons.cacheutils.cachedproperty
+    def uv_spw_rows(self):
         """
         Returns
         -------
@@ -278,26 +401,18 @@ class KatdalAdapter(object):
                 {'CH WIDTH': [208984.375],
                   'FRQSEL': [1],
                   'IF FREQ': [-428000000.0],
-                  'NumFields': 7,
                   'RXCODE': ['L'],
                   'SIDEBAND': [1],
-                  'TOTAL BANDWIDTH': [856000000.0],
-                  'Table name': 'AIPS FQ',
-                  '_status': [0]}
+                  'TOTAL BANDWIDTH': [856000000.0] }
         """
-        return [{'FRQSEL': [i+1],
-                'IF FREQ': [sw.channel_freqs[0] - sw.centre_freq],
-                'CH WIDTH': [sw.channel_width],
-                'RXCODE': ['L'],
-                'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-                'TOTAL BANDWIDTH': [abs(sw.channel_width)*
-                                    len(sw.channel_freqs)],
-                'NumFields': 7,
-                'Table name': 'AIPS FQ',
-                '_status': [0],
-
-                }
-                for i, sw in enumerate(self._katds.spectral_windows)]
+        return [{   'FRQSEL': [i],
+                    'IF FREQ': [sw.channel_freqs[0] - sw.centre_freq],
+                    'CH WIDTH': [sw.channel_width],
+                    'RXCODE': ['L'],
+                    'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
+                    'TOTAL BANDWIDTH': [abs(sw.channel_width)*
+                                        len(sw.channel_freqs)], }
+                for i, sw in enumerate(self._katds.spectral_windows, 1)]
 
 
     def uv_descriptor(self):
