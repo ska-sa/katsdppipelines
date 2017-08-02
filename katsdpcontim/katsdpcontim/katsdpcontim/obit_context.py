@@ -9,6 +9,7 @@ import OSystem
 
 logging.basicConfig(level=logging.INFO)
 
+# Single obit context class
 __obit_context = None
 
 class ObitContext(object):
@@ -17,10 +18,14 @@ class ObitContext(object):
     the Obit error stack and Obit System
     """
     def __init__(self):
+        """ Constructor """
         self.err = OErr.OErr()
         self.obitsys = AIPSSetup.AIPSSetup(self.err)
 
     def close(self):
+        """
+        Shutdown the Obit System, logging any errors on the error stack
+        """
         if self.err.isErr:
             OErr.printErr(self.err)
 
@@ -54,14 +59,17 @@ def obit_context():
             logging.info("Shutting Down Obit Context")
             __obit_context.close()
 
-def handle_obit_err(message=None, err=None):
+def handle_obit_err(msg="", err=None):
     """
-    Performs Obit error log handling if any errors are present
+    If the Obit error stack is in an error state,
+    print it via :code:`OErr.printErrMsg` and raise
+    an :code:`Exception(msg)`.
 
     Parameters
     ----------
-    message (optional): str
-        Additional message to log, along with the error
+    msg (optional): str
+        Message describing the context in which the
+        error occurred. Defaults to "".
     err (optional): OErr
         Obit error stack to handle. If None, the default
         error stack will be obtained from :code:`obit_err()`
@@ -69,17 +77,14 @@ def handle_obit_err(message=None, err=None):
     Raises
     ------
     Exception
-        exceptions may be thrown by thrown by Obit on error.
+        Raised by Obit if error stack is in an error state
     """
     if err is None:
         err = obit_err()
 
+    # OErr.printErrMsg raises an Exception
     if err.isErr:
-        if msg is None:
-            OErr.printErr(err)
-        else:
-            OErr.printMsg(err, message=msg)
-
+        err.printErrMsg(err, msg)
 
 def obit_err():
     """ Return the Obit Context error stack """
