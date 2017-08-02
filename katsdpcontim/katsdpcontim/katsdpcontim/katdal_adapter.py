@@ -328,10 +328,20 @@ class KatdalAdapter(object):
                   'RAEPO': [50.65166666666667],
                   'RAOBS': [50.81529166666667],
                   'SOURCE': 'For A           '},
-
-
         """
-        targets = []
+        return self.uv_source_map.values()
+
+    @boltons.cacheutils.cachedproperty
+    def uv_source_map(self):
+        """
+        Returns
+        -------
+        dict
+            A { name: dict } mapping where `name` is a
+            :py:class:`katpoint.Target` name and `dict` is a
+            dictionary describing a UV source.
+        """
+        targets = OrderedDict()
         aips_src_index = 0
         bandwidth = self.channel_freqs[-1] - self.channel_freqs[0]
 
@@ -357,7 +367,7 @@ class KatdalAdapter(object):
             raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
             deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
 
-            targets.append({
+            targets[target.name] = {
                     'ID. NO.'  : [aips_src_index],
                     'SOURCE'   : [name],
                     'RAEPO'    : [ra],
@@ -367,7 +377,7 @@ class KatdalAdapter(object):
                     'EPOCH'    : [2000.0],
                     'RAAPP'    : [raa],
                     'DECAPP'   : [deca],
-                    'BANDWIDTH': [bandwidth] })
+                    'BANDWIDTH': [bandwidth] }
 
         return targets
 
