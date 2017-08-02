@@ -7,7 +7,7 @@ import boltons.cacheutils
 import UVDesc
 
 def _aips_source_name(name):
-    """ Pad / truncate up to 16 spaces """
+    """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
 class KatdalAdapter(object):
@@ -15,7 +15,7 @@ class KatdalAdapter(object):
     Adapts a katdal data source to look a bit more like a UV data source.
 
     This is not a true adapter, but perhaps if
-    called that enough,it will become one.
+    called that enough, it will become one.
     """
     def __init__(self, katds):
         """
