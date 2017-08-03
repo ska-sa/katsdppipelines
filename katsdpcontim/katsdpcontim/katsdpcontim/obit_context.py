@@ -58,6 +58,7 @@ def obit_context():
         if __obit_context is not None:
             logging.info("Shutting Down Obit Context")
             __obit_context.close()
+            __obit_context = None
 
 def handle_obit_err(msg="", err=None):
     """
