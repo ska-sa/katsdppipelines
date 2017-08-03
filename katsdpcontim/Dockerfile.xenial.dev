@@ -134,7 +134,6 @@ RUN echo "#!/bin/bash\
 \nsource $HOME/.bashrc\
 \nsource /bin/setup_obit.sh\
 \nsource /bin/aipsrunner.sh\
-\nexport PYTHONPATH=/src/katsdpresearch:\$PYTHONPATH\
 \necho 'Standard OBIT task configuration files are available in /obitconf'\
 \necho echo 'You probably want to run the tasks in a mounted volume'" >> /run.sh
 
