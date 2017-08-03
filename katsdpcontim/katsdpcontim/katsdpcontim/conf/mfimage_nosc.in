@@ -211,7 +211,7 @@ $Key = CCFilter Flt (2)
 $Key = maxPixel Int (1)
 50000
 $Key = maxPSCLoop Int (1)
-1
+0
 $Key = minFluxPSC Flt (1)
 0.00008
 $Key = solPInt Flt (1)
@@ -221,7 +221,7 @@ $Key = solPType Str (4)
 $Key = solPMode Str (4)
 P
 $Key = maxASCLoop Int (1)
-1
+0
 $Key = minFluxASC Flt (1)
 0.0005
 $Key = solAInt Flt (1)
