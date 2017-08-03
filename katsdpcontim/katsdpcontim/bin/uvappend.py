@@ -10,7 +10,7 @@ import six
 import OTObit
 import ObitTask
 
-from katsdpcontim.aips_context import aips_context
+from katsdpcontim.obit_context import obit_context
 from katsdpcontim.aips_parser import aips_cfg, apply_cfg_to_task
 
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +42,7 @@ def create_task(args):
 
     return task
 
-with aips_context():
+with obit_context():
     task = create_task(create_parser().parse_args())
     task.g
 
