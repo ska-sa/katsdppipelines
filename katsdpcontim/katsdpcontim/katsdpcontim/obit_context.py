@@ -2,7 +2,8 @@ import logging
 
 from contextlib import contextmanager
 
-from katim import AIPSSetup
+import AIPS
+import ObitTalkUtil
 
 import OErr
 import OSystem
@@ -18,9 +19,39 @@ class ObitContext(object):
     the Obit error stack and Obit System
     """
     def __init__(self):
-        """ Constructor """
-        self.err = OErr.OErr()
-        self.obitsys = AIPSSetup.AIPSSetup(self.err)
+        """
+        Constructor
+
+        Largely derived from
+        https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
+        """
+
+        # TODO: Configuration object should be passed.
+        # Generate default configuration for now
+        from configuration import validate_configuration
+        cfg = validate_configuration({})
+
+        self.err = err = OErr.OErr()
+        self.obitsys =  OSystem.OSystem("Pipeline", 1, cfg.obit.userno,
+                                            0, [" "], 0, [" "],
+                                            True, False, err)
+        OErr.printErrMsg(err, "Error starting Obit System")
+
+        # Setup AIPS userno
+        AIPS.userno = cfg.obit.userno
+
+        # (url, dir) tuples, where None means localhost
+        aipsdirs = [(None, d) for d in cfg.obit.aipsdirs]
+        fitsdirs = [(None, d) for d in cfg.obit.fitsdirs]
+
+        # Setup Obit Environment
+        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg.obit.aipsroot,
+                                AIPS_VERSION=cfg.obit.aipsversion,
+                                OBIT_EXEC=cfg.obit.obitexec,
+                                DA00=cfg.obit.da00,
+                                ARCH="LINUX",
+                                aipsdirs=aipsdirs,
+                                fitsdirs=fitsdirs)
 
     def close(self):
         """
