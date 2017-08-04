@@ -254,6 +254,16 @@ class KatdalAdapter(object):
         """
         return self._katds.spectral_windows[0].channel_freqs[0]
 
+    @property
+    def refwave(self):
+        """
+        Returns
+        -------
+        float
+            Reference wavelength
+        """
+        return 2.997924562e8/self.reffreq
+
     @boltons.cacheutils.cachedproperty
     def uv_antenna_header(self):
         """
