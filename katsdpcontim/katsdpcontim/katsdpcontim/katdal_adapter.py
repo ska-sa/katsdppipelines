@@ -41,9 +41,11 @@ class KatdalAdapter(object):
         Returns
         -------
         dict
-            A { antenna_name: antenna } mapping
+            A { antenna_name: (index, antenna) } mapping
         """
-        return OrderedDict((a.name, a) for a in sorted(self._katds.ants))
+        A = attr.make_class("IndexedAntenna", ["index", "antenna"])
+        return OrderedDict((a.name, A(i, a)) for i, a
+                            in enumerate(sorted(self._katds.ants)))
 
     @property
     def obsdat(self):
@@ -92,7 +94,8 @@ class KatdalAdapter(object):
                   ('v','h'): 3 }
 
         """
-        DataProduct = attr.make_class("DataProduct", ["ant1", "ant2", "id"])
+        DataProduct = attr.make_class("DataProduct", ["ant1", "ant2",
+                                    "ant1_index", "ant2_index", "id"])
         antenna_map = self._antenna_map()
 
         products = []
@@ -106,10 +109,6 @@ class KatdalAdapter(object):
             a2_name = a2_corr[:4]
             a2_type = a2_corr[4:].lower()
 
-            # Look up katdal antenna pair
-            a1 = antenna_map[a1_name]
-            a2 = antenna_map[a2_name]
-
             # Derive the data product id
             try:
                 dp = self.DATA_PRODUCT_ID_MAP[(a1_type, a2_type)]
@@ -117,7 +116,12 @@ class KatdalAdapter(object):
                 raise ValueError("Invalid Correlator Product "
                                 "['{}', '{}']".format(a1_corr, a2_corr))
 
-            products.append(DataProduct(a1, a2, dp))
+            # Look up katdal antenna pair
+            a1 = antenna_map[a1_name]
+            a2 = antenna_map[a2_name]
+
+            products.append(DataProduct(a1.antenna, a2.antenna,
+                                        a1.index, a2.index, dp))
 
         return products
 
