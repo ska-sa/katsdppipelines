@@ -174,6 +174,99 @@ Obit already contains python wrappers for accessing and inspecting data in said 
 At this point, a python script will be necessary to retrieve solution data and
 write it over the network to telstate.
 
+-------------------------------
+AIPS UV Format for MeerKAT data
+-------------------------------
+
+This document was created by inspecting the Obit_ code base and `AIPS Memo 117 <AIPSMemo117_>`_.
+
+UV FITS Axis Configuration
+-------------------------------
+
+For the purposes of writing MeerKAT visibility data to AIPS FITS format,
+a 32-bit floating point data cube must be constructed as follows:
+
+======== ====== ========= ========== ====================================
+Name     INAXES CRVAL     CDELT      Description
+======== ====== ========= ========== ====================================
+COMPLEX  3      1.0       1.0        Visibility :code:`[real, imaginary, weight]`
+
+STOKES   4      -1.0      -5.0       Polarisation Combinations
+                                     :code:`[-5,-6,-7,-8]` refer to
+                                     :code:`[XX, XY, YX, YY]` as per
+                                     the `Memo <AIPSMemo117_>`_.
+
+FREQ     4096   First     Channel    Frequency Channels (MeerKAT).
+                frequency width      Reference Frequency here is the
+                                     first frequency in the band.
+
+
+IF       1      1.0       1.0        Spectral Windows.
+                                     1 for MeerKAT 4096 L band
+
+RA       1      0.0       0.0        Source Right Ascension
+
+DEC      1      0.0       0.0        Source Declination
+======== ====== ========= ========== ====================================
+
+The :code:`CROTA` and :code:`CRPIX` axes should be set to `0.0` and `1.0`, respectively.
+
+UV Descriptor
+-------------
+
+Information about the data dimensions are available on the
+Descriptor :code:`Desc.Dict` dictionary attribute for
+an Obit :code:`UV` object.
+For example, :code:`inaxes`, :code:`crval` and :code:`cdelt`
+are key-values in this dictionary.
+
+The UV Descriptor also contains *regular parameters*,
+which are simply index dimensions in the above FITS cube.
+
+============== ===========
+Index Variable Description
+============== ===========
+jlocc          COMPLEX
+jlocs          STOKES
+jlocf          FREQ
+jlocif         IF
+jlocr          RA, GLON, ELON
+jlocd          DEC, GLAT, ELAT
+============== ===========
+
+A number of *random parameters* also exist in the dictionary,
+specified by the specified by the :code:`nrparm` variable.
+
+============== ===========
+Index Variable Description
+============== ===========
+ilocu          U coordinate
+ilocv          V coordinate
+ilovw          W coordinate
+iloct          Time
+ilocb          Baseline
+ilocsu         Source Index
+============== ===========
+
+The above is not exhaustive, but represent the MeerKAT data currently required for imaging.
+These indices reference entries in the `Visibility Buffer <UV Visibility Buffer_>`_.
+
+UV Visibility Buffer
+--------------------
+
+Obit python UV objects expose visibility data via a 32-bit floating point python buffer on the :code:`uv.VisBuf` attribute.
+
+Generally, the *random parameters* are located at the first :code:`nrparm` floats.
+Visibility data follows with the shape specified in :code:`inaxes`.
+
+Multiple chunks of visibility data can exist in the buffer in the following manner:
+
+.. code-block:: python
+
+  [params1, vis1, params2, vis2, ..., paramsn, visn]
+
+
+.. _AIPSMemo117: ftp://ftp.aoc.nrao.edu/pub/software/aips/TEXT/PUBL/AIPSMEM117.PS
 .. _Obit: https://www.cv.nrao.edu/~bcotton/Obit.html
 .. _NRAO: https://nrao.edu/
 .. _DBCON: https://www.aips.nrao.edu/cgi-bin/ZXHLP2.PL?DBCON
