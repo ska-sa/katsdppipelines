@@ -244,10 +244,11 @@ class KatdalAdapter(object):
         Returns
         -------
         float
-            The centre channel frequency.
+            The first channel frequency as the reference frequency,
+            rather than the centre frequency. See `uv_format.rst`.
             Presently derived from the first spectral window.
         """
-        return self._katds.spectral_windows[0].centre_freq
+        return self._katds.spectral_windows[0].channel_freqs[0]
 
     @boltons.cacheutils.cachedproperty
     def uv_antenna_header(self):
@@ -410,13 +411,13 @@ class KatdalAdapter(object):
 
                 {'CH WIDTH': [208984.375],
                   'FRQSEL': [1],
-                  'IF FREQ': [-428000000.0],
+                  'IF FREQ': [0.0],
                   'RXCODE': ['L'],
                   'SIDEBAND': [1],
                   'TOTAL BANDWIDTH': [856000000.0] }
         """
         return [{   'FRQSEL': [i],
-                    'IF FREQ': [sw.channel_freqs[0] - sw.centre_freq],
+                    'IF FREQ': [0.0],
                     'CH WIDTH': [sw.channel_width],
                     'RXCODE': ['L'],
                     'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
