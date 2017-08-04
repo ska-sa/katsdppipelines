@@ -69,8 +69,8 @@ class KatdalAdapter(object):
         return self._katds.observer
 
 
-    """ Map correlations to Data Product Id """
-    DATA_PRODUCT_ID_MAP = {
+    """ Map correlation characters to correlation id """
+    CORR_ID_MAP = {
         ('h','h'): 0,
         ('v','v'): 1,
         ('h','v'): 2,
@@ -78,7 +78,7 @@ class KatdalAdapter(object):
     }
 
     @boltons.cacheutils.cachedmethod('_cache')
-    def _data_products(self):
+    def correlator_products(self):
         """
         Returns
         -------
@@ -94,8 +94,10 @@ class KatdalAdapter(object):
                   ('v','h'): 3 }
 
         """
-        DataProduct = attr.make_class("DataProduct", ["ant1", "ant2",
-                                    "ant1_index", "ant2_index", "id"])
+        CorrelatorProduct = attr.make_class("CorrelatorProduct",
+                                    ["ant1", "ant2",
+                                     "ant1_index", "ant2_index",
+                                     "cid"])
         antenna_map = self._antenna_map()
 
         products = []
@@ -109,9 +111,9 @@ class KatdalAdapter(object):
             a2_name = a2_corr[:4]
             a2_type = a2_corr[4:].lower()
 
-            # Derive the data product id
+            # Derive the correlation id
             try:
-                dp = self.DATA_PRODUCT_ID_MAP[(a1_type, a2_type)]
+                cid = self.CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError as e:
                 raise ValueError("Invalid Correlator Product "
                                 "['{}', '{}']".format(a1_corr, a2_corr))
@@ -120,10 +122,10 @@ class KatdalAdapter(object):
             a1 = antenna_map[a1_name]
             a2 = antenna_map[a2_name]
 
-            products.append(DataProduct(a1.antenna, a2.antenna,
-                                        a1.index, a2.index, dp))
+            products.append(CorrelatorProduct(a1.antenna, a2.antenna,
+                                        a1.index, a2.index, cid))
 
-        return products
+            return products
 
     @boltons.cacheutils.cachedproperty
     def nstokes(self):
@@ -137,7 +139,8 @@ class KatdalAdapter(object):
         """
 
         # Count the number of times we see a correlation product
-        counts = Counter((dp.ant1, dp.ant2) for dp in self._data_products())
+        counts = Counter((cp.ant1_index, cp.ant2_index) for cp
+                            in self.correlator_products())
         return max(counts.itervalues())
 
     def _classify_targets(self):
