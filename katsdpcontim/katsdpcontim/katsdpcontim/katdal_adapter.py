@@ -386,16 +386,40 @@ class KatdalAdapter(object):
             deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
 
             targets[target.name] = {
+                    # Book-keeping
+                    'Table name': 'AIPS SU',
+                    'NumFields': 22,
+                    '_status'  : [0],
+
+                    # Fill in data derived from katpoint targets
                     'ID. NO.'  : [aips_src_index],
                     'SOURCE'   : [name],
                     'RAEPO'    : [ra],
                     'DECEPO'   : [dec],
                     'RAOBS'    : [raa],
                     'DECOBS'   : [deca],
-                    'EPOCH'    : [2000.0],
                     'RAAPP'    : [raa],
                     'DECAPP'   : [deca],
-                    'BANDWIDTH': [bandwidth] }
+                    'EPOCH'    : [2000.0],
+                    'BANDWIDTH': [bandwidth],
+                    'CALCODE'  : [' '*4], # 4 spaces for calibrator code
+
+                    # Following seven key-values vary by spectral window
+                    # Just one at the moment
+                    # TODO: Fluxes should be modified
+                    'IFLUX'    : [0.0],
+                    'QFLUX'    : [0.0],
+                    'VFLUX'    : [0.0],
+                    'UFLUX'    : [0.0],
+                    # zero the rest
+                    'LSRVEL'   : [0.0],
+                    'FREQOFF'  : [0.0],
+                    'RESTFREQ' : [0.0],
+
+                    'PMRA'     : [0.0],
+                    'PMDEC'    : [0.0],
+                    'QUAL'     : [0.0],
+            }
 
         return targets
 

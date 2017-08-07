@@ -226,13 +226,8 @@ class UVFacade(object):
         sutab.keys.update(header)
         Table.PDirty(sutab)
 
-        # Read first row of SU table to get a row template
-        row = sutab.ReadRow(1, err)
-        handle_obit_err("Error reading SU table", err)
-
-        # Update the rows
-        for ri, row_update in enumerate(rows, 1):
-            row.update(row_update)
+        # Write rows
+        for ri, row in enumerate(rows, 1):
             sutab.WriteRow(ri, row, err)
             handle_obit_err("Error writing SU table", err)
 
