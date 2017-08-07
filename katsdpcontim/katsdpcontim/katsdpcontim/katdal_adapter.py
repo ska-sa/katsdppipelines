@@ -125,7 +125,7 @@ class KatdalAdapter(object):
             products.append(CorrelatorProduct(a1.antenna, a2.antenna,
                                         a1.index, a2.index, cid))
 
-            return products
+        return products
 
     @boltons.cacheutils.cachedproperty
     def nstokes(self):
