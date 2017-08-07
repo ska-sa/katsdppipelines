@@ -448,16 +448,75 @@ class KatdalAdapter(object):
         Returns
         -------
         dict
-            Dictionary containing observational and other KAT metadata.
-            Suitable for merging into a UVDesc dictionary.
+            UV descriptor dictionary, derived from the metadata
+            of a katdal file. Suitable for merging into a UVDesc dictionary
+            when creating a new AIPS UV data file.
         """
-        return {
+
+        desc = {
+            # Observation
             'obsdat': self.obsdat,
             'observer': self.observer,
+            'origin': 'katdal export',
             'JDObs': UVDesc.PDate2JD(self.obsdat),
+            # TODO: Use the current date, rather than the observation date?
+            'date': self.obsdat,
+            'epoch': 2000.0,
+            'equinox': 2000.0,
+            'teles': "MeerKAT",
+            'instrume': "MeerKAT",
+
+            # Not quite sure what these do
+            'isort': 'TB',
+            'object': 'MULTI',
+            'nvis': 1,
+            'firstVis': 1,
+
+            # FITS visibility data setup
             'naxis': 6,
-            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1, 0],
-            'cdelt': [1.0,-1.0, self.chinc, 1.0, 0.0, 0.0, 0.0],
-            'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0, 0.0],
-            'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
+            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
+            'cdelt': [1.0,-1.0, self.chinc, 1.0, 0.0, 0.0],
+            'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
+            'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+
+            # Regular parameter indices into ctypes/inaxes/cdelt etc.
+            'jlocc': 0,   # COMPLEX
+            'jlocs': 1,   # SOURCES
+            'jlocf': 2,   # FREQ
+            'jlocif': 3,  # IF
+            'jlocr': 4,   # RA
+            'jlocd': 5,   # DEC
         }
+
+        # Random parameter keys, indices and coordinate systems
+        # index == -1 indicates its absence in the Visibility Buffer
+        RP = attr.make_class("RandomParameters", ["key", "index", "type"] )
+
+        random_parameters = [
+            RP('ilocu', 0, 'UU-L-SIN'),  # U Coordinate
+            RP('ilocv', 1, 'VV-L-SIN'),  # V Coordinate
+            RP('ilovw', 2, 'WW-L-SIN'),  # W Coordinate
+            RP('ilocb', 3, 'BASELINE'),  # Baseline ID
+            RP('iloct', 4, 'TIME1'),     # Timestamp
+            RP('iloscu', 5, 'SOURCE'),   # Source Index
+
+            RP('ilocfq', -1, ''),        # FREQSEL
+            RP('ilocit', -1, ''),        # INTTIM
+            RP('ilocid', -1, ''),        # CORR-ID
+            RP('ilocws', -1, ''),        # WEIGHT
+
+            RP('iloca1', -1, ''),        # ANTENNA 1
+            RP('iloca2', -1, ''),        # ANTENNA 2
+            RP('ilocsa', -1, ''),        # SUBARRAY
+        ]
+
+        # Construct parameter types for existent random parameters
+        ptype = [rp.type for rp in random_parameters if not rp.index == -1]
+
+        # Update with random parameters
+        desc.update({ rp.key: rp.index for rp in random_parameters })
+        desc.update({'nrparm' : len(ptype), 'ptype' : ptype })
+
+        return desc
