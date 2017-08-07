@@ -145,7 +145,12 @@ class UVFacade(object):
 
         if not noif == 1:
             raise ValueError("Only handling 1 IF at present. "
-                             "'%s' supplied" % noif)
+                             "'%s' specified in header" % noif)
+
+        if not len(rows) == 1:
+            raise ValueError("Only handling 1 IF at present. "
+                             "'%s' rows supplied" % len(rows))
+
 
         # Create and open a new FQ table
         fqtab = self._uv.NewTable(Table.READWRITE, "AIPS FQ",1, err, numIF=noif)
@@ -158,14 +163,8 @@ class UVFacade(object):
         # Force update
         Table.PDirty(fqtab)
 
-        # Basic row definition
-        row = { 'NumFields': 7,
-                'Table name': 'AIPS FQ',
-                '_status': [0] }
-
         # Write spectral window rows
-        for ri, row_update in enumerate(rows, 1):
-            row.update(row_update)
+        for ri, row in enumerate(rows, 1):
             fqtab.WriteRow(ri, row, err)
             handle_obit_err("Error writing row %d in FQ table. "
                             "Row data is '%s'" % (ri, row), err)

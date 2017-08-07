@@ -478,13 +478,20 @@ class KatdalAdapter(object):
                   'SIDEBAND': [1],
                   'TOTAL BANDWIDTH': [856000000.0] }
         """
-        return [{   'FRQSEL': [i],
-                    'IF FREQ': [0.0],
-                    'CH WIDTH': [sw.channel_width],
-                    'RXCODE': ['L'],
-                    'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-                    'TOTAL BANDWIDTH': [abs(sw.channel_width)*
-                                        len(sw.channel_freqs)], }
+        return [{
+            # Book-keeping
+            'Table name': 'AIPS FQ',
+            'NumFields': 7,
+            '_status': [0],
+
+            # Fill in data from MeerKAT spectral window
+            'FRQSEL': [i],
+            'IF FREQ': [0.0],
+            'CH WIDTH': [sw.channel_width],
+            'RXCODE': ['L'],
+            'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
+            'TOTAL BANDWIDTH': [abs(sw.channel_width)*
+                                len(sw.channel_freqs)], }
                 for i, sw in enumerate(self._katds.spectral_windows, 1)]
 
 
