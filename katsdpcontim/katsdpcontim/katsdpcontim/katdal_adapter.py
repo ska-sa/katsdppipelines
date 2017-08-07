@@ -301,12 +301,33 @@ class KatdalAdapter(object):
                   'DIAMETER': [13.4],
                   'POLAA': [90.0] }
         """
-        return [{'NOSTA': [i],
-                'ANNAME': [a.name],
-                'STABXYZ': list(a.position_ecef),
-                'DIAMETER': [a.diameter],
-                'POLAA': [90.0]}
+
+
+        return [{
+            # Book-keeping
+            'Table name': 'AIPS AN',
+            'NumFields': 15,
+            '_status': [0],
+
+            # MeerKAT antenna information
+            'NOSTA': [i],
+            'ANNAME': [a.name],
+            'STABXYZ': list(a.position_ecef),
+            'DIAMETER': [a.diameter],
+            'POLAA': [90.0],
+
+            # Defaults for the rest
+            'POLAB': [0.0],
+            'POLCALA': [0.0, 0.0],
+            'POLCALB': [0.0, 0.0],
+            'POLTYA': ['X'],
+            'POLTYB': ['Y'],
+            'STAXOF': [0.0],
+            'BEAMFWHM': [0.0],
+            'ORBPARM': [],
+            'MNTSTA': [0] }
                     for i, a in enumerate(sorted(self._katds.ants), 1)]
+
 
     @boltons.cacheutils.cachedproperty
     def uv_source_header(self):

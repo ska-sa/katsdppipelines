@@ -96,13 +96,8 @@ class UVFacade(object):
         # Mark table as dirty to force header update
         Table.PDirty(ant_table)
 
-        # Read a row to serve as a row template
-        row = ant_table.ReadRow(1, err)
-        handle_obit_err("Error reading AN table.", err)
-
         # Write each row to the antenna table
-        for ri, row_update in enumerate(rows, 1):
-            row.update(row_update)
+        for ri, row in enumerate(rows, 1):
             ant_table.WriteRow(ri, row, err)
             handle_obit_err("Error writing row %d in AN table. "
                             "Row data is '%s'" % (ri, row), err)
