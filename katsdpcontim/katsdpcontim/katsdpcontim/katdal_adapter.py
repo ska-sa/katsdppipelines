@@ -423,23 +423,24 @@ class KatdalAdapter(object):
                     'DECAPP'   : [deca],
                     'EPOCH'    : [2000.0],
                     'BANDWIDTH': [bandwidth],
+
+                    # No calibrator, fill with spaces
                     'CALCODE'  : [' '*4], # 4 spaces for calibrator code
 
-                    # Following seven key-values vary by spectral window
-                    # Just one at the moment
-                    # TODO: Fluxes should be modified
+                    # Following seven key-values technically vary by spectral window
+                    # Specify zero flux for sources since we don't know them yet
                     'IFLUX'    : [0.0],
                     'QFLUX'    : [0.0],
                     'VFLUX'    : [0.0],
                     'UFLUX'    : [0.0],
-                    # zero the rest
-                    'LSRVEL'   : [0.0],
-                    'FREQOFF'  : [0.0],
-                    'RESTFREQ' : [0.0],
+                    'LSRVEL'   : [0.0], # Velocity
+                    'FREQOFF'  : [0.0], # Frequency Offset
+                    'RESTFREQ' : [0.0], # Rest Frequency
 
-                    'PMRA'     : [0.0],
-                    'PMDEC'    : [0.0],
-                    'QUAL'     : [0.0],
+                    # Don't have these, zero them
+                    'PMRA'     : [0.0], # Proper Motion in Right Ascension
+                    'PMDEC'    : [0.0], # Proper Motion in Declination
+                    'QUAL'     : [0.0], # Source Qualifier Number
             }
 
         return targets
@@ -519,10 +520,13 @@ class KatdalAdapter(object):
             'instrume': "MeerKAT",
 
             # Not quite sure what these do
+            # but were derived from the original
+            # MeerKAT template
             'isort': 'TB',
             'object': 'MULTI',
-            'nvis': 1,
-            'firstVis': 1,
+
+            'nvis': 0,
+            'firstVis': 0,
 
             # FITS visibility data setup
             'naxis': 6,
@@ -532,6 +536,12 @@ class KatdalAdapter(object):
             'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+
+            # These are automatically calculated, but
+            # are left here for illustration
+            # 'incs' : 3,          # Stokes 1D increment. 3 floats in COMPLEX
+            # 'incf' : 12,         # Frequency 1D increment, 12 = 3*4 STOKES
+            # 'incif' : 49152,     # Spectral window 1D increment = 49152 = 3*4*4096 CHANNELS
 
             # Regular parameter indices into ctypes/inaxes/cdelt etc.
             'jlocc': 0,   # COMPLEX
