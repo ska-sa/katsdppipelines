@@ -76,34 +76,33 @@ with obit_context():
 
     for scan, state, target in K.scans():
         # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
-        # nbl*npol is all mixed up though
+        # nbl*npol is all mixed up at this point
         times = K.timestamps[:]
         vis = K.vis[:].astype(np.complex64)
         weights = K.weights[:].astype(np.float32)
         flags = K.flags[:]
 
+        # Apply flags by negating weights
+        weights[np.where(flags)] = -32767.0
+
+        # AIPS visibility is [real, imag, weight]
+        # (ntime, 3, nchan, nbl*npol)
+        vis = np.stack([vis.real, vis.imag, weights], axis=1)
+
         print vis.shape
-        print weights.shape
-        print flags.shape
 
         ntimes = len(times)
 
-        # This rearranges so that we have (ntime, nchan, nbl, npol)
-        vis = vis[:,:,cp_argsort].reshape(ntimes, nchans, -1, nstokes)
-        weights = weights[:,:,cp_argsort].reshape(ntimes, nchans, -1, nstokes)
-        flags = flags[:,:,cp_argsort].reshape(ntimes, nchans, -1, nstokes)
+        # Reorganise correlation product dim so that
+        # polarisations are grouped per baseline.
+        # Then split correlations into baselines and polarisation
+        # producing (ntime, 3, nchan, nbl, npol)
+        vis = vis[:,:,:,cp_argsort].reshape(ntimes, 3, nchans, -1, nstokes)
 
-        # This transposes so that we have (ntime, nbl, npol, nchan)
-        vis = vis.transpose(0,2,3,1)
-        weights = weights.transpose(0,2,3,1)
-        flags = flags.transpose(0,2,3,1)
+        # This transposes so that we have (ntime, nbl, 3, npol, nchan)
+        vis = vis.transpose(0,3,1,4,2)
 
         print vis.shape, vis.nbytes / (1024.*1024.)
-        print weights.shape, weights.nbytes / (1024.*1024.)
-        print flags.shape, flags.nbytes / (1024.*1024.)
-
-        # Apply flags by negating weights
-        weights[np.where(flags)] = -32767.0
 
         # Compute UVW coordinates from correlator products
         # (3, ntimes, nbl, npol)
