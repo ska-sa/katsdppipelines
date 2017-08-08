@@ -8,7 +8,7 @@ import ObitTalkUtil
 import UV
 
 import katsdpcontim
-from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context
+from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
 
 logging.basicConfig(level=logging.INFO)
@@ -38,15 +38,45 @@ with obit_context():
     print ObitTalkUtil.ListAIPSDirs()
     print ObitTalkUtil.ListFITSDirs()
 
-    uv = open_aips_file_from_fits_template(0, 'test')
+    err = obit_err()
 
+    # Create the AIPS UV file
+    uv = UV.newPAUV("myuv", "stuff", "Raw", 1, 1, False, err)
+    uv.Open(UV.WRITEONLY, err)
+    handle_obit_err(err)
+
+    # Update the UV descriptor with MeerKAT metadata
+    desc = uv.Desc.Dict
+    desc.update(KA.uv_descriptor())
+    uv.Desc.Dict = desc
+    created_desc = uv.Desc.Dict
+    uv.UpdateDesc(err)
     pprint(uv.Desc.Dict)
+    handle_obit_err(err)
 
+    # Close the AIPS UV file
+    # uv.Close(err)
+    # handle_obit_err(err)
+
+    # uv = open_aips_file_from_fits_template(0, 'test')
     uv = UVFacade(uv)
     uv.update_descriptor(KA.uv_descriptor())
-    uv.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
-    uv.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
-    uv.create_source_table(KA.uv_source_header, KA.uv_source_rows)
+    # uv.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
+    # uv.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
+    # uv.create_source_table(KA.uv_source_header, KA.uv_source_rows)
+    uv._uv.Close(err)
+    handle_obit_err("Error closing UV file", err)
+
+    # Write 1024 visibilities at a time
+    uv._uv.List.set("nVisPIO", 1024)
+    uv._uv.Open(UV.WRITEONLY, err)
+    handle_obit_err("Error opening UV file", err)
+
+    # Configure number of visibilities written in a batch
+    d = uv._uv.Desc.Dict
+    d['nvis'] = 1024          # Max vis written
+    d['numVisBuff'] = 1024    # NumVisBuff is actual number of vis written
+    uv._uv.Desc.Dict = d
 
     import itertools
     import time
@@ -74,7 +104,7 @@ with obit_context():
     tx = time.gmtime(tm)
     time0 = tm - tx[3]*3600.0 - tx[4]*60.0 - tx[5]
 
-    for scan, state, target in K.scans():
+    for i, (scan, state, target) in enumerate(K.scans()):
         # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
         # nbl*npol is all mixed up at this point
         times = K.timestamps[:]
@@ -115,3 +145,9 @@ with obit_context():
         # Timestamps in days
         aips_time = (times - time0) / 86400.0
 
+        vis_buffer = np.frombuffer(uv._uv.VisBuf, count=-1, dtype=np.float32)
+
+        # Just write the visibility buffer back for the moment.
+        # Likely very wrong, but test writes.
+        uv._uv.Write(err, firstVis=i+1)
+        handle_obit_err("Error opening UV file", err)
