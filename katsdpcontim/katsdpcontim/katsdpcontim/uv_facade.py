@@ -24,8 +24,10 @@ class UVFacade(object):
         """
         self._uv = uv
 
-    def __del__(self):
-        """ Close on garbage collection """
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, etraceback):
         self.close()
 
     def close(self):
