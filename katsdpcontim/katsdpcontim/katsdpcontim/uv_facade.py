@@ -46,7 +46,7 @@ class UVFacade(object):
         """
         err = obit_err()
 
-        desc = self._uv.Desc.Dict.copy()
+        desc = self._uv.Desc.Dict
         desc.update(descriptor)
         self._uv.Desc.Dict = desc
         self._uv.UpdateDesc(err)
