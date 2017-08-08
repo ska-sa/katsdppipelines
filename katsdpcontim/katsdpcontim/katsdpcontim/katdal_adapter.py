@@ -527,6 +527,7 @@ class KatdalAdapter(object):
 
             'nvis': 0,
             'firstVis': 0,
+            'numVisBuff': 0,
 
             # FITS visibility data setup
             'naxis': 6,
