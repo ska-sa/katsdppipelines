@@ -251,6 +251,54 @@ ilocsu         Source Index
 The above is not exhaustive, but represent the MeerKAT data currently required for imaging.
 These indices reference entries in the `Visibility Buffer <UV Visibility Buffer_>`_.
 
+UV File Creation
+----------------
+
+AIPS UV file creation and writes need to happen in the following order:
+
+.. code-block:: python
+
+    # Create basic UV object. Files do not exist at this point
+    uv = UV.newPAUV(..., exist=False,...)
+    # Create ANTENNA table. Also creates a file looking like AND001001.02X;
+    anttab = uv.NewTable(Table.READWRITE, "AIPS AN", 1, err)
+    ...
+    antab.Close(err)
+    # Create FREQUENCY table. Also creates a file looking like FQD001001.02X;
+    fqtab = uv.NewTable(Table.READWRITE, "AIPS FQ", 1, err)
+    ...
+    fqtab.Close(err)
+    # Create SOURCE table. Also creates a file looking like SUD001001.02X;
+    sutab = uv.NewTable(Table.READWRITE, "AIPS SU", 1, err)
+    ...
+    sutab.Close(err)
+
+    # Update the UV descriptor
+    desc = uv.Desc.Dict
+    desc.update({...})
+    uv.Desc.Dict = desc
+    UV.UpdateDesc(err)
+
+    # Indicate we're writing 1024 visibilities at a time
+    uv.List.set("nVisPIO", 1024)
+
+    # Open the UV file proper. Also creates a file looking like UVD001001.02X;
+    # This does not happen if opened with READWRITE and uv.VisBuf will be length 0.
+    uv.Open(UV.WRITEONLY, err)
+
+    # Configure number of visibilities written in a batch
+    desc = uv.Desc.Dict
+    desc['nvis'] = 1024          # Max vis written
+    desc['numVisBuff'] = 768     # NumVisBuff is actual number of vis written
+    uv.Desc.Dict = desc
+
+    # Reference the visibility buffer in numpy
+    vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
+
+    # Write the visibility buffer
+    uv.Write(err)
+
+
 UV Visibility Buffer
 --------------------
 

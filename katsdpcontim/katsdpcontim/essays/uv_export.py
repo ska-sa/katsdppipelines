@@ -42,41 +42,35 @@ with obit_context():
 
     # Create the AIPS UV file
     uv = UV.newPAUV("myuv", "stuff", "Raw", 1, 1, False, err)
-    uv.Open(UV.WRITEONLY, err)
-    handle_obit_err(err)
+    uv.Open(UV.READWRITE, err)
+    handle_obit_err("Error creating UV file", err)
+
+    uvf = UVFacade(uv)
+    uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
+    uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
+    uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
+
+    # Reopen the file
+    # uv.Open(UV.READWRITE, err)
+    # handle_obit_err("Error Opening UV file", err)
 
     # Update the UV descriptor with MeerKAT metadata
-    desc = uv.Desc.Dict
-    desc.update(KA.uv_descriptor())
-    uv.Desc.Dict = desc
-    created_desc = uv.Desc.Dict
-    uv.UpdateDesc(err)
-    pprint(uv.Desc.Dict)
-    handle_obit_err(err)
-
-    # Close the AIPS UV file
-    # uv.Close(err)
-    # handle_obit_err(err)
-
-    # uv = open_aips_file_from_fits_template(0, 'test')
-    uv = UVFacade(uv)
-    uv.update_descriptor(KA.uv_descriptor())
-    # uv.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
-    # uv.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
-    # uv.create_source_table(KA.uv_source_header, KA.uv_source_rows)
-    uv._uv.Close(err)
-    handle_obit_err("Error closing UV file", err)
+    uvf.update_descriptor(KA.uv_descriptor())
 
     # Write 1024 visibilities at a time
-    uv._uv.List.set("nVisPIO", 1024)
-    uv._uv.Open(UV.WRITEONLY, err)
+    uv.List.set("nVisPIO", 1024)
+
+    # WRITEONLY correctly creates a buffer on the UV object
+    # READWRITE only creates a buffer
+    # on the UV object if the underlying file exists...
+    uv.Open(UV.WRITEONLY, err)
     handle_obit_err("Error opening UV file", err)
 
     # Configure number of visibilities written in a batch
-    d = uv._uv.Desc.Dict
+    d = uv.Desc.Dict
     d['nvis'] = 1024          # Max vis written
     d['numVisBuff'] = 1024    # NumVisBuff is actual number of vis written
-    uv._uv.Desc.Dict = d
+    uv.Desc.Dict = d
 
     import itertools
     import time
@@ -119,8 +113,6 @@ with obit_context():
         # (ntime, 3, nchan, nbl*npol)
         vis = np.stack([vis.real, vis.imag, weights], axis=1)
 
-        print vis.shape
-
         ntimes = len(times)
 
         # Reorganise correlation product dim so that
@@ -145,9 +137,10 @@ with obit_context():
         # Timestamps in days
         aips_time = (times - time0) / 86400.0
 
-        vis_buffer = np.frombuffer(uv._uv.VisBuf, count=-1, dtype=np.float32)
+        vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
+        print vis_buffer.shape
 
         # Just write the visibility buffer back for the moment.
         # Likely very wrong, but test writes.
-        uv._uv.Write(err, firstVis=i+1)
+        uv.Write(err, firstVis=i+1)
         handle_obit_err("Error opening UV file", err)
