@@ -1,3 +1,4 @@
+import datetime
 from collections import OrderedDict, Counter
 import time
 
@@ -59,6 +60,16 @@ class KatdalAdapter(object):
         return time.strftime('%Y-%m-%d', start)
 
     @property
+    def today(self):
+        """
+        Returns
+        -------
+        str
+            The current date
+        """
+        return datetime.date.today().strftime('%Y-%m-%d')
+
+    @property
     def observer(self):
         """
         Returns
@@ -67,7 +78,6 @@ class KatdalAdapter(object):
             The observer
         """
         return self._katds.observer
-
 
     """ Map correlation characters to correlation id """
     CORR_ID_MAP = {
@@ -512,8 +522,7 @@ class KatdalAdapter(object):
             'observer': self.observer,
             'origin': 'katdal export',
             'JDObs': UVDesc.PDate2JD(self.obsdat),
-            # TODO: Use the current date, rather than the observation date?
-            'date': self.obsdat,
+            'date': self.today,
             'epoch': 2000.0,
             'equinox': 2000.0,
             'teles': "MeerKAT",
