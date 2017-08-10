@@ -54,10 +54,6 @@ with obit_context():
     uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
     uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
 
-    # Reopen the file
-    # uv.Open(UV.READWRITE, err)
-    # handle_obit_err("Error Opening UV file", err)
-
     # Update the UV descriptor with MeerKAT metadata
     uvf.update_descriptor(KA.uv_descriptor())
 
