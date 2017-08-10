@@ -96,13 +96,18 @@ with obit_context():
     # Lexicographically sort correlation products on (a1, a2, cid)
     sort_fn = lambda x: (cp[x].ant1_index,cp[x].ant2_index,cp[x].cid)
     cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
-    corr_products = [cp[i] for i in cp_argsort]
+    corr_products = np.asarray([cp[i] for i in cp_argsort])
     refwave = KA.refwave
 
-    # AIPS baseline ID for each data product
-    aips_baselines_flat = np.asarray([cp.ant1_index*256.0 + cp.ant2_index
-                                                for cp in corr_products],
-                                                        dtype=np.float32)
+    # Take baseline products so that we don't recompute
+    # UVW coordinates for all correlator products
+    bl_products = corr_products.reshape(-1, nstokes)[:,0]
+    nbl, = bl_products.shape
+
+    # AIPS baseline IDs
+    aips_baselines = np.asarray([bp.ant1_index*256.0+bp.ant2_index for bp
+                                                            in bl_products],
+                                                            dtype=np.float32)
 
     uv_source_map = KA.uv_source_map
 
@@ -141,27 +146,23 @@ with obit_context():
         # polarisations are grouped per baseline.
         # Then split correlations into baselines and polarisation
         # producing (ntime, 3, nchan, nbl, npol)
-        vis = vis[:,:,:,cp_argsort].reshape(ntime, 3, nchan, -1, nstokes)
+        vis = vis[:,:,:,cp_argsort].reshape(ntime, 3, nchan, nbl, nstokes)
 
         # This transposes so that we have (ntime, nbl, 3, npol, nchan)
         vis = vis.transpose(0,3,1,4,2)
-        # Get dimensions, mainly to get baselines
-        ntime, nbl, _, _, nchan = vis.shape
 
         # Reshape to introduce nif, ra and dec
         # It's now (ntime, nbl, 3, npol, nchan, nif, ra, dec)
         vis = np.reshape(vis, (ntime, nbl) + inaxes)
 
-        print "Visibilities of shape {} and size {:.2f}MB".format(vis.shape, vis.nbytes / (1024.*1024.))
+        print "Visibilities of shape {} and size {:.2f}MB".format(
+                    vis.shape, vis.nbytes / (1024.*1024.))
 
-        # Compute UVW coordinates from correlator products
-        # (3, ntimes, nbl, npol)
-        uvw = (np.stack([target.uvw(cp.ant1, antenna=cp.ant2, timestamp=times)
-                            for cp in corr_products], axis=2)
-                                .reshape(3, ntime, -1, nstokes))
-
-        # Get the shape
-        aips_baselines = aips_baselines_flat.reshape(nbl, nstokes)[:,0]
+        # Compute UVW coordinates from baselines
+        # (3, ntimes, nbl)
+        uvw = (np.stack([target.uvw(bp.ant1, antenna=bp.ant2, timestamp=times)
+                                                for bp in bl_products], axis=2)
+                                .reshape(3, ntime, nbl))
 
         # UVW coordinates (in frequency?)
         aips_uvw = uvw / refwave
@@ -191,15 +192,19 @@ with obit_context():
 
         for t in range(ntime):
             for bl in range(nbl):
+                # Index within vis_buffer
                 idx = numVisBuff*lrec
-                # UVW coordinates are the same for each stokes parameter
-                vis_buffer[idx+ilocu] = uvw[0,t,bl,0]
-                vis_buffer[idx+ilocv] = uvw[1,t,bl,0]
-                vis_buffer[idx+ilocw] = uvw[2,t,bl,0]
-                vis_buffer[idx+iloct] = aips_time[t]
-                vis_buffer[idx+ilocb] = aips_baselines[bl]
-                vis_buffer[idx+ilocsu] = aips_source_id
-                vis_buffer[idx+nrparm:idx+nrparm+flat_inaxes] = vis[t,bl].ravel()
+
+                # Write random parameters
+                vis_buffer[idx+ilocu] = uvw[0,t,bl]        # U
+                vis_buffer[idx+ilocv] = uvw[1,t,bl]        # V
+                vis_buffer[idx+ilocw] = uvw[2,t,bl]        # W
+                vis_buffer[idx+iloct] = aips_time[t]       # time
+                vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
+                vis_buffer[idx+ilocsu] = aips_source_id    # source id
+
+                flat_vis = vis[t,bl].ravel()
+                vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
                 numVisBuff += 1
                 firstVis += 1
