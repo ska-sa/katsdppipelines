@@ -110,8 +110,8 @@ with obit_context():
 
     uv_source_map = KA.uv_source_map
 
-    # Derive starting time in unix seconds
-    time0 = K.timestamps[0]
+    # Get starting time
+    time0 = K.start_time.secs
 
     for si, (scan, state, target) in enumerate(K.scans()):
         # Retrieve UV source information for this scan
