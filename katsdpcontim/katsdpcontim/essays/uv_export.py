@@ -170,7 +170,27 @@ with obit_context():
         aips_time = (times - time0) / 86400.0
 
         def _write_buffer(uv, firstVis, numVisBuff):
-            """ Handle writes """
+            """
+            Use as follows
+
+            .. code-block:: python
+
+                firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+
+            Parameters
+            ----------
+            uv: Obit UV object
+            firstVis: integer
+                First visibility to write in the file (FORTRAN indexing)
+            numVisBuff: integer
+                Number of visibilities to write to the file.
+
+            Returns
+            -------
+            tuple
+                (firstVis, 0)
+
+            """
             # Update descriptor
             desc = uv.Desc.Dict
             desc['numVisBuff'] = numVisBuff
@@ -184,6 +204,9 @@ with obit_context():
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
             uv.Write(err, firstVis=firstVis)
             handle_obit_err("Error writing UV file", err)
+
+            # Pass through firstVis and 0 numVisBuff
+            return firstVis, 0
 
         vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
 
@@ -211,10 +234,8 @@ with obit_context():
 
                 # Hit the limit, write
                 if numVisBuff == nVisPIO:
-                    _write_buffer(uv, firstVis, numVisBuff)
-                    numVisBuff = 0
+                    firstvis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
 
         # Write out any remaining visibilities
         if numVisBuff > 0:
-            _write_buffer(uv, firstVis, numVisBuff)
-            numVisBuff = 0
+            firstvis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
