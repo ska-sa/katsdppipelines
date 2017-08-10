@@ -94,9 +94,7 @@ with obit_context():
                                                         dtype=np.float32)
 
     # Derive starting time in unix seconds
-    tm = K.timestamps[1:2][0]
-    tx = time.gmtime(tm)
-    time0 = tm - tx[3]*3600.0 - tx[4]*60.0 - tx[5]
+    time0 = K.timestamps[0]
 
     for i, (scan, state, target) in enumerate(K.scans()):
         # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
