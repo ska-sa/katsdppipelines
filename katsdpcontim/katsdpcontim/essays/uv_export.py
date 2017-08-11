@@ -106,8 +106,10 @@ with obit_context():
 
     # AIPS baseline IDs
     aips_baselines = np.asarray([bp.ant1_index*256.0+bp.ant2_index for bp
-                                                            in bl_products],
-                                                            dtype=np.float32)
+                                                            in bl_products],                                                            dtype=np.float32)
+    # UV file location variables
+    firstVis = 1    # FORTRAN indexing
+    numVisBuff = 0  # Number of visibilities in the buffer
 
     uv_source_map = KA.uv_source_map
 
@@ -210,9 +212,6 @@ with obit_context():
             return firstVis + numVisBuff, 0
 
         vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
-
-        firstVis = 1    # FORTRAN indexing
-        numVisBuff = 0  # Number of visibilities in the buffer
 
         for t in range(ntime):
             for bl in range(nbl):
