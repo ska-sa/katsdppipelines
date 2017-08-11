@@ -171,7 +171,7 @@ with obit_context():
 
         def _write_buffer(uv, firstVis, numVisBuff):
             """
-            Use as follows
+            Use as follows:
 
             .. code-block:: python
 
@@ -199,7 +199,8 @@ with obit_context():
             uv.Desc.Dict = desc
 
             nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
-            logging.info("Writing {:.2f}MB visibilities".format(nbytes / (1024.*1024.)))
+            logging.info("firstVis={} numVisBuff={} Writing {:.2f}MB visibilities".format(
+                firstVis, numVisBuff, nbytes / (1024.*1024.)))
 
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
             uv.Write(err, firstVis=firstVis)
@@ -233,8 +234,8 @@ with obit_context():
 
                 # Hit the limit, write
                 if numVisBuff == nVisPIO:
-                    firstvis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+                    firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
 
         # Write out any remaining visibilities
         if numVisBuff > 0:
-            firstvis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+            firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
