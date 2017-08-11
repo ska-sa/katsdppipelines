@@ -497,7 +497,7 @@ class KatdalAdapter(object):
 
             # Fill in data from MeerKAT spectral window
             'FRQSEL': [i],
-            'IF FREQ': [0.0],
+            'IF FREQ': [sw.channel_freqs[0]],
             'CH WIDTH': [sw.channel_width],
             'RXCODE': ['L'],
             'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
