@@ -188,7 +188,7 @@ with obit_context():
             Returns
             -------
             tuple
-                (firstVis, 0)
+                (firstVis + numVisBuff, 0)
 
             """
             # Update descriptor
@@ -206,12 +206,12 @@ with obit_context():
             handle_obit_err("Error writing UV file", err)
 
             # Pass through firstVis and 0 numVisBuff
-            return firstVis, 0
+            return firstVis + numVisBuff, 0
 
         vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
 
-        firstVis = 0
-        numVisBuff = 0
+        firstVis = 1    # FORTRAN indexing
+        numVisBuff = 0  # Number of visibilities in the buffer
 
         for t in range(ntime):
             for bl in range(nbl):
@@ -230,7 +230,6 @@ with obit_context():
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
                 numVisBuff += 1
-                firstVis += 1
 
                 # Hit the limit, write
                 if numVisBuff == nVisPIO:
