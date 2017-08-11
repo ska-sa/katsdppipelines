@@ -100,19 +100,19 @@ RUN pip install -U pip setuptools wheel
 
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
-RUN pip install /src/katpoint
+RUN pip install -e /src/katpoint
 
 # Install master katdal
 ADD katsdpcontim/katdal /src/katdal
-RUN pip install /src/katdal
+RUN pip install -e /src/katdal
 
 # Install katim
 ADD . /src/katsdppipelines
-RUN pip install /src/katsdppipelines/Obit-pipeline
+RUN pip install -e /src/katsdppipelines/Obit-pipeline
 
 # Install katsdpcontim package
 ADD katsdpcontim/katsdpcontim /src/katsdpcontim
-RUN pip install /src/katsdpcontim
+RUN pip install -e /src/katsdpcontim
 
 # Add katsdpcontim task configuration files
 ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitconf
