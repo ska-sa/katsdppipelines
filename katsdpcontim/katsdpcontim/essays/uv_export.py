@@ -238,3 +238,6 @@ with obit_context():
         # Write out any remaining visibilities
         if numVisBuff > 0:
             firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+
+    uv.Close(err)
+    handle_obit_err("Error closing UV file", err)
