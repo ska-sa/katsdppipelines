@@ -9,7 +9,7 @@ services:
 
     container_name: trusty-obit-dev
     image: trusty/obit:dev
-    network_mode: bridge
+    network_mode: host
     restart: "no"
     hostname: trusty-obit
     environment:
@@ -26,7 +26,7 @@ services:
 
     container_name: xenial-obit-dev
     image: xenial/obit:dev
-    network_mode: bridge
+    network_mode: host
     restart: "no"
     hostname: xenial-obit
     environment:
