@@ -121,6 +121,9 @@ with obit_context():
     # Get starting time
     time0 = K.start_time.secs
 
+    # NX table rows
+    nx_rows = []
+
     for si, (scan, state, target) in enumerate(K.scans()):
         # Retrieve UV source information for this scan
         try:
@@ -216,6 +219,8 @@ with obit_context():
             # Pass through firstVis and 0 numVisBuff
             return firstVis + numVisBuff, 0
 
+        # Starting visibility of this scan
+        start_vis = firstVis
         vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
 
         for t in range(ntime):
@@ -243,6 +248,29 @@ with obit_context():
         # Write out any remaining visibilities
         if numVisBuff > 0:
             firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+
+        nx_row = {
+            # Book-keeping
+            'Table name': 'AIPS NX',
+            'NumFields': 8,
+            '_status': [0],
+
+            'TIME': [(aips_time[-1] - aips_time[0])/2],      # Time Centroid
+            'TIME INTERVAL': [aips_time[-1] - aips_time[0]],
+            'SOURCE ID': [aips_source_id],
+            'SUBARRAY': [1],                  # Should match 'AIPS AN' header
+            'FREQ ID': [1],                   # Should match 'AIPS FQ' row
+            'START VIS': [start_vis],
+            'END VIS': [firstVis-1]
+        }
+
+        pprint(nx_nrow)
+
+        # Create an index for this scan
+        nx_rows.append(nx_row)
+
+    # Create the index table...
+    uvf.create_index_table({}, nx_rows)
 
     uv.Close(err)
     handle_obit_err("Error closing UV file", err)
