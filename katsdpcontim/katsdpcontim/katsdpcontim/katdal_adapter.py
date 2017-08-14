@@ -11,6 +11,8 @@ def _aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
+MEERKAT = 'MeerKAT'
+
 class KatdalAdapter(object):
     """
     Adapts a katdal data source to look a bit more like a UV data source.
@@ -291,8 +293,13 @@ class KatdalAdapter(object):
                 { 'RefDate': self.obsdat,
                   'Freq': self.channel_freqs[0] }
         """
-        return { 'RefDate': self.obsdat,
-                 'Freq': self.channel_freqs[0] }
+        return { 'ArrName': MEERKAT,
+                 'Freq': self.channel_freqs[0],  # Reference frequency
+                 'FreqID': 1,                    # Frequency setup id
+                 'numIF': self.nif,              # Number of spectral windows
+                 'RefDate': self.obsdat,
+                 'EXTVER': 1,                    # Subarray number
+                }
 
     @boltons.cacheutils.cachedproperty
     def uv_antenna_rows(self):
@@ -525,8 +532,8 @@ class KatdalAdapter(object):
             'date': self.today,
             'epoch': 2000.0,
             'equinox': 2000.0,
-            'teles': "MeerKAT",
-            'instrume': "MeerKAT",
+            'teles': MEERKAT,
+            'instrume': MEERKAT,
 
             # Not quite sure what these do
             # but were derived from the original
