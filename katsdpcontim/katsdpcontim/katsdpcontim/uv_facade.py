@@ -175,6 +175,30 @@ class UVFacade(object):
         fqtab.Close(err)
         handle_obit_err("Error closing FQ table.")
 
+    def create_index_table(self, header, rows):
+        """
+        Creates an NX table in this UV file.
+        """
+
+        err = obit_err()
+
+        # Create and open the SU table
+        nxtab = self._uv.NewTable(Table.READWRITE, "AIPS NX",1,err)
+        handle_obit_err("Error creating NX table", err)
+        nxtab.Open(Table.READWRITE, err)
+        handle_obit_err("Error opening NX table", err)
+
+        # Write index table rows
+        for ri, row in enumerate(rows, 1):
+            nxtab.WriteRow(ri, row, err)
+            handle_obit_err("Error writing row %d in NX table. "
+                            "Row data is '%s'" % (ri, row), err)
+
+
+        nxtab.Close(err)
+        handle_obit_err("Error closing NX table", err)
+
+
     def create_source_table(self, header, rows):
         """
         Creates an SU table in this UV file.
