@@ -249,7 +249,8 @@ with obit_context():
         if numVisBuff > 0:
             firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
 
-        nx_row = {
+        # Create an index for this scan
+        nx_rows.append({
             # Book-keeping
             'Table name': 'AIPS NX',
             'NumFields': 8,
@@ -262,12 +263,7 @@ with obit_context():
             'FREQ ID': [1],                   # Should match 'AIPS FQ' row
             'START VIS': [start_vis],
             'END VIS': [firstVis-1]
-        }
-
-        pprint(nx_nrow)
-
-        # Create an index for this scan
-        nx_rows.append(nx_row)
+        })
 
     # Create the index table...
     uvf.create_index_table({}, nx_rows)
