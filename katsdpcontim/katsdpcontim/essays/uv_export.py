@@ -45,7 +45,12 @@ with obit_context():
     err = obit_err()
 
     # Create the AIPS UV file
-    uv = UV.newPAUV("myuv", "stuff", "Raw", 1, 1, False, err)
+    inlabel = "myuv"
+    inname = "stuff"
+    inclass = "raw"
+    inseq = 1
+    indisk = 1
+    uv = UV.newPAUV(inlabel, inname, inclass, indisk, inseq, False, err)
     uv.Open(UV.READWRITE, err)
     handle_obit_err("Error creating UV file", err)
 

@@ -15,7 +15,8 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./work:/work:rw
+      - ./AIPS2:/usr/local/AIPS/DATA/LOCALHOST_2:rw
+      - ./FITS2:/usr/local/AIPS/FITS2:rw
 
   xenial-obit-dev:
     build:
@@ -32,4 +33,5 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./work:/work:rw
+      - ./AIPS2:/usr/local/AIPS/DATA/LOCALHOST_2:rw
+      - ./FITS2:/usr/local/AIPS/FITS2:rw

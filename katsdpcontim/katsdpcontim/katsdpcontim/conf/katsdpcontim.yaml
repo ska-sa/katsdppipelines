@@ -1,0 +1,8 @@
+---
+obit:
+    fitsdirs:
+        - "/usr/local/AIPS/FITS"
+        - "/usr/local/AIPS/FITS2"
+    aipsdirs:
+        - "/usr/local/AIPS/DATA/LOCALHOST_1"
+        - "/usr/local/AIPS/DATA/LOCALHOST_2"

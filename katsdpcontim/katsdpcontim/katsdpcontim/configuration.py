@@ -16,9 +16,10 @@ def config_validator():
     aipsroot = pjoin(os.sep, 'usr', 'local', 'AIPS')
     obitroot = pjoin(os.sep, 'usr', 'local', 'Obit')
     obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
-    fitsdirs = [pjoin(aipsroot, 'FITS')]
-    aipsdirs = [pjoin(aipsroot, 'DATA', 'LOCALHOST_1')]
-
+    fitsdirs = [pjoin(aipsroot, 'FITS'),
+                pjoin(aipsroot, 'FITS2')]
+    aipsdirs = [pjoin(aipsroot, 'DATA', 'LOCALHOST_1'),
+                pjoin(aipsroot, 'DATA', 'LOCALHOST_2')]
     da00 = pjoin(aipsroot, 'DA00')
 
     obit_schema = {
