@@ -28,8 +28,8 @@ class ObitContext(object):
 
         # TODO: Configuration object should be passed.
         # Generate default configuration for now
-        from configuration import validate_configuration
-        cfg = validate_configuration({})
+        from configuration import get_config
+        cfg = get_config()
 
         self.err = err = OErr.OErr()
         self.obitsys =  OSystem.OSystem("Pipeline", 1, cfg.obit.userno,
