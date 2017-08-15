@@ -2,7 +2,7 @@
 obit:
     fitsdirs:
         - "/usr/local/AIPS/FITS"
-        - "/usr/local/AIPS/FITS2"
+        - "/usr/local/Obit/ObitSystem/Obit/share/data"
     aipsdirs:
         - "/usr/local/AIPS/DATA/LOCALHOST_1"
         - "/usr/local/AIPS/DATA/LOCALHOST_2"

@@ -15,8 +15,8 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./AIPS2:/usr/local/AIPS/DATA/LOCALHOST_2:rw
-      - ./FITS2:/usr/local/AIPS/FITS2:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
 
   xenial-obit-dev:
     build:
@@ -33,5 +33,5 @@ services:
     environment:
       - DISPLAY
     volumes:
-      - ./AIPS2:/usr/local/AIPS/DATA/LOCALHOST_2:rw
-      - ./FITS2:/usr/local/AIPS/FITS2:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw

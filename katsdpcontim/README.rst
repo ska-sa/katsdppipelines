@@ -35,6 +35,17 @@ Build
     $ docker-compose build xenial-obit-dev
     $ docker-compose build trusty-obit-dev
 
+Mounts
+~~~~~~
+
+docker-compose will mount the following first AIPS and FITS disks
+inside the container in these local directories:
+
+- `$HOME/.local/katsdpcontim/aipsmounts/AIPS`
+- `$HOME/.local/katsdpcontim/aipsmounts/FITS`
+
+**Note that these will probably be mounted as the `root` owner
+and consumes large quantities of disk space!**.
 
 Run
 ~~~

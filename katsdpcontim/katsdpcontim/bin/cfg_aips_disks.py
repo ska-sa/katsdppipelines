@@ -95,10 +95,15 @@ def setup_aips_disks(args, cfg):
     Ensure that each AIPS disk (directory) exists.
     Creates a SPACE file within the disk.
     """
-    for aipsdir in cfg.obit.aipsdirs:
-        if not os.path.exists(aipsdir):
-            raise ValueError("AIPS Disk '{}' does not exist".format(aipsdir))
 
+    for aipsdir in cfg.obit.aipsdirs:
+        # Create directory if it doesn't exist
+        if not os.path.exists(aipsdir):
+            log.warn("AIPS Disk '{}' does not exist "
+                     "and will be created".format(aipsdir))
+            os.makedirs(aipsdir)
+
+        # Create SPACE file
         space = pjoin(aipsdir, 'SPACE')
 
         with open(space, 'a'):
