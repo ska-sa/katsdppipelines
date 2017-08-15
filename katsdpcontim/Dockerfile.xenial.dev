@@ -133,6 +133,7 @@ ADD katsdpcontim/aipsrunner.sh /bin/aipsrunner.sh
 RUN echo "#!/bin/bash\
 \nsource $HOME/.bashrc\
 \nsource /bin/setup_obit.sh\
+\ncfg_aips_disks.py /usr/local/AIPS\
 \nsource /bin/aipsrunner.sh\
 \necho 'Standard OBIT task configuration files are available in /obitconf'\
 \necho echo 'You probably want to run the tasks in a mounted volume'" >> /run.sh
