@@ -350,12 +350,15 @@ class MeanWeight(accel.Operation):
     def _run(self):
         grid = self.buffer('grid')
         sums = self.buffer('sums')
+        self.command_queue.enqueue_zero_buffer(sums.buffer)
         self.command_queue.enqueue_kernel(
             self._kernel,
             [
                 sums.buffer,
                 grid.buffer,
-                np.int32(grid.padded_shape[-1])
+                np.int32(grid.padded_shape[-1]),
+                np.int32(grid.shape[2]),
+                np.int32(grid.shape[1])
             ],
             global_size=(accel.roundup(grid.shape[2], self.template.wgs_x),
                          accel.roundup(grid.shape[1], self.template.wgs_y)),
