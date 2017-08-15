@@ -58,6 +58,7 @@ with obit_context():
     uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
     uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
     uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
+    uvf.create_calibration_table(KA.uv_calibration_header, {})
 
     # Update the UV descriptor with MeerKAT metadata
     uvf.update_descriptor(KA.uv_descriptor())

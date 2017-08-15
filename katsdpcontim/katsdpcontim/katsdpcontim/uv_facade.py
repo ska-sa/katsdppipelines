@@ -198,6 +198,29 @@ class UVFacade(object):
         nxtab.Close(err)
         handle_obit_err("Error closing NX table", err)
 
+    def create_calibration_table(self, header, rows):
+        """
+        Creates a CL table associated with this UV file.
+        """
+        err = obit_err()
+
+        cltab = self._uv.NewTable(Table.READWRITE, "AIPS CL", 1, err)
+        handle_obit_err("Error creating CL table", err)
+        cltab.Open(Table.READWRITE, err)
+        handle_obit_err("Error opening CL table", err)
+
+        # Update header
+        cltab.keys.update(header)
+        # Force update
+        Table.PDirty(cltab)
+
+        for ri, row in enumerate(rows, 1):
+            cltab.WriteRow(ri, row, err)
+            handle_obit_err("Error writing row %d in CL table. "
+                            "Row data is '%s'" % (ri, row), err)
+
+        cltab.Close(err)
+        handle_obit_err("Error closing CL table", err)
 
     def create_source_table(self, header, rows):
         """

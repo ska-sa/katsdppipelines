@@ -475,6 +475,25 @@ class KatdalAdapter(object):
         """
         return { 'NO_IF': self.nif }
 
+    @boltons.cacheutils.cachedproperty
+    def uv_calibration_header(self):
+        """
+        Returns
+        -------
+        dict
+            Dictionary used to construct the CL table header.
+        """
+        return {
+            'NO_IF': self.nif,
+            # TODO: AIPS Memo 117 seems to imply that this is not the same
+            # as# the number of stokes paramters. Can be one or two
+            # orthogonal polarisations
+            'NO_POL': 2,
+            'NO_ANT': max(r['NOSTA'] for r in self.uv_antenna_rows),
+            'NO_TERM': 1,
+            'MGMOD': 1
+        }
+
 
     @boltons.cacheutils.cachedproperty
     def uv_spw_rows(self):
