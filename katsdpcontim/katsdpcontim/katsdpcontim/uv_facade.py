@@ -3,12 +3,6 @@ import Table
 
 from obit_context import obit_err, handle_obit_err
 
-def _sanity_check_header(header):
-    """ Sanity check AN and SU header dictionaries """
-    for k in ('RefDate', 'Freq'):
-        if k not in header:
-            raise KeyError("'%s' not in header." % k)
-
 class UVFacade(object):
     """
     Provides a simplified interface to an Obit UV object
@@ -79,9 +73,6 @@ class UVFacade(object):
                   'DIAMETER': [13.4],
                   'POLAA': [90.0] }
         """
-
-        _sanity_check_header(header)
-
         err = obit_err()
 
         ant_table = self._uv.NewTable(Table.READWRITE, "AIPS AN", 1, err)
@@ -89,13 +80,8 @@ class UVFacade(object):
         ant_table.Open(Table.READWRITE, err)
         handle_obit_err("Error opening AN table.", err)
 
-        # Update header
+        # Update header, forcing underlying table update
         ant_table.keys.update(header)
-        JD = UVDesc.PDate2JD(header['RefDate'])
-        ant_table.keys['GSTIA0'] = UVDesc.GST0(JD)*15.0
-        ant_table.keys['DEGPDY'] = UVDesc.ERate(JD)*360.0
-
-        # Mark table as dirty to force header update
         Table.PDirty(ant_table)
 
         # Write each row to the antenna table
@@ -120,7 +106,7 @@ class UVFacade(object):
 
             .. code-block:: python
 
-                { 'NO_IF' : 1 }
+                { 'numIF' : 1 }
 
         rows: list
             List of dictionaries describing each spectral window, with
@@ -143,7 +129,7 @@ class UVFacade(object):
             handle_obit_err("Error zapping old FQ table", err)
 
         # Get the number of spectral windows from the header
-        noif = header['NO_IF']
+        noif = header['numIF']
 
         if not noif == 1:
             raise ValueError("Only handling 1 IF at present. "
@@ -160,9 +146,10 @@ class UVFacade(object):
         fqtab.Open(Table.READWRITE, err)
         handle_obit_err("Error opening FQ table,", err)
 
-        # Update header
+        # Update header, forcing underlying table update
         fqtab.keys.update(header)
-        # Force update
+        pprint("FQTAB Header")
+        pprint(fqtab.keys)
         Table.PDirty(fqtab)
 
         # Write spectral window rows
@@ -214,11 +201,11 @@ class UVFacade(object):
         cltab.Open(Table.READWRITE, err)
         handle_obit_err("Error opening CL table", err)
 
-        # Update header
+        # Update header, forcing underlying table update
         cltab.keys.update(header)
-        # Force update
         Table.PDirty(cltab)
 
+        # Write calibration table rows
         for ri, row in enumerate(rows, 1):
             cltab.WriteRow(ri, row, err)
             handle_obit_err("Error writing row %d in CL table. "
@@ -239,8 +226,8 @@ class UVFacade(object):
 
             .. code-block:: python
 
-                { 'RefDate' : ...,
-                  'Freq': ..., }
+                { 'numIF' : 1,
+                  'FreqID': 1, }
 
         rows: list
             List of dictionaries describing each antenna, with
@@ -259,8 +246,6 @@ class UVFacade(object):
                   'RAOBS': [50.81529166666667],
                   'SOURCE': 'For A           '},
         """
-
-        _sanity_check_header(header)
 
         err = obit_err()
 

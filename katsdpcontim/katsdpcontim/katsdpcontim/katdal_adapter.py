@@ -293,13 +293,20 @@ class KatdalAdapter(object):
                 { 'RefDate': self.obsdat,
                   'Freq': self.channel_freqs[0] }
         """
-        return { 'ArrName': MEERKAT,
-                 'Freq': self.channel_freqs[0],  # Reference frequency
-                 'FreqID': 1,                    # Frequency setup id
-                 'numIF': self.nif,              # Number of spectral windows
-                 'RefDate': self.obsdat,
-                 'EXTVER': 1,                    # Subarray number
-                }
+
+        julian_date = UVDesc.PDate2JD(self.obsdat)
+
+        return {
+            'ArrName': MEERKAT,
+            'Freq': self.channel_freqs[0],  # Reference frequency
+            'FreqID': 1,                    # Frequency setup id
+            'numIF': self.nif,              # Number of spectral windows
+            'RefDate': self.obsdat,         # Reference date
+            # GST at 0h on reference data in degrees
+            'GSTiat0': UVDesc.GST0(julian_date)*15.0,
+            # Earth's rotation rate (degrees/day)
+            'DegDay': UVDesc.ERate(julian_date)*360.0,
+        }
 
     @boltons.cacheutils.cachedproperty
     def uv_antenna_rows(self):
@@ -354,14 +361,13 @@ class KatdalAdapter(object):
         dict
             Dictionary containing elements necessary
             for constructing a SU table header. Of the form:
-
-            .. code-block:: python
-
-                { 'RefDate': self.obsdat,
-                  'Freq': self.channel_freqs[0] }
         """
-        return { 'RefDate': self.obsdat,
-                 'Freq': self.channel_freqs[0] }
+        return {
+            'numIF': 1,         # Number of spectral windows
+            'FreqID': 1,        # Frequency setup ID
+            'velDef': 'RADIO',  # Radio/Optical Velocity?
+            'velType': 'LSR'    # Velocity Frame of Reference (LSR is default)
+        }
 
     @boltons.cacheutils.cachedproperty
     def uv_source_rows(self):
@@ -470,10 +476,10 @@ class KatdalAdapter(object):
         dict
             Dictionary used in construction of
             the FQ table. Currently only contains
-            :code:`{ 'NO_IF' : 1 }`, the (singular)
+            :code:`{ 'numIF' : 1 }`, the (singular)
             number of spectral windows.
         """
-        return { 'NO_IF': self.nif }
+        return { 'numIF': self.nif }
 
     @boltons.cacheutils.cachedproperty
     def uv_calibration_header(self):
@@ -484,14 +490,11 @@ class KatdalAdapter(object):
             Dictionary used to construct the CL table header.
         """
         return {
-            'NO_IF': self.nif,
-            # TODO: AIPS Memo 117 seems to imply that this is not the same
-            # as# the number of stokes paramters. Can be one or two
-            # orthogonal polarisations
-            'NO_POL': 2,
-            'NO_ANT': max(r['NOSTA'] for r in self.uv_antenna_rows),
-            'NO_TERM': 1,
-            'MGMOD': 1
+            'numIF': self.nif,
+            'numPol': self.nstokes,
+            'numAnt': max(r['NOSTA'][0] for r in self.uv_antenna_rows),
+            'numTerm': 1,
+            'mGMod': 1
         }
 
 
