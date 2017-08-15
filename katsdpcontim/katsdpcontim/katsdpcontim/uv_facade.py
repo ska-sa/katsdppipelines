@@ -177,16 +177,21 @@ class UVFacade(object):
 
     def create_index_table(self, header, rows):
         """
-        Creates an NX table in this UV file.
+        Creates an NX table associated with this UV file.
         """
 
         err = obit_err()
 
         # Create and open the SU table
-        nxtab = self._uv.NewTable(Table.READWRITE, "AIPS NX",1,err)
+        nxtab = self._uv.NewTable(Table.READWRITE, "AIPS NX", 1, err)
         handle_obit_err("Error creating NX table", err)
         nxtab.Open(Table.READWRITE, err)
         handle_obit_err("Error opening NX table", err)
+
+        # Update header
+        nxtab.keys.update(header)
+        # Force update
+        Table.PDirty(nxtab)
 
         # Write index table rows
         for ri, row in enumerate(rows, 1):
