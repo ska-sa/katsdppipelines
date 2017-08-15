@@ -26,8 +26,6 @@ class ObitContext(object):
         https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
         """
 
-        # TODO: Configuration object should be passed.
-        # Generate default configuration for now
         from configuration import get_config
         cfg = get_config()
 

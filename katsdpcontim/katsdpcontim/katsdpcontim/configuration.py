@@ -81,4 +81,7 @@ def validate_configuration(configuration):
     return _dicts_to_attrs("main", cfg)
 
 def get_config():
+    """
+    Get the configuration
+    """
     return validate_configuration({})
