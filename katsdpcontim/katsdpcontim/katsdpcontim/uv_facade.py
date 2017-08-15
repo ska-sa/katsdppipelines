@@ -54,7 +54,7 @@ class UVFacade(object):
 
     def create_antenna_table(self, header, rows):
         """
-        Creates an AN table in this UV file.
+        Creates an AN table associated with this UV file.
 
         Parameters
         ----------
@@ -110,7 +110,7 @@ class UVFacade(object):
 
     def create_frequency_table(self, header, rows):
         """
-        Creates an FQ table in this UV file.
+        Creates an FQ table associated this UV file.
 
         Parameters
         ----------
@@ -120,7 +120,7 @@ class UVFacade(object):
 
             .. code-block:: python
 
-                { 'nif' : 1 }
+                { 'NO_IF' : 1 }
 
         rows: list
             List of dictionaries describing each spectral window, with
@@ -143,7 +143,7 @@ class UVFacade(object):
             handle_obit_err("Error zapping old FQ table", err)
 
         # Get the number of spectral windows from the header
-        noif = header.pop('nif')
+        noif = header['NO_IF']
 
         if not noif == 1:
             raise ValueError("Only handling 1 IF at present. "
@@ -161,7 +161,7 @@ class UVFacade(object):
         handle_obit_err("Error opening FQ table,", err)
 
         # Update header
-        fqtab.keys['NO_IF'] = noif  # Structural so no effect
+        fqtab.keys.update(header)
         # Force update
         Table.PDirty(fqtab)
 

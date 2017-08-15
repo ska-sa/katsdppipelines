@@ -470,11 +470,10 @@ class KatdalAdapter(object):
         dict
             Dictionary used in construction of
             the FQ table. Currently only contains
-            :code:`{ 'nif' : 1 }`, which is not
-            a key in the FQ table header per se,
-            but used to construct the table itself.
+            :code:`{ 'NO_IF' : 1 }`, the (singular)
+            number of spectral windows.
         """
-        return { 'nif': self.nif }
+        return { 'NO_IF': self.nif }
 
 
     @boltons.cacheutils.cachedproperty
