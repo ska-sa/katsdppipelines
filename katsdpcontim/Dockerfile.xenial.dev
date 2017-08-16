@@ -123,17 +123,21 @@ WORKDIR /obitconf
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
 
-# Add the AIPS running script
-ADD katsdpcontim/aipsrunner.sh /bin/aipsrunner.sh
+# Create a script that runs whenever the container is entered
+# (1) Load the bashrc since we're running run.sh with --rcfile
+# (2) Setup OBIT environment variables
+# (3) Create links to Obit FITS data in the AIPS FITS disk
+# (4) Configure AIPS disks with the Obit setup
+# (5) Execute AIPS login
 
-# Create a script that sources .bashrc and the above scripts
 RUN echo "#!/bin/bash\
 \nsource $HOME/.bashrc\
 \nsource /bin/setup_obit.sh\
+\nln -f -s /usr/local/Obit/ObitSystem/Obit/share/data/* /usr/local/AIPS/FITS\
 \ncfg_aips_disks.py /usr/local/AIPS\
-\nsource /bin/aipsrunner.sh\
+\n. /usr/local/AIPS/LOGIN.SH\
 \necho 'Standard OBIT task configuration files are available in /obitconf'\
-\necho echo 'You probably want to run the tasks in a mounted volume'" >> /run.sh
+\necho 'Run aips headless with \"aips da=all notv tvok tpok\"'" >> /run.sh
 
 RUN chmod a+x /run.sh
 
