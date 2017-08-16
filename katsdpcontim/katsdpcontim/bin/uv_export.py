@@ -1,5 +1,8 @@
 import argparse
 import logging
+import os
+import os.path
+
 from pprint import pprint
 
 import numpy as np
@@ -17,12 +20,23 @@ logging.basicConfig(level=logging.INFO)
 
 def create_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("h5file")
+    parser.add_argument("katdata")
+    parser.add_argument("-l", "--label", default="MeerKAT")
+    parser.add_argument("-n", "--name", help="AIPS name")
+    parser.add_argument("-k", "--klass", help="AIPS class", default="raw")
+    parser.add_argument("-d", "--disk", help="AIPS disk", default=1)
+    parser.add_argument("-s", "--seq", help="AIPS sequence", default=1)
     return parser
 
 args = create_parser().parse_args()
 
-K = katdal.open(args.h5file)
+# Use the hdf5file name if none is supplied
+if args.name is None:
+    path, file  = os.path.split(args.katdata)
+    base_filename, ext = os.path.splitext(file)
+    args.name = base_filename
+
+K = katdal.open(args.katdata)
 KA = KatdalAdapter(K)
 
 pprint({k: v for k, v in KA._targets.items()})
@@ -44,13 +58,12 @@ with obit_context():
 
     err = obit_err()
 
+    logging.info("Creating '{}.{}.{}' "
+                "on AIPS disk '{}'".format(args.name, args.klass,
+                                           args.seq, args.disk))
+
     # Create the AIPS UV file
-    inlabel = "myuv"
-    inname = "stuff"
-    inclass = "raw"
-    inseq = 1
-    indisk = 1
-    uv = UV.newPAUV(inlabel, inname, inclass, indisk, inseq, False, err)
+    uv = UV.newPAUV(args.label, args.name, args.klass, args.disk, args.seq, False, err)
     uv.Open(UV.READWRITE, err)
     handle_obit_err("Error creating UV file", err)
 
