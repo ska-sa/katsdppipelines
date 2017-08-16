@@ -148,8 +148,6 @@ class UVFacade(object):
 
         # Update header, forcing underlying table update
         fqtab.keys.update(header)
-        pprint("FQTAB Header")
-        pprint(fqtab.keys)
         Table.PDirty(fqtab)
 
         # Write spectral window rows
