@@ -20,7 +20,7 @@ class KatdalAdapter(object):
     This is not a true adapter, but perhaps if
     called that enough, it will become one.
     """
-    def __init__(self, katds):
+    def __init__(self, katds, spw=0):
         """
         Constructs a KatdalAdapter.
 
@@ -28,15 +28,14 @@ class KatdalAdapter(object):
         ----------
         katds : katdal data source object
             An opened katdal data source, probably an hdf5file
+        spw : integer
+            Index of spectral window to export
         """
         self._katds = katds
         self._cache = {}
 
-        nspw = len(self._katds.spectral_windows)
-
-        if nspw != 1:
-            raise ValueError("Only handling one Spectral Window for now, "
-                            "but found '{}'.".format(nspw))
+        # Set the spectral window we're handling
+        self._spw = self._katds.spectral_windows[spw]
 
     @boltons.cacheutils.cachedmethod('_cache')
     def _antenna_map(self):
@@ -224,7 +223,7 @@ class KatdalAdapter(object):
             The number of channels in this observation.
             Presently derived from the first spectral window
         """
-        return len(self._katds.spectral_windows[0].channel_freqs)
+        return len(self._spw.channel_freqs)
 
     @property
     def nif(self):
@@ -234,7 +233,7 @@ class KatdalAdapter(object):
         int
             The number of spectral windows
         """
-        return len(self._katds.spectral_windows)
+        return 1
 
     @property
     def channel_freqs(self):
@@ -244,7 +243,7 @@ class KatdalAdapter(object):
         list or np.ndarray
             List of channel frequencies
         """
-        return self._katds.spectral_windows[0].channel_freqs
+        return self._spw.channel_freqs
 
     @property
     def chinc(self):
@@ -255,7 +254,7 @@ class KatdalAdapter(object):
             The channel increment, or width.
             Presently derived from the first spectral window.
         """
-        return self._katds.spectral_windows[0].channel_width
+        return self._spw.channel_width
 
     @property
     def reffreq(self):
@@ -267,7 +266,7 @@ class KatdalAdapter(object):
             rather than the centre frequency. See `uv_format.rst`.
             Presently derived from the first spectral window.
         """
-        return self._katds.spectral_windows[0].channel_freqs[0]
+        return self._spw.channel_freqs[0]
 
     @property
     def refwave(self):
@@ -531,7 +530,7 @@ class KatdalAdapter(object):
             'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
             'TOTAL BANDWIDTH': [abs(sw.channel_width)*
                                 len(sw.channel_freqs)], }
-                for i, sw in enumerate(self._katds.spectral_windows, 1)]
+                for i, sw in enumerate([self._spw], 1)]
 
 
     def uv_descriptor(self):
