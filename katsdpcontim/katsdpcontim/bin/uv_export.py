@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 
 def create_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("katdata")
+    parser.add_argument("katdata", help="hdf5 observation file")
     parser.add_argument("-l", "--label", default="MeerKAT")
     parser.add_argument("-n", "--name", help="AIPS name")
     parser.add_argument("-k", "--klass", help="AIPS class", default="raw")
