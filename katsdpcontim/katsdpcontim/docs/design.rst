@@ -178,7 +178,11 @@ write it over the network to telstate.
 AIPS UV Format for MeerKAT data
 -------------------------------
 
-This document was created by inspecting the Obit_ code base and `AIPS Memo 117 <AIPSMemo117_>`_.
+This section was created by inspecting
+
+- the Obit_ code base
+- `AIPS Memo 117 <AIPSMemo117_>`_
+- `Obit Documentation <ObitDoc_>`_
 
 UV FITS Axis Configuration
 -------------------------------
@@ -314,8 +318,73 @@ Multiple chunks of visibility data can exist in the buffer in the following mann
   [params1, vis1, params2, vis2, ..., paramsn, visn]
 
 
+AIPS Tables
+-----------
+
+AIPS Tables, defined in `AIPS Memo 117 <AIPSMemo117_>`_ consist of both headers and rows.
+They are both exposed by Obit, to the user via python dictionaries.
+
+.. code-block:: python
+
+    # Create antenna table
+    antab = uv.NewTable(Table.READWRITE, "AIPS AN", 1, err)
+    pprint(antab.keys)           # Print antenna table header
+    row = antab.ReadRow(1, err)  # Read first table row
+    antab.WriteRow(1, row, err)  # Write firs table row
+
+Note that the :code:`keys` attribute is a dictionary whose keys are
+Obit variable names, corresponding to, but not matching the table keywords
+defined in `AIPS Memo 117 <AIPSMemo117_>`_.
+The mapping from Obit variable name to table keyword is present in ObitDoc_.
+
+There is some potential for confusion here, since the :code:`row` dictionary,
+returned from :code:`antab.ReadRow` and passed through to :code:`antab.WriteRow`
+**do** match the keywords in the memo.
+
+It may be possible to achieve consistency by accessing the :code:`InfoList`
+on the table's descriptor, :code:`Desc` for e.g.
+
+.. code-block:: python
+
+    import InfoList
+    pprint(InfoList.PGetDict(antab.Desc.List))
+    {'ARRAYX': [11, [1, 1, 1, 1, 1], [0.0]],
+     'ARRAYY': [11, [1, 1, 1, 1, 1], [0.0]],
+     'ARRAYZ': [11, [1, 1, 1, 1, 1], [0.0]],
+     'ARRNAM': [14, [8, 1, 1, 1, 1], ['MeerKAT ']],
+     'DATUTC': [10, [1, 1, 1, 1, 1], [0.0]],
+     'DEGPDY': [11, [1, 1, 1, 1, 1], [360.9856449789221]],
+     'FRAME': [14, [8, 1, 1, 1, 1], ['UNKNOWN ']],
+     'FREQ': [11, [1, 1, 1, 1, 1], [856000000.0]],
+     'FREQID': [3, [1, 1, 1, 1, 1], [1]],
+     'GSTIA0': [11, [1, 1, 1, 1, 1], [293.03651864172565]],
+     'IATUTC': [10, [1, 1, 1, 1, 1], [0.0]],
+     'NOPCAL': [3, [1, 1, 1, 1, 1], [2]],
+     'NO_IF': [3, [1, 1, 1, 1, 1], [1]],
+     'NUMORB': [3, [1, 1, 1, 1, 1], [0]],
+     'POLARX': [10, [1, 1, 1, 1, 1], [0.0]],
+     'POLARY': [10, [1, 1, 1, 1, 1], [0.0]],
+     'POLTYPE': [14, [8, 1, 1, 1, 1], ['        ']],
+     'P_DIFF01': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF02': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF03': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF04': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF05': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF06': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF07': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_DIFF08': [10, [1, 1, 1, 1, 1], [0.0]],
+     'P_REFANT': [3, [1, 1, 1, 1, 1], [0]],
+     'RDATE': [14, [10, 1, 1, 1, 1], ['2017-07-15']],
+     'REVISION': [3, [1, 1, 1, 1, 1], [10]],
+     'TIMSYS': [14, [8, 1, 1, 1, 1], ['IAT     ']],
+     'UT1UTC': [10, [1, 1, 1, 1, 1], [0.0]],
+     'XYZHAND': [14, [8, 1, 1, 1, 1], ['RIGHT   ']]}
+
+General format is :code:`{keyword: [typeid, dimension, value]}`. `dimension` seems to specify the shape of `value` with up to 5 dimensions supported. In the case of strings, the first dimension specifies the length of each string element, for example.
+
 .. _AIPSMemo117: ftp://ftp.aoc.nrao.edu/pub/software/aips/TEXT/PUBL/AIPSMEM117.PS
 .. _Obit: https://www.cv.nrao.edu/~bcotton/Obit.html
+.. _ObitDoc: https://github.com/bill-cotton/Obit/blob/master/ObitSystem/ObitSD/doc/OBITdoc.tex
 .. _NRAO: https://nrao.edu/
 .. _DBCON: https://www.aips.nrao.edu/cgi-bin/ZXHLP2.PL?DBCON
 .. _KAT7-obit-pipline: https://github.com/ska-sa/katsdppipelines/tree/master/Obit-pipeline
