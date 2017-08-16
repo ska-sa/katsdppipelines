@@ -1,28 +1,28 @@
 # Inputs for Obit program MFImage
 $Key = DataType  Str (4) # Type, AIPS or FITS
-FITS
+AIPS
 $Key = nFITS Int (1) # Number of FITS directories
 1
 $Key = FITSdirs Str (48)   # Directories of FITS "disks"
-/scratch/sjperkins/data
+/usr/local/AIPS/FITS
 $Key = nAIPS Int (1) # Number of FITS directories
 1
 $Key = AIPSdirs Str (48)   # Directories of FITS "disks"
-/scratch/sjperkins/data
+/usr/local/AIPS/DATA/LOCALHOST_1
 $Key = AIPSuser Int (1)    # AIPS user number
 105
 $Key = inDisk     Int (1)  # input file disk number
 1
 $Key = inName  Str (12)    # Input name
-R_CNC
+stuff
 $Key = inClass  Str (6)    # Input class
-CVel
+raw
 $Key = inSeq      Int (1)  # input Sequence number
-0
+1
 $Key = doPS Boo (1)
  F
 $Key = Sources Str (16,30)
-DEEP_2
+
 
 
 
