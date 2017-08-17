@@ -577,11 +577,8 @@ class KatdalAdapter(object):
             'teles': MEERKAT,
             'instrume': MEERKAT,
 
-            # Not quite sure what these do
-            # but were derived from the original
-            # MeerKAT template
-            'isort': 'TB',
-            'object': 'MULTI',
+            'isort': 'TB',     # Time, Baseline sort order
+            'object': 'MULTI', # Source, this implies multiple sources
 
             'nvis': 0,
             'firstVis': 0,
