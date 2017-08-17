@@ -273,7 +273,7 @@ with obit_context():
             'NumFields': 8,
             '_status': [0],
 
-            'TIME': [(aips_time[-1] - aips_time[0])/2],      # Time Centroid
+            'TIME': [(aips_time[-1] + aips_time[0])/2],      # Time Centroid
             'TIME INTERVAL': [aips_time[-1] - aips_time[0]],
             'SOURCE ID': [aips_source_id],
             'SUBARRAY': [1],                  # Should match 'AIPS AN' header
