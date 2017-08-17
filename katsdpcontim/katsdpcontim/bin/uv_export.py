@@ -37,6 +37,7 @@ if args.name is None:
     args.name = base_filename
 
 K = katdal.open(args.katdata)
+K.select(scans='track')
 KA = KatdalAdapter(K)
 
 pprint({k: v for k, v in KA._targets.items()})
