@@ -164,15 +164,18 @@ with obit_context():
         # AIPS visibility is [real, imag, weight]
         # (ntime, 3, nchan, nbl*npol)
         vis = np.stack([vis.real, vis.imag, weights], axis=1)
+        assert vis.shape == (ntime, 3, nchan, ncorrprods)
 
         # Reorganise correlation product dim so that
         # polarisations are grouped per baseline.
-        # Then split correlations into baselines and polarisation
-        # producing (ntime, 3, nchan, nbl, npol)
-        vis = vis[:,:,:,cp_argsort].reshape(ntime, 3, nchan, nbl, nstokes)
+        # producing (ntime, 3, nchan, ncorrprods)
+        vis = vis[:,:,:,cp_argsort]
+        assert vis.shape == (ntime, 3, nchan, ncorrprods)
 
-        # This transposes so that we have (ntime, nbl, 3, npol, nchan)
-        vis = vis.transpose(0,3,1,4,2)
+        # Then split correlations into baselines and polarisation
+        # and transpose so that we have (ntime, nbl, 3, npol, nchan)
+        vis = vis.reshape(ntime, 3, nchan, nbl, nstokes).transpose(0,3,1,4,2)
+        assert vis.shape == (ntime, nbl, 3, nstokes, nchan)
 
         # Reshape to introduce nif, ra and dec
         # It's now (ntime, nbl, 3, npol, nchan, nif, ra, dec)
