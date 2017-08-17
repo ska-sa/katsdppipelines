@@ -256,7 +256,7 @@ with obit_context():
                 vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
                 vis_buffer[idx+ilocsu] = aips_source_id    # source id
 
-                flat_vis = vis[t,bl].ravel()
+                flat_vis = vis[t,bl,:,:,:,:,:,:].ravel()
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
                 numVisBuff += 1
