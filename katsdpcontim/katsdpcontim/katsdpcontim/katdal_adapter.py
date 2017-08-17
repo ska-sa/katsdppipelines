@@ -103,12 +103,24 @@ class KatdalAdapter(object):
                   ('v','v'): 1,
                   ('h','v'): 2,
                   ('v','h'): 3 }
-
         """
-        CorrelatorProduct = attr.make_class("CorrelatorProduct",
-                                    ["ant1", "ant2",
-                                     "ant1_index", "ant2_index",
-                                     "cid"])
+        attrs = ["ant1", "ant2", "ant1_ix", "ant2_ix", "cid"]
+        CorrelatorProductBase = attr.make_class("CorrelatorProductBase", attrs)
+
+        # Add properties onto the base class
+        class CorrelatorProduct(CorrelatorProductBase):
+            @property
+            def aips_ant1_ix(self):
+                return self.ant1_ix+1
+
+            @property
+            def aips_ant2_ix(self):
+                return self.ant2_ix+1
+
+            @property
+            def aips_bl_ix(self):
+                return self.aips_ant1_ix*256.0 + self.aips_ant2_ix
+
         antenna_map = self._antenna_map()
 
         products = []
@@ -150,7 +162,7 @@ class KatdalAdapter(object):
         """
 
         # Count the number of times we see a correlation product
-        counts = Counter((cp.ant1_index, cp.ant2_index) for cp
+        counts = Counter((cp.ant1_ix, cp.ant2_ix) for cp
                             in self.correlator_products())
         return max(counts.itervalues())
 

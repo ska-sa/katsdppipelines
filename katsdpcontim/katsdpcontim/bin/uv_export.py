@@ -112,7 +112,7 @@ with obit_context():
     cp = KA.correlator_products()
 
     # Lexicographically sort correlation products on (a1, a2, cid)
-    sort_fn = lambda x: (cp[x].ant1_index,cp[x].ant2_index,cp[x].cid)
+    sort_fn = lambda x: (cp[x].ant1_ix,cp[x].ant2_ix,cp[x].cid)
     cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
     corr_products = np.asarray([cp[i] for i in cp_argsort])
     refwave = KA.refwave
@@ -122,9 +122,10 @@ with obit_context():
     bl_products = corr_products.reshape(-1, nstokes)[:,0]
     nbl, = bl_products.shape
 
-    # AIPS baseline IDs, need to make antennas FORTRAN indexed
-    aips_baselines = np.asarray([(bp.ant1_index+1)*256.0 + (bp.ant2_index+1)
-                                for bp in bl_products], dtype=np.float32)
+    # AIPS baseline IDs
+    aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
+                                                    dtype=np.float32)
+
     # UV file location variables
     firstVis = 1    # FORTRAN indexing
     numVisBuff = 0  # Number of visibilities in the buffer
