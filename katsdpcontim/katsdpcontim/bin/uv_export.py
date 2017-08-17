@@ -71,7 +71,6 @@ with obit_context():
     uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
     uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
     uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
-    uvf.create_calibration_table(KA.uv_calibration_header, {})
 
     # Update the UV descriptor with MeerKAT metadata
     uvf.update_descriptor(KA.uv_descriptor())
@@ -279,8 +278,9 @@ with obit_context():
             'END VIS': [firstVis-1]
         })
 
-    # Create the index table...
+    # Create the index and calibration tables
     uvf.create_index_table({}, nx_rows)
+    uvf.create_calibration_table_from_index(KA.max_antenna_number)
 
     uv.Close(err)
     handle_obit_err("Error closing UV file", err)

@@ -188,33 +188,9 @@ class UVFacade(object):
         nxtab.Close(err)
         handle_obit_err("Error closing NX table", err)
 
-    def create_calibration_table(self, header, rows):
-        """
-        Creates a CL table associated with this UV file.
-        """
-        err = obit_err()
-
-        cltab = self._uv.NewTable(Table.READWRITE, "AIPS CL", 1, err)
-        handle_obit_err("Error creating CL table", err)
-        cltab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening CL table", err)
-
-        # Update header, forcing underlying table update
-        cltab.keys.update(header)
-        Table.PDirty(cltab)
-
-        # Write calibration table rows
-        for ri, row in enumerate(rows, 1):
-            cltab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in CL table. "
-                            "Row data is '%s'" % (ri, row), err)
-
-        cltab.Close(err)
-        handle_obit_err("Error closing CL table", err)
-
     def create_source_table(self, header, rows):
         """
-        Creates an SU table in this UV file.
+        Creates an SU table associated with this UV file.
 
         Parameters
         ----------
@@ -265,3 +241,43 @@ class UVFacade(object):
         # Close the table
         sutab.Close(err)
         handle_obit_err("Error closing SU table", err)
+
+    def create_calibration_table(self, header, rows):
+        """
+        Creates a CL table associated with this UV file.
+        """
+        err = obit_err()
+
+        cltab = self._uv.NewTable(Table.READWRITE, "AIPS CL", 1, err)
+        handle_obit_err("Error creating CL table", err)
+        cltab.Open(Table.READWRITE, err)
+        handle_obit_err("Error opening CL table", err)
+
+        # Update header, forcing underlying table update
+        cltab.keys.update(header)
+        pprint("CLTAB Header")
+        pprint(cltab.keys)
+        Table.PDirty(cltab)
+
+        # Write calibration table rows
+        for ri, row in enumerate(rows, 1):
+            cltab.WriteRow(ri, row, err)
+            handle_obit_err("Error writing row %d in CL table. "
+                            "Row data is '%s'" % (ri, row), err)
+
+        cltab.Close(err)
+        handle_obit_err("Error closing CL table", err)
+
+    def create_calibration_table_from_index(self, max_ant_nr):
+        """
+        Creates a CL table associated with this UV file
+        from an NX table.
+
+        Parameters
+        ----------
+        max_ant_nr : integer
+            Maximum antenna number written to the AIPS AN table.
+        """
+        err = obit_err()
+        UV.PTableCLfromNX(self._uv, max_ant_nr, err)
+        handle_obit_err("Error creating CL table from NX table", err)

@@ -481,6 +481,16 @@ class KatdalAdapter(object):
         return { 'numIF': self.nif }
 
     @boltons.cacheutils.cachedproperty
+    def max_antenna_number(self):
+        """
+        Returns
+        -------
+        integer
+            The maximum AIPS antenna number
+        """
+        return max(r['NOSTA'][0] for r in self.uv_antenna_rows)
+
+    @boltons.cacheutils.cachedproperty
     def uv_calibration_header(self):
         """
         Returns
@@ -491,7 +501,7 @@ class KatdalAdapter(object):
         return {
             'numIF': self.nif,
             'numPol': self.nstokes,
-            'numAnt': max(r['NOSTA'][0] for r in self.uv_antenna_rows),
+            'numAnt': self.max_antenna_number,
             'numTerm': 1,
             'mGMod': 1
         }
