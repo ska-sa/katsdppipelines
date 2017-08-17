@@ -122,9 +122,9 @@ with obit_context():
     bl_products = corr_products.reshape(-1, nstokes)[:,0]
     nbl, = bl_products.shape
 
-    # AIPS baseline IDs
-    aips_baselines = np.asarray([bp.ant1_index*256.0+bp.ant2_index for bp
-                                                            in bl_products],                                                            dtype=np.float32)
+    # AIPS baseline IDs, need to make antennas FORTRAN indexed
+    aips_baselines = np.asarray([(bp.ant1_index+1)*256.0 + (bp.ant2_index+1)
+                                for bp in bl_products], dtype=np.float32)
     # UV file location variables
     firstVis = 1    # FORTRAN indexing
     numVisBuff = 0  # Number of visibilities in the buffer
