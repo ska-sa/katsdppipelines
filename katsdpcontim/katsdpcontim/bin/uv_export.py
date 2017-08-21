@@ -2,21 +2,22 @@ import argparse
 import logging
 import os
 import os.path
-
 from pprint import pprint
 
 import numpy as np
 
-import katdal
-
 import ObitTalkUtil
 import UV
+
+import katdal
 
 import katsdpcontim
 from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
 
 logging.basicConfig(level=logging.INFO)
+
+# uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
 def create_parser():
     parser = argparse.ArgumentParser()
@@ -191,10 +192,11 @@ with obit_context():
         # Compute UVW coordinates from baselines
         # (3, ntimes, nbl)
         uvw = (np.stack([target.uvw(bp.ant1, antenna=bp.ant2, timestamp=times)
-                                                for bp in bl_products], axis=2)
-                                .reshape(3, ntime, nbl))
+                                                for bp in bl_products], axis=2))
 
-        # UVW coordinates (in frequency?)
+        assert uvw.shape == (3, ntime, nbl), uvw.shape
+
+        # UVW coordinates in seconds
         aips_uvw = uvw / refwave
         # Convert difference between timestep and
         # midnight on observation date to days.
@@ -260,7 +262,7 @@ with obit_context():
                 vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
                 vis_buffer[idx+ilocsu] = aips_source_id    # source id
 
-                flat_vis = vis[t,bl].ravel()
+                flat_vis = vis[t,bl].ravel(order='F')
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
                 numVisBuff += 1
