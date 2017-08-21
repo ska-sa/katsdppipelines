@@ -308,8 +308,10 @@ UV Visibility Buffer
 
 Obit python UV objects expose visibility data via a 32-bit floating point python buffer on the :code:`uv.VisBuf` attribute.
 
-Generally, the *random parameters* are located at the first :code:`nrparm` floats.
-Visibility data follows with the shape specified in :code:`inaxes`.
+Generally, the *random parameters* are located at the first :code:`nrparm` floats
+and is ``C-ordered``.
+Visibility data follows with the shape specified in :code:`inaxes`,
+and is ``FORTRAN-ordered``.
 
 Multiple chunks of visibility data can exist in the buffer in the following manner:
 
