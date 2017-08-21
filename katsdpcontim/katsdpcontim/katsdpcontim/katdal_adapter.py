@@ -57,8 +57,18 @@ class KatdalAdapter(object):
         str
             The observation date
         """
-        start = time.gmtime(self._katds.timestamps[0])
+        start = time.gmtime(self._katds.start_time.secs)
         return time.strftime('%Y-%m-%d', start)
+
+    @property
+    def midnight(self):
+        """
+        Returns
+        -------
+        float
+            Midnight on the observation date in unix seconds
+        """
+        return time.mktime(time.strptime(self.obsdat, '%Y-%m-%d'))
 
     @property
     def today(self):

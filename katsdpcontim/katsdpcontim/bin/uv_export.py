@@ -135,8 +135,8 @@ with obit_context():
 
     uv_source_map = KA.uv_source_map
 
-    # Get starting time
-    time0 = K.start_time.secs
+    # Get midnight on the observation date
+    midnight = KA.midnight
 
     # NX table rows
     nx_rows = []
@@ -196,8 +196,12 @@ with obit_context():
 
         # UVW coordinates (in frequency?)
         aips_uvw = uvw / refwave
-        # Timestamps in days
-        aips_time = (times - time0) / 86400.0
+        # Convert difference between timestep and
+        # midnight on observation date to days.
+        # This, combined with (probably) JDObs in the
+        # UV descriptor, givens the Julian Date in days
+        # of the visibility.
+        aips_time = (times - midnight) / 86400.0
 
         def _write_buffer(uv, firstVis, numVisBuff):
             """
