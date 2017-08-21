@@ -243,7 +243,6 @@ class KatdalAdapter(object):
         -------
         int
             The number of channels in this observation.
-            Presently derived from the first spectral window
         """
         return len(self._spw.channel_freqs)
 
@@ -274,7 +273,6 @@ class KatdalAdapter(object):
         -------
         float
             The channel increment, or width.
-            Presently derived from the first spectral window.
         """
         return self._spw.channel_width
 
@@ -286,7 +284,6 @@ class KatdalAdapter(object):
         float
             The first channel frequency as the reference frequency,
             rather than the centre frequency. See `uv_format.rst`.
-            Presently derived from the first spectral window.
         """
         return self._spw.channel_freqs[0]
 
