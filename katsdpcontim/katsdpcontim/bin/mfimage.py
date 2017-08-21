@@ -43,5 +43,9 @@ def create_task(args):
 
 with obit_context():
     task = create_task(create_parser().parse_args())
-    task.g
 
+    try:
+        task.go()
+    except Exception as e:
+        logging.exception("Task exception")
+        logging.error("Please consult '%s'" % task.taskLog)
