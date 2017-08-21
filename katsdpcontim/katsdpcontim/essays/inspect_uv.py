@@ -1,10 +1,9 @@
 import argparse
 
 import katsdpcontim
-from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
-
 import numpy as np
 
+from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 import UV
 
 def create_parser():
