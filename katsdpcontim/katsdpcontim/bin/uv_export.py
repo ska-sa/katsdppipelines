@@ -100,12 +100,10 @@ with obit_context():
     ilocb = desc['ilocb']     # baseline id
     ilocsu = desc['ilocsu']   # source id
 
+    lrec = desc['lrec']       # Length of visibility buffer record
     inaxes = tuple(desc['inaxes'][:6])  # Visibility shape, strip out trailing 0
     flat_inaxes = np.product(inaxes)
-    lrec = nrparm + flat_inaxes         # Length of record in vis buffer. See
-                                        # https://github.com/bill-cotton/Obit/blob/
-                                        # 14a29d631e4ebd37b8ccdd6568559ba98f1a9a87/
-                                        # ObitSystem/Obit/src/ObitUVDesc.c#L438
+
     import itertools
     import time
 

@@ -12,7 +12,6 @@ Obit Continuum Imaging Pipeline TODO List
     - AIPS ``31DEC16``
     - katpoint ``master``
     - katdal ``master``
-- Use ``lrec`` introduced by Bill in Obit ``r570`` rather than hard-coding it ourselves.
 - Improve visibility massaging process. Presently, as a general process,
   visibility data is massaged into a
   :code:`(ntime,nbl,3,nstokes,nchan,nspw,1,1)` array.
