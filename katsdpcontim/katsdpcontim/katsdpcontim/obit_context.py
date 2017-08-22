@@ -30,26 +30,22 @@ class ObitContext(object):
         cfg = get_config()
 
         self.err = err = OErr.OErr()
-        self.obitsys =  OSystem.OSystem("Pipeline", 1, cfg.obit.userno,
+        self.obitsys =  OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
                                             0, [" "], 0, [" "],
                                             True, False, err)
         OErr.printErrMsg(err, "Error starting Obit System")
 
         # Setup AIPS userno
-        AIPS.userno = cfg.obit.userno
-
-        # (url, dir) tuples, where None means localhost
-        aipsdirs = [(None, d) for d in cfg.obit.aipsdirs]
-        fitsdirs = [(None, d) for d in cfg.obit.fitsdirs]
+        AIPS.userno = cfg.aips.userno
 
         # Setup Obit Environment
-        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg.obit.aipsroot,
-                                AIPS_VERSION=cfg.obit.aipsversion,
+        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg.aips.aipsroot,
+                                AIPS_VERSION=cfg.aips.aipsversion,
                                 OBIT_EXEC=cfg.obit.obitexec,
-                                DA00=cfg.obit.da00,
+                                DA00=cfg.aips.da00,
                                 ARCH="LINUX",
-                                aipsdirs=aipsdirs,
-                                fitsdirs=fitsdirs)
+                                aipsdirs=cfg.obit.aipsdirs,
+                                fitsdirs=cfg.obit.fitsdirs)
 
     def close(self):
         """

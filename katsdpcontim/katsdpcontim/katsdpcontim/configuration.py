@@ -13,27 +13,37 @@ def config_validator():
 
     from cerberus import Validator
 
+    # Create the aips schema and defaults
     aipsroot = pjoin(os.sep, 'usr', 'local', 'AIPS')
-    obitroot = pjoin(os.sep, 'usr', 'local', 'Obit')
-    obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
-    fitsdirs = [pjoin(aipsroot, 'FITS'),
-                pjoin(obitroot, 'ObitSystem', 'Obit', 'share', 'data')]
-    aipsdirs = [pjoin(aipsroot, 'DATA', 'LOCALHOST_1'),
-                pjoin(aipsroot, 'DATA', 'LOCALHOST_2')]
-    da00 = pjoin(aipsroot, 'DA00')
 
-    obit_schema = {
+    aips_schema = {
         'aipsroot' : {'type': 'string', 'default': aipsroot },
         'aipsversion' : {'type': 'string', 'default': '31DEC16' },
+        'da00': {'type':'string', 'default': pjoin(aipsroot, 'DA00') },
+        'userno': {'type': 'integer', 'default': 105 },
+    }
+
+    # Create the obit schema and defaults
+    obitroot = pjoin(os.sep, 'usr', 'local', 'Obit')
+    obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
+    # (url, dir) tuples, where None means localhost
+    fitsdirs = [(None, pjoin(aipsroot, 'FITS'))]
+    aipsdirs = [(None, pjoin(aipsroot, 'DATA', 'LOCALHOST_1')),
+                (None, pjoin(aipsroot, 'DATA', 'LOCALHOST_2'))]
+
+    obit_schema = {
         'obitroot': {'type': 'string', 'default': obitroot },
         'obitexec': {'type': 'string', 'default': obitexec },
         'fitsdirs' : {'type': 'list', 'default': fitsdirs },
         'aipsdirs' : {'type': 'list', 'default': aipsdirs },
-        'userno': {'type': 'integer', 'default': 105 },
-        'da00': {'type':'string', 'default': da00 },
     }
 
     schema = {
+        'aips' : {
+            'type' : 'dict',
+            'schema': aips_schema,
+            'default': Validator(aips_schema).validated({}),
+        },
         'obit' : {
             'type' : 'dict',
             'schema': obit_schema,
