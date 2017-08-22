@@ -255,9 +255,9 @@ with obit_context():
                 idx = numVisBuff*lrec
 
                 # Write random parameters
-                vis_buffer[idx+ilocu] = uvw[0,t,bl]        # U
-                vis_buffer[idx+ilocv] = uvw[1,t,bl]        # V
-                vis_buffer[idx+ilocw] = uvw[2,t,bl]        # W
+                vis_buffer[idx+ilocu] = aips_uvw[0,t,bl]   # U
+                vis_buffer[idx+ilocv] = aips_uvw[1,t,bl]   # V
+                vis_buffer[idx+ilocw] = aips_uvw[2,t,bl]   # W
                 vis_buffer[idx+iloct] = aips_time[t]       # time
                 vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
                 vis_buffer[idx+ilocsu] = aips_source_id    # source id
