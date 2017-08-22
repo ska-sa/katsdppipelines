@@ -262,6 +262,7 @@ with obit_context():
                 vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
                 vis_buffer[idx+ilocsu] = aips_source_id    # source id
 
+                # Visibilities should be written to the buffer in FORTRAN order
                 flat_vis = vis[t,bl].ravel(order='F')
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
