@@ -1,4 +1,4 @@
-import argparse
+import glob
 import logging
 import os
 from os.path import join as pjoin
@@ -20,26 +20,18 @@ def create_logger():
 
 log = create_logger()
 
-def create_parser():
-    """ Create an argument parser """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("aipsdir",
-                help="Location of AIPS installation, "
-                     "e.g. /usr/local/AIPS")
-    return parser
-
-def rewrite_dadevs(args, cfg):
+def rewrite_dadevs(cfg):
     """
-    Rewrite `args.aipsdir/DA00/DADEVS.LIST` to reference
+    Rewrite ``cfg.aips.aipsroot/DA00/DADEVS.LIST`` to reference
     the AIPS directories specified in our configuration
     """
-    dadevs_list = pjoin(args.aipsdir, 'DA00', 'DADEVS.LIST')
-    backup = pjoin(args.aipsdir, 'DA00', '.DADEVS.LIST.BAK')
+    dadevs_list = pjoin(cfg.aips.da00, 'DADEVS.LIST')
+    backup = pjoin(cfg.aips.da00, '.DADEVS.LIST.BAK')
 
     if not os.path.exists(dadevs_list):
         raise ValueError("Could not find '{}' for modification. "
                          "Check your AIPS directory root '{}'."
-                            .format(dadevs_list, args.aipsdir))
+                            .format(dadevs_list, cfg.aips.aipsroot))
 
     # Make a copy of the original
     shutil.copy(dadevs_list, backup)
@@ -52,25 +44,25 @@ def rewrite_dadevs(args, cfg):
                 wf.write(line)
 
         # Write out AIPS directories
-        for aipsdir in cfg.obit.aipsdirs:
+        for url, aipsdir in cfg.obit.aipsdirs:
             log.info("Adding AIPS Disk '{}' to '{}'".format(aipsdir, dadevs_list))
             wf.write("-  " + aipsdir + '\n')
 
     # Remove the copy
     os.remove(backup)
 
-def rewrite_netsp(args, cfg):
+def rewrite_netsp(cfg):
     """
-    Rewrite `args.aipsdir/DA00/NETSP` to reference
+    Rewrite `cfg.aips.aipsroot.da00/DA00/NETSP` to reference
     the AIPS directories specified in our configuration
     """
-    netsp = pjoin(args.aipsdir, 'DA00', 'NETSP')
-    backup = pjoin(args.aipsdir, 'DA00', '.NETSP.BAK')
+    netsp = pjoin(cfg.aips.da00, 'NETSP')
+    backup = pjoin(cfg.aips.da00, '.NETSP.BAK')
 
     if not os.path.exists(netsp):
         raise ValueError("Could not find '{}' for modification. "
                          "Check your AIPS directory root '{}'."
-                            .format(netsp, args.aipsdir))
+                            .format(netsp, cfg.aips.aipsroot))
 
     # Make a copy of the original
     shutil.copy(netsp, backup)
@@ -83,20 +75,20 @@ def rewrite_netsp(args, cfg):
                 wf.write(line)
 
         # Write out AIPS Directory parameters
-        for aipsdir in cfg.obit.aipsdirs:
+        for url, aipsdir in cfg.obit.aipsdirs:
             log.info("Adding AIPS Disk '{}' to '{}'".format(aipsdir, netsp))
             wf.write(aipsdir + ' 365.0    0    0    0    0    0    0    0    0\n')
 
     # Remove the copy
     os.remove(backup)
 
-def setup_aips_disks(args, cfg):
+def setup_aips_disks(cfg):
     """
     Ensure that each AIPS disk (directory) exists.
     Creates a SPACE file within the disk.
     """
 
-    for aipsdir in cfg.obit.aipsdirs:
+    for url, aipsdir in cfg.obit.aipsdirs:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
             log.warn("AIPS Disk '{}' does not exist "
@@ -109,10 +101,36 @@ def setup_aips_disks(args, cfg):
         with open(space, 'a'):
             os.utime(space, None)
 
+def link_obit_data(cfg):
+    """
+    Creates soft links to Obit data files within FITS directories
+    """
+
+    # Directory in which Obit data file are located
+    obit_data_glob = pjoin(cfg.obit.obitroot, 'ObitSystem', 'Obit',
+                                                'share', 'data', '*')
+    # Data files we wish to symlink
+    data_files = glob.glob(obit_data_glob)
+
+    # Separate filename from full path
+    filenames = [os.path.split(f)[1] for f in data_files]
+
+    # In each FITS dir, create a link to each data file
+    for url, fitsdir in cfg.obit.fitsdirs:
+        # Fully expand link paths
+        link_names = [pjoin(fitsdir, f) for f in filenames]
+
+        # Remove any prior symlinks and then symlink
+        for data_file, link_name in zip(data_files, link_names):
+            if os.path.exists(link_name):
+                os.remove(link_name)
+
+            os.symlink(data_file, link_name)
+
 if __name__ == "__main__":
-    args = create_parser().parse_args()
     cfg = get_config()
 
-    setup_aips_disks(args, cfg)
-    rewrite_dadevs(args, cfg)
-    rewrite_netsp(args, cfg)
+    setup_aips_disks(cfg)
+    rewrite_dadevs(cfg)
+    rewrite_netsp(cfg)
+    link_obit_data(cfg)
