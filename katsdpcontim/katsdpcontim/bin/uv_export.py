@@ -24,7 +24,7 @@ def create_parser():
     parser.add_argument("katdata", help="hdf5 observation file")
     parser.add_argument("-l", "--label", default="MeerKAT")
     parser.add_argument("-n", "--name", help="AIPS name")
-    parser.add_argument("-k", "--klass", help="AIPS class", default="raw")
+    parser.add_argument("-c", "--class", help="AIPS class", default="raw", dest="aclass")
     parser.add_argument("-d", "--disk", help="AIPS disk", default=1)
     parser.add_argument("-s", "--seq", help="AIPS sequence", default=1)
     return parser
@@ -61,11 +61,11 @@ with obit_context():
     err = obit_err()
 
     logging.info("Creating '{}.{}.{}' "
-                "on AIPS disk '{}'".format(args.name, args.klass,
+                "on AIPS disk '{}'".format(args.name, args.aclass,
                                            args.seq, args.disk))
 
     # Create the AIPS UV file
-    uv = UV.newPAUV(args.label, args.name, args.klass, args.disk, args.seq, False, err)
+    uv = UV.newPAUV(args.label, args.name, args.aclass, args.disk, args.seq, False, err)
     uv.Open(UV.READWRITE, err)
     handle_obit_err("Error creating UV file", err)
 
