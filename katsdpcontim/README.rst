@@ -125,3 +125,24 @@ Run
 .. code-block:: bash
 
     $ docker-compose run --rm xenial-obit-dev
+
+Export katdal observation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
+For example:
+
+.. code-block:: bash
+
+    $ uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+
+The AIPS filename is automatically derived from the input filename. Four command line options can be specified to further customise the AIPS filenames.
+
+--disk  AIPS disk number
+--name  Name of the file. ``'1500148809'`` for example
+--class  Short string indicating file class. Can be thought of as arbitrary tags
+         assigned by the user.
+         ``'raw'``  to indicate raw visibilities for example.
+--seq  AIPS file sequence number.
+       A number used to specify bits of data in a sequence. ``'1'`` for example.
+       
