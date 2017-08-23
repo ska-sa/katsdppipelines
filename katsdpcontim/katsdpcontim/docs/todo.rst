@@ -2,7 +2,6 @@
 Obit Continuum Imaging Pipeline TODO List
 =========================================
 
-- Expand usage patterns in README.rst
 - Pull calibration solutions from the CL table
 - Output per scan AIPS files.
 - Pin software versions

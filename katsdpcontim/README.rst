@@ -39,8 +39,143 @@ for further insight.
 
 .. code-block:: bash
 
-    $ docker-compose build xenial-obit-dev
-    $ docker-compose build trusty-obit-dev
+    # docker-compose build xenial-obit-dev
+    # docker-compose build trusty-obit-dev
+
+
+~~~~~~~~~~~~~
+Docker Mounts
+~~~~~~~~~~~~~
+
+To persist AIPS and FITS disks between container runs, the first AIPS disk
+and the single FITS area are mounted on the docker host via the following
+specification in ``docker-compose.yml``:
+
+.. code-block:: yaml
+
+    volumes:
+      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
+
+Two important points to note:
+
+- These will be **mounted as the root** and **consume large quantities of disk space**.
+- The mount points inside the container should match the configuration discussed in `AIPS Disk Setup`_.
+
+Its useful to mount the KAT archives and other volumes within these containers.
+Edit ``docker-compose.yml`` to mount KAT NFS ``archive2`` within the container,
+for example.
+
+.. code-block:: yaml
+
+    volumes:
+      ...
+      - /var/kat/archive2:/var/kat/archive2:ro
+
+
+
+~~~
+Run
+~~~
+
+.. code-block:: bash
+
+    $ docker-compose run --rm xenial-obit-dev
+
+Export katdal observation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
+For example:
+
+.. code-block:: bash
+
+    # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+
+The AIPS filename is automatically derived from the input filename. Four command line options can be specified to further customise the AIPS filenames.
+
+--disk  AIPS disk number
+--name  Name of the file. ``'1500148809'`` for example
+--class  Short string indicating file class. Can be thought of as arbitrary tags
+         assigned by the user.
+         ``'raw'``  to indicate raw visibilities for example.
+--seq  AIPS file sequence number.
+       A number used to specify bits of data in a sequence. ``'1'`` for example.
+
+Run AIPS
+~~~~~~~~
+
+Run AIPS to view the observation. Remember to enter ``105`` when asked
+to enter your user number. You should see something like the following:
+
+.. code-block:: bash
+
+    # aips da=all notv tvok tpok
+    START_AIPS: Your initial AIPS printer is the
+    START_AIPS:  - system name , AIPS type
+
+    START_AIPS: User data area assignments:
+    DADEVS.PL: This program is untested under Perl version 5.022
+      (Using global default file /usr/local/AIPS/DA00/DADEVS.LIST for DADEVS.PL)
+       Disk 1 (1) is /usr/local/AIPS/DATA/LOCALHOST_1
+       Disk 2 (2) is /usr/local/AIPS/DATA/LOCALHOST_2
+
+    Tape assignments:
+       Tape 1 is REMOTE
+       Tape 2 is REMOTE
+
+    START_AIPS: Assuming TV servers are already started (you said TVOK)
+    START_AIPS: Assuming TPMON daemons are running or not used (you said TPOK)
+    Starting up 31DEC16 AIPS with normal priority
+    Begin the one true AIPS number 1 (release of 31DEC16) at priority =   0
+    AIPS 1: You are NOT assigned a TV device or server
+    AIPS 1: You are NOT assigned a graphics device or server
+    AIPS 1: Enter user ID number
+    ?105
+    AIPS 1:                          31DEC16 AIPS:
+    AIPS 1:      Copyright (C) 1995-2017 Associated Universities, Inc.
+    AIPS 1:            AIPS comes with ABSOLUTELY NO WARRANTY;
+    AIPS 1:                 for details, type HELP GNUGPL
+    AIPS 1: This is free software, and you are welcome to redistribute it
+    AIPS 1: under certain conditions; type EXPLAIN GNUGPL for details.
+    AIPS 1: Previous session command-line history recovered.
+    AIPS 1: TAB-key completions enabled, type HELP READLINE for details.
+    AIPS 1: Recovered POPS environment from last exit
+    >
+
+Then, type ``UCAT`` to view and ``MCAT`` to list UV data and images
+on the AIPS disks, respectively:
+
+.. code-block:: bash
+
+    >UCAT
+    AIPS 1: Catalog on disk  1
+    AIPS 1:   Cat  Usid Mapname      Class   Seq  Pt    Last access     Stat
+    AIPS 1:     1   105 1500148809  .raw   .    1 UV 22-AUG-17 16:58:43
+    AIPS 1: Catalog on disk  2
+    AIPS 1:   Cat  Usid Mapname      Class   Seq  Pt    Last access     Stat
+    >
+
+Then, exit AIPS
+
+.. code-block:: bash
+
+    > EXIT
+
+
+Image exported observation
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Once an observation has been exported to a UV data file on an AIPS disk, we can run ``MFImage``
+to image the observation. A number of standard configuration files for this in ``/obitconf``.
+Edit ``mfimage_nosc.in`` to specify the AIPS file parameters for the observation above
+and the run MFImage using the configuration file.
+
+.. code-block:: bash
+
+    /obitconf # MFImage -input mfimage_nosc.in &
+    /obitconf $ tail -f IMAGE.log
+
 
 ~~~~~~~~~~~~~~~
 AIPS Disk Setup
@@ -99,50 +234,3 @@ This is achieved by running the ``cfg_aips_disks.py`` script which:
 - modifies ``DADEVS.LIST`` and ``NETSP`` in the AIPS installation.
 - Creates soft links in the Obit data directory into the FITS area.
 
-
-~~~~~~~~~~~~~
-Docker Mounts
-~~~~~~~~~~~~~
-
-To persist AIPS and FITS disks between container runs, the first AIPS disk
-and the single FITS area is mounted on the docker host:
-
-- ``$HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw``
-- ``$HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw``
-
-**Note that these will probably be mounted as the `root` owner
-and consume large quantities of disk space**.
-
-Its useful to mount the KAT archives and other volumes within these containers.
-Edit the ``docker-compose.yml`` file to add the following, for example.
-
-- ``/var/kat/archive2:/var/kat/archive2:ro``
-
-~~~
-Run
-~~~
-
-.. code-block:: bash
-
-    $ docker-compose run --rm xenial-obit-dev
-
-Export katdal observation
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
-For example:
-
-.. code-block:: bash
-
-    $ uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
-
-The AIPS filename is automatically derived from the input filename. Four command line options can be specified to further customise the AIPS filenames.
-
---disk  AIPS disk number
---name  Name of the file. ``'1500148809'`` for example
---class  Short string indicating file class. Can be thought of as arbitrary tags
-         assigned by the user.
-         ``'raw'``  to indicate raw visibilities for example.
---seq  AIPS file sequence number.
-       A number used to specify bits of data in a sequence. ``'1'`` for example.
-       
