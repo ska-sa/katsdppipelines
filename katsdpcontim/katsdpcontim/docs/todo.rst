@@ -5,7 +5,6 @@ Obit Continuum Imaging Pipeline TODO List
 - Expand usage patterns in README.rst
 - Pull calibration solutions from the CL table
 - Output per scan AIPS files.
-- Mount AIPS disks in more obvious places within the docker container.
 - Pin software versions
     - Obit ``r570``
     - AIPS ``31DEC16``
