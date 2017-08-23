@@ -18,16 +18,16 @@ Setup
 
 Clone the following repositories:
 
-.. code-block:: bash
+.. code-block::
 
-    $ git clone git@github.com:ska-sa/katpoint.git
-    $ git clone git@github.com:ska-sa/katdal.git
+    # git clone git@github.com:ska-sa/katpoint.git
+    # git clone git@github.com:ska-sa/katdal.git
 
 Also, checkout the Obit source code @ revision ``570``.
 
-.. code-block:: bash
+.. code-block::
 
-    $ svn checkout -r 570 https://github.com/bill-cotton/Obit
+    # svn checkout -r 570 https://github.com/bill-cotton/Obit
 
 ~~~~~
 Build
@@ -37,7 +37,7 @@ The following builds the docker containers.
 Inspect the ``docker-compose.yml`` and ``Dockerfile's``
 for further insight.
 
-.. code-block:: bash
+.. code-block::
 
     # docker-compose build xenial-obit-dev
     # docker-compose build trusty-obit-dev
@@ -78,9 +78,9 @@ for example.
 Run
 ~~~
 
-.. code-block:: bash
+.. code-block::
 
-    $ docker-compose run --rm xenial-obit-dev
+    # docker-compose run --rm xenial-obit-dev
 
 Export katdal observation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -88,7 +88,7 @@ Export katdal observation
 The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
 For example:
 
-.. code-block:: bash
+.. code-block::
 
     # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
@@ -108,7 +108,7 @@ Run AIPS
 Run AIPS to view the observation. Remember to enter ``105`` when asked
 to enter your user number. You should see something like the following:
 
-.. code-block:: bash
+.. code-block::
 
     # aips da=all notv tvok tpok
     START_AIPS: Your initial AIPS printer is the
@@ -146,7 +146,7 @@ to enter your user number. You should see something like the following:
 Then, type ``UCAT`` to view and ``MCAT`` to list UV data and images
 on the AIPS disks, respectively:
 
-.. code-block:: bash
+.. code-block::
 
     >UCAT
     AIPS 1: Catalog on disk  1
@@ -158,24 +158,30 @@ on the AIPS disks, respectively:
 
 Then, exit AIPS
 
-.. code-block:: bash
+.. code-block::
 
     > EXIT
 
 
-Image exported observation
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Image observation with MFImage
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Once an observation has been exported to a UV data file on an AIPS disk, we can run ``MFImage``
 to image the observation. A number of standard configuration files for this in ``/obitconf``.
 Edit ``mfimage_nosc.in`` to specify the AIPS file parameters for the observation above
 and the run MFImage using the configuration file.
 
-.. code-block:: bash
+.. code-block::
 
-    /obitconf # MFImage -input mfimage_nosc.in &
+    /obitconf $ MFImage -input mfimage_nosc.in &
     /obitconf $ tail -f IMAGE.log
 
+Export CLEAN image with FITS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run AIPS and look for the CLEAN image with the ``MCAT`` command.
+Then, run the ``FITTP`` task to export the CLEAN image from the
+AIPS disk to the FITS disk.
 
 ~~~~~~~~~~~~~~~
 AIPS Disk Setup
