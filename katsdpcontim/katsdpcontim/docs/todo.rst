@@ -2,7 +2,6 @@
 Obit Continuum Imaging Pipeline TODO List
 =========================================
 
-- Fix frequency range in the SPECLNMF axes in the CLEAN image produced by SPECLNMF
 - Expand usage patterns in README.rst
 - Pull calibration solutions from the CL table
 - Output per scan AIPS files.
