@@ -8,6 +8,7 @@ ENV PACKAGES \
     python-software-properties \
     python-pip \
     curl \
+    vim \
     wget \
     git \
     cvs \
