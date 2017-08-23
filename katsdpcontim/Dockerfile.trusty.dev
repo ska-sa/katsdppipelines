@@ -1,4 +1,4 @@
-FROM ubuntu:trusty-20170620
+FROM ubuntu:trusty-20170728
 MAINTAINER simon.perkins@gmail.com
 
 ENV DEBIAN_FRONTEND noninteractive

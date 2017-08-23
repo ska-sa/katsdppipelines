@@ -1,4 +1,4 @@
-FROM ubuntu:xenial-20170619
+FROM ubuntu:xenial-20170802
 MAINTAINER simon.perkins@gmail.com
 
 ENV DEBIAN_FRONTEND noninteractive
