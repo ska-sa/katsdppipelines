@@ -8,7 +8,7 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
-logging.basicConfig(level=logging.INFO)
+log = logging.getLogger('katsdpcontim')
 
 # Single obit context class
 __obit_context = None
@@ -75,13 +75,13 @@ def obit_context():
         if __obit_context is not None:
             raise ValueError("Obit Context already exists")
 
-        logging.info("Creating Obit Context")
+        log.info("Creating Obit Context")
         __obit_context = ObitContext()
 
         yield
     finally:
         if __obit_context is not None:
-            logging.info("Shutting Down Obit Context")
+            log.info("Shutting Down Obit Context")
             __obit_context.close()
             __obit_context = None
 

@@ -4,7 +4,7 @@ import re
 
 import six
 
-logging.basicConfig(level=logging.INFO)
+log = logging.getLogger('katsdpcontim')
 
 # Matches expressions of the form
 # $Key = Sources Str (16, 30)
@@ -151,7 +151,7 @@ def parse_aips_config(aips_cfg_file):
         try:
             return _parse_file(f)
         except BaseException as e:
-            logging.exception("Parsing Error")
+            log.exception("Parsing Error")
             raise
 
 def aips_disk_config(infile, fitsdir, aipsdir):
@@ -164,15 +164,15 @@ def aips_disk_config(infile, fitsdir, aipsdir):
 
     if infile is None:
         infile = ""
-        logging.warn("No 'infile' was provided, setting to '%s'" % infile)
+        log.warn("No 'infile' was provided, setting to '%s'" % infile)
 
     if fitsdir is None:
-        fitsdir = os.getcwd()
-        logging.warn("No 'fitsdir' was provided, setting to '%s'" % fitsdir)
+        fitsdir = FITS.disks[aipsdisk].dirname
+        log.warn("No 'fitsdir' was provided, setting to '%s'" % fitsdir)
 
     if aipsdir is None:
-        aipsdir = os.getcwd()
-        logging.warn("No 'aipsdir' was provided, setting to '%s'" % fitsdir)
+        aipsdir = AIPS.disks[fitsdisk].dirname
+        log.warn("No 'aipsdir' was provided, setting to '%s'" % aipsdir)
 
     # Override AIPS disk configuration options
     cfg = OrderedDict([
@@ -203,7 +203,7 @@ def aips_user():
     try:
         return OSystem.PGetAIPSuser()
     except Exception as e:
-        logging.exception("Exception getting AIPS User. "
+        log.exception("Exception getting AIPS User. "
                           "Returning 105 instead")
         return 105
 
@@ -239,7 +239,7 @@ def apply_cfg_to_task(task, cfg):
         except AttributeError as e:
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
-                logging.warn("Key '{}' is not valid for this "
+                log.warn("Key '{}' is not valid for this "
                              "task and will be ignored".format(k))
             else:
                 raise
