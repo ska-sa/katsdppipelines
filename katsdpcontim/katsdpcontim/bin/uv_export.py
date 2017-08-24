@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import os.path
 from pprint import pprint
@@ -13,7 +14,8 @@ import katsdpcontim
 from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
 
-log = katsdpcontim.log
+log = logging.getLogger('katsdpcontim')
+
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
 def create_parser():

@@ -1,4 +1,5 @@
 import datetime
+import logging
 from collections import OrderedDict, Counter
 import time
 
@@ -8,9 +9,7 @@ import numpy as np
 
 import UVDesc
 
-import katsdpcontim
-
-log = katsdpcontim.log
+log = logging.getLogger('katsdpcontim')
 
 def _aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
