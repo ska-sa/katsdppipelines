@@ -46,6 +46,11 @@ class KatdalAdapter(object):
         """ Proxies :meth:`katdal.DataSet.select` """
         return self._katds.select(**kwargs)
 
+    @property
+    def shape(self):
+        """ Proxies :meth:`katdal.DataSet.shape` """
+        return self._katds.shape
+
     def uv_scans(self):
         """
         Generator returning vibility data for scan's selected
