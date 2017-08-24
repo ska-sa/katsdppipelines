@@ -25,7 +25,7 @@ class KatdalAdapter(object):
     This is not a true adapter, but perhaps if
     called that enough, it will become one.
     """
-    def __init__(self, katds, spw=0):
+    def __init__(self, katds):
         """
         Constructs a KatdalAdapter.
 
@@ -33,14 +33,9 @@ class KatdalAdapter(object):
         ----------
         katds : :class:`katdal.DataSet`
             An opened katdal dataset, probably an hdf5file
-        spw : integer
-            Index of spectral window to export
         """
         self._katds = katds
         self._cache = {}
-
-        # Set the spectral window we're handling
-        katds.select(spw=spw)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """

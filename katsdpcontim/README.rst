@@ -101,6 +101,9 @@ The AIPS filename is automatically derived from the input filename. Four command
          ``'raw'``  to indicate raw visibilities for example.
 --seq  AIPS file sequence number.
        A number used to specify bits of data in a sequence. ``'1'`` for example.
+--select  katdal select statement. Should only contain python
+          assignment statements to python literals, separated
+          by semi-colons. e.g. "scans='track';spw=0".
 
 Run AIPS
 ~~~~~~~~

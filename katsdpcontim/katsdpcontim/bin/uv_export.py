@@ -13,6 +13,7 @@ import katdal
 import katsdpcontim
 from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
+from katsdpcontim.util import parse_katdal_select
 
 log = logging.getLogger('katsdpcontim')
 
@@ -23,9 +24,18 @@ def create_parser():
     parser.add_argument("katdata", help="hdf5 observation file")
     parser.add_argument("-l", "--label", default="MeerKAT")
     parser.add_argument("-n", "--name", help="AIPS name")
-    parser.add_argument("-c", "--class", help="AIPS class", default="raw", dest="aclass")
-    parser.add_argument("-d", "--disk", help="AIPS disk", default=1)
-    parser.add_argument("-s", "--seq", help="AIPS sequence", default=1)
+    parser.add_argument("-c", "--class", default="raw", dest="aclass",
+                                        help="AIPS class")
+    parser.add_argument("-d", "--disk", default=1,
+                                        help="AIPS disk")
+    parser.add_argument("-s", "--seq", default=1,
+                                        help="AIPS sequence")
+    parser.add_argument("-ks", "--select", default="scans='track';spw=0",
+                                        type=parse_katdal_select,
+                                        help="katdal select statement "
+                                             "Should only contain python "
+                                             "assignment statements to python "
+                                             "literals, separated by semi-colons")
     return parser
 
 args = create_parser().parse_args()
@@ -36,17 +46,9 @@ if args.name is None:
     base_filename, ext = os.path.splitext(file)
     args.name = base_filename
 
-K = katdal.open(args.katdata)
-KA = KatdalAdapter(K)
-
-# pprint({k: v for k, v in KA._targets.items()})
+KA = KatdalAdapter(katdal.open(args.katdata))
 
 descriptor = KA.uv_descriptor()
-
-# pprint(descriptor)
-# pprint(KA.uv_antenna_rows)
-# pprint(KA.uv_spw_rows)
-# pprint(KA.uv_source_rows)
 
 nVisPIO = 1024
 
@@ -96,8 +98,6 @@ with obit_context():
     inaxes = tuple(desc['inaxes'][:6])  # Visibility shape, strip out trailing 0
     flat_inaxes = np.product(inaxes)
 
-    import numpy as np
-
     # UV file location variables
     firstVis = 1    # FORTRAN indexing
     numVisBuff = 0  # Number of visibilities in the buffer
@@ -105,7 +105,7 @@ with obit_context():
     # NX table rows
     nx_rows = []
 
-    KA.select(scans="track")
+    KA.select(**args.select)
 
     for u, v, w, time, baselines, source_id, vis in KA.uv_scans():
         def _write_buffer(uv, firstVis, numVisBuff):
