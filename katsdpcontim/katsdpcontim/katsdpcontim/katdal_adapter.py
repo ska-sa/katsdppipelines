@@ -40,7 +40,7 @@ class KatdalAdapter(object):
         self._cache = {}
 
         # Set the spectral window we're handling
-        self._spw = self._katds.spectral_windows[spw]
+        katds.select(spw=spw)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """
@@ -332,11 +332,32 @@ class KatdalAdapter(object):
         int
             The number of channels in this observation.
         """
-        return len(self._spw.channel_freqs)
+        return len(self._katds.channel_freqs)
+
+    @property
+    def frqsel(self):
+        """
+        The selected spectral window (FORTRAN-index)
+
+        .. code-block:: python
+
+            KA = KatdalAdapter(katdal.open('...'), spw=0)
+            assert KA.frqsel == 1
+
+        Returns
+        -------
+        int
+            The selected spectral window
+        """
+        return self._katds.spw + 1
 
     @property
     def nif(self):
         """
+        The number of spectral windows, hard-coded to one,
+        since :class:`katdal.DataSet` only supports selecting
+        by one spectral window at a time.
+
         Returns
         -------
         int
@@ -352,7 +373,7 @@ class KatdalAdapter(object):
         list or np.ndarray
             List of channel frequencies
         """
-        return self._spw.channel_freqs
+        return self._katds.channel_freqs
 
     @property
     def chinc(self):
@@ -362,7 +383,7 @@ class KatdalAdapter(object):
         float
             The channel increment, or width.
         """
-        return self._spw.channel_width
+        return self._katds.channel_width
 
     @property
     def reffreq(self):
@@ -373,7 +394,7 @@ class KatdalAdapter(object):
             The first channel frequency as the reference frequency,
             rather than the centre frequency. See `uv_format.rst`.
         """
-        return self._spw.channel_freqs[0]
+        return self._katds.channel_freqs[0]
 
     @property
     def refwave(self):
@@ -405,7 +426,7 @@ class KatdalAdapter(object):
         return {
             'ArrName': MEERKAT,
             'Freq': self.channel_freqs[0],  # Reference frequency
-            'FreqID': 1,                    # Frequency setup id
+            'FreqID': self.frqsel,          # Frequency setup id
             'numIF': self.nif,              # Number of spectral windows
             'RefDate': self.obsdat,         # Reference date
             # GST at 0h on reference data in degrees
@@ -455,9 +476,8 @@ class KatdalAdapter(object):
             'STAXOF': [0.0],
             'BEAMFWHM': [0.0],
             'ORBPARM': [],
-            'MNTSTA': [0] }
-                    for i, a in enumerate(sorted(self._katds.ants), 1)]
-
+            'MNTSTA': [0]
+        } for i, a in enumerate(sorted(self._katds.ants), 1)]
 
     @boltons.cacheutils.cachedproperty
     def uv_source_header(self):
@@ -469,10 +489,10 @@ class KatdalAdapter(object):
             for constructing a SU table header. Of the form:
         """
         return {
-            'numIF': 1,         # Number of spectral windows
-            'FreqID': 1,        # Frequency setup ID
-            'velDef': 'RADIO',  # Radio/Optical Velocity?
-            'velType': 'LSR'    # Velocity Frame of Reference (LSR is default)
+            'numIF': self.nif,     # Number of spectral windows
+            'FreqID': self.frqsel, # Frequency setup ID
+            'velDef': 'RADIO',     # Radio/Optical Velocity?
+            'velType': 'LSR'       # Velocity Frame of Reference (LSR is default)
         }
 
     @boltons.cacheutils.cachedproperty
@@ -621,8 +641,7 @@ class KatdalAdapter(object):
         -------
         list
             List of dictionaries describing each
-            spectral window (1 at present),
-            each with the following form:
+            spectral window each with the following form:
 
             .. code-block:: python
 
@@ -645,9 +664,8 @@ class KatdalAdapter(object):
             'CH WIDTH': [sw.channel_width],
             'RXCODE': ['L'],
             'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-            'TOTAL BANDWIDTH': [abs(sw.channel_width)*
-                                len(sw.channel_freqs)], }
-                for i, sw in enumerate([self._spw], 1)]
+            'TOTAL BANDWIDTH': [abs(sw.channel_width)*len(sw.channel_freqs)],
+        } for i, sw in enumerate(self._katds.spectral_windows, 1)]
 
 
     def fits_descriptor(self):
