@@ -37,6 +37,10 @@ class KatdalAdapter(object):
         # Set the spectral window we're handling
         self._spw = self._katds.spectral_windows[spw]
 
+    def select(self, **kwargs):
+        """ Proxy katdal's select method """
+        return self._katds.select(**kwargs)
+
     @boltons.cacheutils.cachedmethod('_cache')
     def _antenna_map(self):
         """
