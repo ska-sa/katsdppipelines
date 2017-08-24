@@ -1,158 +1,105 @@
 from collections import OrderedDict
 import logging
-import re
 
 import six
 
+import InfoList
+import ParserUtil
+
+from katsdpcontim import obit_err, handle_obit_err
+
 log = logging.getLogger('katsdpcontim')
-
-# Matches expressions of the form
-# $Key = Sources Str (16, 30)
-VAR_EXPR = re.compile("^\$Key\s+="
-                      "\s+(?P<variable>\S+)\s+"
-                      "(?P<type>\S+)\s+"
-                      "\((?P<dimensions>[0-9,]+)\)\s*"
-                      "#*\s*(?P<comment>.*)$")
-
-# Should match groups in VAR_EXPR, in the correct order
-REQUIRED_GROUPS = ["variable", "type", "dimensions"]
 
 def parse_aips_config(aips_cfg_file):
     """
-    Parses an AIPS config file.
+    Parses an AIPS config file into a
+    dictionary with schema
+    :code:`{ option: [type, dimensions, value]}`
 
-    Entries look something like this:
+    :code:`type_` is an enum. Look at ObitTypes.h
+    to figure it out.
 
-    ```
-    $Key = Sources Str (2, 30) # Sources to image
-    DEEP2
-    PKS 1934-638
-    ```
+    :code:`dims` indicate dimensionality of input
+    For scalar types :code:`[64,1,1,1,1]` indicates
+    a 1D array of length 64 floats.
 
-    which defines a `Sources` variable which is a
-    length 2 list of strings of length 30. The contents
-    of the variable follow the definition on each line.
+    String dims need to be handled slightly differently
+    First dimension indicates string length so for e.g.
+    :code:`["obit", "    ", "abcd"]` has dims :code:`[4,3,1,1,1]`
+    So a :code:`[4,1,1,1,1]` implies one string of length 4
+
+    :code:`value` will always be a list and is probably
+    nested if :code:`dims is setup appropriately.
+
+    Parameters
+    ----------
+    aips_cfg_file : str
+        AIPS configuration file
+
+    Returns
+    -------
+    dict
+        A dictionary of AIPS configuration options
+    """
+    err = obit_err()
+    info_list = InfoList.InfoList()
+    ParserUtil.PParse(aips_cfg_file, info_list, err)
+    handle_obit_err("Error parsing Obit configuration file '{}'"
+                        .format(aips_cfg_file), err)
+
+
+    return InfoList.PGetDict(info_list)
+
+def process_aips_config(aips_cfg_file):
+    """
+    Extract key-values from AIPS configuration file
+    into a { option: value } dictionary.
+
+    Processes the configuration so that the values are
+    suitable to apply to ObitTask objects, converting
+    singleton list to objects, for example.
+
+    Parameters
+    ----------
+    aips_cfg_file : str
+        AIPS configuration file
+
+    Returns
+    -------
+    dict
+        Configuration dictionary
     """
 
-    # Convert AIPS types to python types
-    aipstype2py = {
-        "Boo": bool,
-        "Str": str,
-        "Int": int,
-        "Flt": float
-    }
+    def _massage(option):
+        """
+        Massage values into structures suitable for
+        setting on Obit Task objects
+        """
 
-    # Convert AIPS boolean options to python bools
-    aipsbool2py = { "T": True, "F": False }
+        # Split into type, dimensions and value
+        type_, dims, value = option
 
-    def _parse_dims(dim_str):
-        """ Converts "20,30" into (20,30) for e.g. """
-        return tuple(int(d.strip()) for d in dim_str.split(","))
+        # Booleans integers must be cast to python bools
+        if type_ == 15:
+            value = [bool(v) for v in value]
 
-    def _extract_group(group_dict, group, line):
-        """ Handle key errors nicely for group_dict access """
-        try:
-            return group_dict[group]
-        except KeyError:
-            raise KeyError("AIPS %s was not present in "
-                            "AIPS variable definition '%s'" %
-                                (group, line))
+        # Check second dimension to test singletons
+        # if we're handling strings else the first dim
+        check_dim = 1 if type_ == 14 else 0
 
-    def _parse_file(f):
-        """ Parse config file line by line """
-        py_varname = None
-        py_type = None
-        py_dims = None
-        py_comment = ""
+        # Return element zero from singleton lists
+        if dims[check_dim] == 1 and len(value) == 1:
+            return value[0]
 
-        D = OrderedDict()
+        return value
 
-        for line_nr, line in enumerate(f):
-            line = line.strip()
-            # Search for comment position
-            cp = line.rfind("#")
-            cp = len(line) if cp == -1 else cp
+    return { k: _massage(o) for k, o
+            in parse_aips_config(aips_cfg_file).iteritems()}
 
-            # Ignore empty lines or lines that are merely space
-            if not line[0:cp] or line[0:cp].isspace():
-                continue
-            # We've found an AIPS variable definition
-            elif line.startswith("$Key"):
-                match = VAR_EXPR.match(line)
 
-                if not match:
-                    raise ValueError("Error parsing AIPS variable "
-                                     "definition '%s'" % line)
 
-                gd = match.groupdict()
-
-                # Extract variable name, type, and dimensions
-                aips_varname, aips_type, aips_dims = (
-                    _extract_group(gd, g, line)
-                    for g in REQUIRED_GROUPS)
-
-                # Assign variable name
-                py_varname = aips_varname
-
-                # Assign variable type
-                try:
-                    py_type = aipstype2py[aips_type]
-                except KeyError:
-                    raise ValueError("No known conversion "
-                                     "to python type "
-                                     "for AIPS type '%s'" % aips_type)
-
-                # Construct a shape tuple
-                py_dims = _parse_dims(aips_dims)
-
-                # Try to extract the comment too, but don't worry if it's not there
-                try:
-                    py_comment = _extract_group(gd, "comment", line)
-                except KeyError:
-                    pass
-
-                # print "Parsed", aips_varname, py_type, py_dims
-            elif py_varname is None:
-                continue
-            else:
-                # Get last dimension size
-                L = len(py_dims)
-                N = py_dims[-1]
-
-                if py_type in (int, float):
-                    value = [py_type(s.strip()) for
-                             s in line.split(" ")][:N]
-
-                    if len(value) == 1:
-                        value = value[0]
-
-                elif py_type in (bool,):
-                    value = aipsbool2py[line.strip()]
-                elif py_type in (str,):
-                    value = line[0:N]
-
-                # There should only be one dimension
-                if L == 1:
-                    D[py_varname] = value
-                # Two dimensions, append this value to the list
-                elif L == 2:
-                    values = D.get(py_varname, [])
-                    values.append(value)
-                    D[py_varname] = values
-                else:
-                    raise ValueError("Not handling variables with rank %s" % L)
-
-        # from pprint import pprint
-        # pprint(D)
-
-        return D
-
-    with open(aips_cfg_file, "r") as f:
-        try:
-            return _parse_file(f)
-        except BaseException as e:
-            log.exception("Parsing Error")
-            raise
+from AIPS import AIPS
+from FITS import FITS
 
 def aips_disk_config(infile, fitsdir, aipsdir):
     """
@@ -211,7 +158,7 @@ def aips_cfg(aips_cfg_file, infile=None, fitsdir=None, aipsdir=None):
     """ Construct a usable AIPS configuration """
 
     # Parse the configuration file
-    cfg = parse_aips_config(aips_cfg_file)
+    cfg = process_aips_config(aips_cfg_file)
 
     # Set the user file
     cfg['userno'] = aips_user()
