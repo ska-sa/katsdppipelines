@@ -41,8 +41,6 @@ KA = KatdalAdapter(K)
 
 # pprint({k: v for k, v in KA._targets.items()})
 
-# pprint(KA._classify_targets())
-
 descriptor = KA.uv_descriptor()
 
 # pprint(descriptor)

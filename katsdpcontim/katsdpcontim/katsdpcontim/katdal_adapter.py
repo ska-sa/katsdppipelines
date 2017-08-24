@@ -215,8 +215,8 @@ class KatdalAdapter(object):
         Returns
         -------
         list
-            (antenna1, antenna2, data_product_id) tuples, with the
-            data_product_id mapped in the following manner.
+            (antenna1, antenna2, correlator_product_id) tuples, with the
+            correlator_product_id mapped in the following manner.
 
             .. code-block:: python
 
@@ -287,28 +287,6 @@ class KatdalAdapter(object):
                             in self.correlator_products())
         return max(counts.itervalues())
 
-    def _classify_targets(self):
-        """
-        Returns
-        -------
-        tuple
-            A tuple, (bandpass, gain, image_targets),
-            of dictionaries of the form { name: target }
-        """
-        bpcals = OrderedDict()
-        gaincals = OrderedDict()
-        img_targets = OrderedDict()
-
-        for t in self._katds.catalogue.targets:
-            if 'bpcal' in t.tags:
-                bpcals[t.name] = t
-            elif 'gaincal' in t.tags:
-                gaincals[t.name] = t
-            else: # Assume all other targets are for imaging
-                img_targets[t.name] = t
-
-        return bpcals, gaincals, img_targets
-
     @boltons.cacheutils.cachedproperty
     def _targets(self):
         """
@@ -343,7 +321,6 @@ class KatdalAdapter(object):
             raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
 
             targets[name] = Target(ra, dec, raa, deca)
-
 
         return targets
 
@@ -716,7 +693,6 @@ class KatdalAdapter(object):
             'nvis': 0,
             'firstVis': 0,
             'numVisBuff': 0,
-
 
             # These are automatically calculated, but
             # are left here for illustration
