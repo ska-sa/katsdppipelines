@@ -1,12 +1,10 @@
 import argparse
-import logging
 import os
 import os.path
 from pprint import pprint
 
 import numpy as np
 
-import ObitTalkUtil
 import UV
 
 import katdal
@@ -15,8 +13,7 @@ import katsdpcontim
 from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
 from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
 
-logging.basicConfig(level=logging.INFO)
-
+log = katsdpcontim.log
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
 def create_parser():
@@ -38,31 +35,26 @@ if args.name is None:
     args.name = base_filename
 
 K = katdal.open(args.katdata)
-K.select(scans='track')
 KA = KatdalAdapter(K)
 
-pprint({k: v for k, v in KA._targets.items()})
+# pprint({k: v for k, v in KA._targets.items()})
 
-pprint(KA._classify_targets())
+# pprint(KA._classify_targets())
 
 descriptor = KA.uv_descriptor()
 
-pprint(descriptor)
-pprint(KA.uv_antenna_rows)
-pprint(KA.uv_spw_rows)
-pprint(KA.uv_source_rows)
+# pprint(descriptor)
+# pprint(KA.uv_antenna_rows)
+# pprint(KA.uv_spw_rows)
+# pprint(KA.uv_source_rows)
 
 nVisPIO = 1024
 
 with obit_context():
-    print ObitTalkUtil.ListAIPSDirs()
-    print ObitTalkUtil.ListFITSDirs()
-
     err = obit_err()
 
-    logging.info("Creating '{}.{}.{}' "
-                "on AIPS disk '{}'".format(args.name, args.aclass,
-                                           args.seq, args.disk))
+    log.info("Creating '{}.{}.{}' on AIPS disk '{}'"
+        .format(args.name, args.aclass, args.seq, args.disk))
 
     # Create the AIPS UV file
     uv = UV.newPAUV(args.label, args.name, args.aclass, args.disk, args.seq, False, err)
@@ -104,105 +96,18 @@ with obit_context():
     inaxes = tuple(desc['inaxes'][:6])  # Visibility shape, strip out trailing 0
     flat_inaxes = np.product(inaxes)
 
-    import itertools
-    import time
-
     import numpy as np
-    import six
-
-    nstokes = KA.nstokes
-    cp = KA.correlator_products()
-
-    # Lexicographically sort correlation products on (a1, a2, cid)
-    sort_fn = lambda x: (cp[x].ant1_ix,cp[x].ant2_ix,cp[x].cid)
-    cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
-    corr_products = np.asarray([cp[i] for i in cp_argsort])
-    refwave = KA.refwave
-
-    # Take baseline products so that we don't recompute
-    # UVW coordinates for all correlator products
-    bl_products = corr_products.reshape(-1, nstokes)[:,0]
-    nbl, = bl_products.shape
-
-    # AIPS baseline IDs
-    aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
-                                                    dtype=np.float32)
 
     # UV file location variables
     firstVis = 1    # FORTRAN indexing
     numVisBuff = 0  # Number of visibilities in the buffer
 
-    uv_source_map = KA.uv_source_map
-
-    # Get midnight on the observation date
-    midnight = KA.midnight
-
     # NX table rows
     nx_rows = []
 
-    for si, (scan, state, target) in enumerate(K.scans()):
-        # Retrieve UV source information for this scan
-        try:
-            aips_source = uv_source_map[target.name]
-        except KeyError:
-            logging.warn("Target '{}' will not be exported".format(target.name))
-            continue
-        else:
-            # Retrieve the source ID
-            aips_source_id = aips_source['ID. NO.'][0]
+    KA.select(scans="track")
 
-        # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
-        # nbl*npol is all mixed up at this point
-        times = K.timestamps[:]
-        vis = K.vis[:].astype(np.complex64)
-        weights = K.weights[:].astype(np.float32)
-        flags = K.flags[:]
-
-        # Get dimension shapes
-        ntime, nchan, ncorrprods = vis.shape
-
-        # Apply flags by negating weights
-        weights[np.where(flags)] = -32767.0
-
-        # AIPS visibility is [real, imag, weight]
-        # (ntime, 3, nchan, nbl*npol)
-        vis = np.stack([vis.real, vis.imag, weights], axis=1)
-        assert vis.shape == (ntime, 3, nchan, ncorrprods)
-
-        # Reorganise correlation product dim so that
-        # polarisations are grouped per baseline.
-        # producing (ntime, 3, nchan, ncorrprods)
-        vis = vis[:,:,:,cp_argsort]
-        assert vis.shape == (ntime, 3, nchan, ncorrprods)
-
-        # Then split correlations into baselines and polarisation
-        # and transpose so that we have (ntime, nbl, 3, npol, nchan)
-        vis = vis.reshape(ntime, 3, nchan, nbl, nstokes).transpose(0,3,1,4,2)
-        assert vis.shape == (ntime, nbl, 3, nstokes, nchan)
-
-        # Reshape to introduce nif, ra and dec
-        # It's now (ntime, nbl, 3, npol, nchan, nif, ra, dec)
-        vis = np.reshape(vis, (ntime, nbl) + inaxes)
-
-        print "Visibilities of shape {} and size {:.2f}MB".format(
-                    vis.shape, vis.nbytes / (1024.*1024.))
-
-        # Compute UVW coordinates from baselines
-        # (3, ntimes, nbl)
-        uvw = (np.stack([target.uvw(bp.ant1, antenna=bp.ant2, timestamp=times)
-                                                for bp in bl_products], axis=2))
-
-        assert uvw.shape == (3, ntime, nbl), uvw.shape
-
-        # UVW coordinates in seconds
-        aips_uvw = uvw / refwave
-        # Convert difference between timestep and
-        # midnight on observation date to days.
-        # This, combined with (probably) JDObs in the
-        # UV descriptor, givens the Julian Date in days
-        # of the visibility.
-        aips_time = (times - midnight) / 86400.0
-
+    for u, v, w, time, baselines, source_id, vis in KA.uv_scans():
         def _write_buffer(uv, firstVis, numVisBuff):
             """
             Use as follows:
@@ -233,8 +138,8 @@ with obit_context():
             uv.Desc.Dict = desc
 
             nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
-            logging.info("firstVis={} numVisBuff={} Writing {:.2f}MB visibilities".format(
-                firstVis, numVisBuff, nbytes / (1024.*1024.)))
+            log.info("Writing {:.2f}MB visibilities. firstVis={} numVisBuff={}."
+                .format(nbytes / (1024.*1024.), firstVis, numVisBuff))
 
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
             uv.Write(err, firstVis=firstVis)
@@ -247,18 +152,20 @@ with obit_context():
         start_vis = firstVis
         vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
 
+        ntime, nbl = u.shape
+
         for t in range(ntime):
             for bl in range(nbl):
                 # Index within vis_buffer
                 idx = numVisBuff*lrec
 
                 # Write random parameters
-                vis_buffer[idx+ilocu] = aips_uvw[0,t,bl]   # U
-                vis_buffer[idx+ilocv] = aips_uvw[1,t,bl]   # V
-                vis_buffer[idx+ilocw] = aips_uvw[2,t,bl]   # W
-                vis_buffer[idx+iloct] = aips_time[t]       # time
-                vis_buffer[idx+ilocb] = aips_baselines[bl] # baseline id
-                vis_buffer[idx+ilocsu] = aips_source_id    # source id
+                vis_buffer[idx+ilocu] = u[t,bl]           # U
+                vis_buffer[idx+ilocv] = v[t,bl]           # V
+                vis_buffer[idx+ilocw] = w[t,bl]           # W
+                vis_buffer[idx+iloct] = time[t]           # time
+                vis_buffer[idx+ilocb] = baselines[bl]     # baseline id
+                vis_buffer[idx+ilocsu] = source_id        # source id
 
                 # Visibilities should be written to the buffer in FORTRAN order
                 flat_vis = vis[t,bl].ravel(order='F')
@@ -281,9 +188,9 @@ with obit_context():
             'NumFields': 8,
             '_status': [0],
 
-            'TIME': [(aips_time[-1] + aips_time[0])/2],      # Time Centroid
-            'TIME INTERVAL': [aips_time[-1] - aips_time[0]],
-            'SOURCE ID': [aips_source_id],
+            'TIME': [(time[-1] + time[0])/2],      # Time Centroid
+            'TIME INTERVAL': [time[-1] - time[0]],
+            'SOURCE ID': [source_id],
             'SUBARRAY': [1],                  # Should match 'AIPS AN' header
             'FREQ ID': [1],                   # Should match 'AIPS FQ' row
             'START VIS': [start_vis],

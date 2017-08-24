@@ -4,8 +4,13 @@ import time
 
 import attr
 import boltons.cacheutils
+import numpy as np
 
 import UVDesc
+
+import katsdpcontim
+
+log = katsdpcontim.log
 
 def _aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
@@ -15,7 +20,8 @@ MEERKAT = 'MeerKAT'
 
 class KatdalAdapter(object):
     """
-    Adapts a katdal data source to look a bit more like a UV data source.
+    Adapts a :class:`katdal.DataSet` to look
+    a bit more like a UV file.
 
     This is not a true adapter, but perhaps if
     called that enough, it will become one.
@@ -26,8 +32,8 @@ class KatdalAdapter(object):
 
         Parameters
         ----------
-        katds : katdal data source object
-            An opened katdal data source, probably an hdf5file
+        katds : :class:`katdal.DataSet`
+            An opened katdal dataset, probably an hdf5file
         spw : integer
             Index of spectral window to export
         """
@@ -38,8 +44,110 @@ class KatdalAdapter(object):
         self._spw = self._katds.spectral_windows[spw]
 
     def select(self, **kwargs):
-        """ Proxy katdal's select method """
+        """ Proxies :meth:`katdal.DataSet.select` """
         return self._katds.select(**kwargs)
+
+    def uv_scans(self):
+        """
+        Generator returning vibility data for scan's selected
+        via the :meth:`KatdalAdapter.select` method.
+
+        Returns
+        -------
+        tuple
+            (u, v, w, time, baseline_index, source_id, visibilities)
+        """
+        cp = self.correlator_products()
+        nstokes = self.nstokes
+
+        # Lexicographically sort correlation products on (a1, a2, cid)
+        sort_fn = lambda x: (cp[x].ant1_ix,cp[x].ant2_ix,cp[x].cid)
+        cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
+        corr_products = np.asarray([cp[i] for i in cp_argsort])
+
+        # Take baseline products so that we don't recompute
+        # UVW coordinates for all correlator products
+        bl_products = corr_products.reshape(-1, nstokes)[:,0]
+        nbl, = bl_products.shape
+
+        # AIPS baseline IDs
+        aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
+                                                        dtype=np.float32)
+
+        refwave = self.refwave
+        midnight = self.midnight
+        uv_source_map = self.uv_source_map
+
+        for si, state, target in self._katds.scans():
+            # Retrieve UV source information for this scan
+            try:
+                aips_source = uv_source_map[target.name]
+            except KeyError:
+                logging.warn("Target '{}' will not be exported"
+                                        .format(target.name))
+                continue
+            else:
+                # Retrieve the source ID
+                aips_source_id = aips_source['ID. NO.'][0]
+
+            # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
+            # nbl*npol is all mixed up at this point
+            times = self._katds.timestamps[:]
+            vis = self._katds.vis[:].astype(np.complex64)
+            weights = self._katds.weights[:].astype(np.float32)
+            flags = self._katds.flags[:]
+
+            # Get dimension shapes
+            ntime, nchan, ncorrprods = vis.shape
+
+            # Apply flags by negating weights
+            weights[np.where(flags)] = -32767.0
+
+            # AIPS visibility is [real, imag, weight]
+            # (ntime, 3, nchan, nbl*npol)
+            vis = np.stack([vis.real, vis.imag, weights], axis=1)
+            assert vis.shape == (ntime, 3, nchan, ncorrprods)
+
+            # Reorganise correlation product dim so that
+            # polarisations are grouped per baseline.
+            # producing (ntime, 3, nchan, ncorrprods)
+            vis = vis[:,:,:,cp_argsort]
+            assert vis.shape == (ntime, 3, nchan, ncorrprods)
+
+            # Then split correlations into baselines and polarisation
+            # and transpose so that we have (ntime, nbl, 3, npol, nchan)
+            vis = (vis.reshape(ntime, 3, nchan, nbl, nstokes)
+                      .transpose(0,3,1,4,2))
+            assert vis.shape == (ntime, nbl, 3, nstokes, nchan)
+
+            # Reshape to introduce nif, ra and dec
+            # It's now (ntime, nbl, 3, npol, nchan, nif, ra, dec)
+            vis = np.reshape(vis, (ntime, nbl, 3, nstokes, nchan, 1, 1, 1))
+
+            log.info("Read visibilities of shape {} and size {:.2f}MB"
+                .format(vis.shape, vis.nbytes / (1024.*1024.)))
+
+            # Compute UVW coordinates from baselines
+            # (3, ntimes, nbl)
+            u, v, w = np.stack([target.uvw(bp.ant1, antenna=bp.ant2,
+                                                     timestamp=times)
+                                      for bp in bl_products], axis=2)
+
+            assert u.shape == v.shape == w.shape == (ntime, nbl)
+
+            # UVW coordinates in seconds
+            aips_u, aips_v, aips_w = (c / refwave for c in (u, v, w))
+            # Convert difference between timestep and
+            # midnight on observation date to days.
+            # This, combined with (probably) JDObs in the
+            # UV descriptor, givens the Julian Date in days
+            # of the visibility.
+            aips_time = (times - midnight) / 86400.0
+
+            # Yield this scan's data
+            yield (aips_u, aips_v, aips_w,
+                  aips_time, aips_baselines, aips_source_id,
+                  vis)
 
     @boltons.cacheutils.cachedmethod('_cache')
     def _antenna_map(self):
