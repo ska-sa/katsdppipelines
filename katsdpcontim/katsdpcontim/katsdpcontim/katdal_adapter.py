@@ -562,6 +562,18 @@ class KatdalAdapter(object):
                 for i, sw in enumerate([self._spw], 1)]
 
 
+    def fits_descriptor(self):
+        """ FITS visibility descriptor setup """
+        return {
+            'naxis': 6,
+            'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
+            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
+            'cdelt': [1.0,-1.0, self.chinc, 1.0, 0.0, 0.0],
+            'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
+            'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        }
+
     def uv_descriptor(self):
         """
         Returns
@@ -572,7 +584,10 @@ class KatdalAdapter(object):
             when creating a new AIPS UV data file.
         """
 
-        desc = {
+        # FITS descriptor is the base for our uv_descriptor
+        desc = self.fits_descriptor()
+
+        desc.update({
             # Observation
             'obsdat': self.obsdat,
             'observer': self.observer,
@@ -591,14 +606,6 @@ class KatdalAdapter(object):
             'firstVis': 0,
             'numVisBuff': 0,
 
-            # FITS visibility data setup
-            'naxis': 6,
-            'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
-            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
-            'cdelt': [1.0,-1.0, self.chinc, 1.0, 0.0, 0.0],
-            'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
-            'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 
             # These are automatically calculated, but
             # are left here for illustration
@@ -613,7 +620,7 @@ class KatdalAdapter(object):
             'jlocif': 3,  # IF
             'jlocr': 4,   # RA
             'jlocd': 5,   # DEC
-        }
+        })
 
         # Random parameter keys, indices and coordinate systems
         # index == -1 indicates its absence in the Visibility Buffer
