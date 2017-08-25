@@ -105,6 +105,26 @@ The AIPS filename is automatically derived from the input filename. Four command
           assignment statements to python literals, separated
           by semi-colons. e.g. "scans='track';spw=0".
 
+Compare export versus legacy export
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An observation export can be compared against the legacy export
+code available in the older ``katim`` package:
+
+.. code-block::
+
+    # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+    # legacy_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+    # cmp_uv.py -n1 1500148809 -c1 raw -n2 1500148809 -c2 legacy
+
+This will iterate over the visibilities in each file comparing
+one against the other and logging comparison failures.
+
+**Note that the time random parameter is slightly different
+in current vs legacy. This is because the starting time,
+or midnight is computed from the** :code:`katdal.DataSet.start_time.sec`
+**rather than** :code:`katdal.DataSet.timestamps[1:2]`.
+
 Run AIPS
 ~~~~~~~~
 
