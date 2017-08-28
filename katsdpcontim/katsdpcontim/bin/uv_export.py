@@ -168,7 +168,7 @@ with obit_context():
                 vis_buffer[idx+ilocsu] = source_id        # source id
 
                 # Visibilities should be written to the buffer in FORTRAN order
-                flat_vis = vis[t,bl].ravel(order='F')
+                flat_vis = vis[t,bl].ravel()
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
                 numVisBuff += 1

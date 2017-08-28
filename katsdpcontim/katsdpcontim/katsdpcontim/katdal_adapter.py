@@ -73,9 +73,17 @@ class KatdalAdapter(object):
         aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
                                                         dtype=np.float32)
 
+        # Get the AIPS visibility data shape (inaxes)
+        # reverse to go from FORTRAN to C ordering
+        fits_desc = self.fits_descriptor()
+        inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
+
+        # Mapping from katdal source name to UV source information
+        uv_source_map = self.uv_source_map
+
+        # Useful constants
         refwave = self.refwave
         midnight = self.midnight
-        uv_source_map = self.uv_source_map
 
         for si, state, target in self._katds.scans():
             # Retrieve UV source information for this scan
@@ -99,29 +107,26 @@ class KatdalAdapter(object):
             # Get dimension shapes
             ntime, nchan, ncorrprods = vis.shape
 
+            log.info("Scan data shape '{}'".format(vis.shape))
+
             # Apply flags by negating weights
             weights[np.where(flags)] = -32767.0
 
             # AIPS visibility is [real, imag, weight]
-            # (ntime, 3, nchan, nbl*npol)
-            vis = np.stack([vis.real, vis.imag, weights], axis=1)
-            assert vis.shape == (ntime, 3, nchan, ncorrprods)
+            # Stacking gives us (ntime, nchan, nbl*npol, 3)
+            vis = np.stack([vis.real, vis.imag, weights], axis=3)
+            assert vis.shape == (ntime, nchan, ncorrprods, 3)
 
             # Reorganise correlation product dim so that
             # polarisations are grouped per baseline.
-            # producing (ntime, 3, nchan, ncorrprods)
-            vis = vis[:,:,:,cp_argsort]
-            assert vis.shape == (ntime, 3, nchan, ncorrprods)
+            # Then reshape to separate the two dimensions
+            vis = vis[:,:,cp_argsort,:].reshape(ntime, nchan, nbl, nstokes, 3)
 
-            # Then split correlations into baselines and polarisation
-            # and transpose so that we have (ntime, nbl, 3, npol, nchan)
-            vis = (vis.reshape(ntime, 3, nchan, nbl, nstokes)
-                      .transpose(0,3,1,4,2))
-            assert vis.shape == (ntime, nbl, 3, nstokes, nchan)
-
-            # Reshape to introduce nif, ra and dec
-            # It's now (ntime, nbl, 3, npol, nchan, nif, ra, dec)
-            vis = np.reshape(vis, (ntime, nbl, 3, nstokes, nchan, 1, 1, 1))
+            # (1) transpose so that we have (ntime, nbl, nchan, npol, 3)
+            # (2) reshape to include the full inaxes shape,
+            #     including singleton nif, ra and dec dimensions
+            vis = (vis.transpose(0,2,1,3,4)
+                      .reshape((ntime,nbl,) + inaxes))
 
             log.info("Read visibilities of shape {} and size {:.2f}MB"
                 .format(vis.shape, vis.nbytes / (1024.*1024.)))
