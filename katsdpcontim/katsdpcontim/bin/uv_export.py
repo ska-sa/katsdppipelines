@@ -32,6 +32,9 @@ def create_parser():
                                         help="AIPS disk")
     parser.add_argument("-s", "--seq", default=1,
                                         help="AIPS sequence")
+    parser.add_argument("--nvispio", default=1024,
+                                        help="Number of visibilities "
+                                             "read/written per IO call")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
                                         type=parse_katdal_select,
                                         help="katdal select statement "
@@ -50,8 +53,6 @@ if args.name is None:
 
 KA = KatdalAdapter(katdal.open(args.katdata))
 
-nVisPIO = 1024
-
 with obit_context():
     err = obit_err()
 
@@ -67,7 +68,7 @@ with obit_context():
     uvf.update_descriptor(KA.uv_descriptor()) # Needs to happen after subtables
 
     # Set number of visibilities read/written at a time
-    uvf.List.set("nVisPIO", nVisPIO)
+    uvf.List.set("nVisPIO", args.nvispio)
 
     # WRITEONLY correctly creates a buffer on the UV object
     # READWRITE only creates a buffer
@@ -161,7 +162,7 @@ with obit_context():
                 numVisBuff += 1
 
                 # Hit the limit, write
-                if numVisBuff == nVisPIO:
+                if numVisBuff == args.nvispio:
                     firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff)
 
         # Write out any remaining visibilities
