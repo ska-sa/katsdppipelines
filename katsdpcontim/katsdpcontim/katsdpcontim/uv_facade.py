@@ -1,12 +1,80 @@
+from functools import partial
+
+import AIPSDir
+import OSystem
 import UV
 import UVDesc
 import Table
 
 from obit_context import obit_err, handle_obit_err
 
+def uv_file_mode(mode):
+    """ Returns UV file mode given string mode """
+    read = 'r' in mode
+    write = 'w' in mode
+    readcal = 'c' in mode
+
+    if readcal:
+        return UV.READCAL
+    elif read and write:
+        return UV.READWRITE
+    elif write:
+        return UV.WRITEONLY
+    # Read by default
+    else:
+        return UV.READONLY
+
+def _open_aips_uv(name, disk, aclass=None, seq=None, mode=None):
+    """ Open/create the specified AIPS UV file """
+    err = obit_err()
+
+    if aclass is None:
+        aclass = "raw"
+
+    if seq is None:
+        seq = 1
+
+    # Possibly abstract this too
+    label = "katuv"
+    uv = UV.newPAUV(label, name, aclass, disk, seq, False, err)
+    handle_obit_err("Error opening uv file", err)
+    return uv
+
+def open_uv(name, disk, aclass=None, seq=None, data_type=None, mode=None):
+    err = obit_err()
+
+    if mode is None:
+        mode = "r"
+
+    if data_type is None:
+        data_type = "AIPS"
+
+    uv_mode = uv_file_mode(mode)
+
+    if data_type.upper() == "AIPS":
+        method = partial(_open_aips_uv, name, disk, aclass, seq, mode)
+    elif data_type.upper() == "FITS":
+        raise NotImplementedError("FITS UV creation via newPFUV "
+                                  "not yet supported.")
+    else:
+        raise ValueError("Invalid data_type '{}'".format(data_type))
+
+    uv = method()
+    uv.Open(uv_mode, err)
+    handle_obit_err("Error opening uv file", err)
+
+    return UVFacade(uv)
+
 class UVFacade(object):
     """
-    Provides a simplified interface to an Obit UV object
+    Provides a simplified interface to an Obit UV object.
+
+    ::
+
+        But you've got to look past the hair and the
+        cute, cuddly thing - it's all a deceptive facade
+
+        https://www.youtube.com/watch?v=DWkMgJ2UknQ
     """
     def __init__(self, uv):
         """
@@ -19,6 +87,14 @@ class UVFacade(object):
         """
         self._uv = uv
 
+        # Construct a name for this object
+        if uv.FileType == "AIPS":
+            self._name = "{}.{}.{}".format(uv.Aname, uv.Aclass, uv.Aseq)
+        elif uv.FileType == "FITS":
+            self._name = uv.FileName
+        else:
+            raise ValueError("Invalid uv.FileType '{}'".format(uv.FileType))
+
     def __enter__(self):
         return self
 
@@ -27,7 +103,43 @@ class UVFacade(object):
 
     def close(self):
         """ Closes the wrapped UV file """
-        self._uv.Close(obit_err())
+        err = obit_err()
+        self._uv.Close(err)
+        handle_obit_err("Error closing uv file", err)
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def Desc(self):
+        return self._uv.Desc
+
+    @property
+    def List(self):
+        return self._uv.List
+
+    @property
+    def VisBuf(self):
+        return self._uv.VisBuf
+
+    def Open(self, mode):
+        err = obit_err()
+        self._uv.Open(mode, err)
+        handle_obit_err("Error opening UV file '%s'" % self._name, err)
+
+    def Close(self):
+        return self.close()
+
+    def Read(self, firstVis=None):
+        err = obit_err()
+        self._uv.Read(err, firstVis=firstVis)
+        handle_obit_err("Error reading UV file '%s'" % self._name)
+
+    def Write(self, firstVis=None):
+        err = obit_err()
+        self._uv.Write(err, firstVis=firstVis)
+        handle_obit_err("Error writing UV file '%s'" % self._name)
 
     def update_descriptor(self, descriptor):
         """
@@ -45,7 +157,8 @@ class UVFacade(object):
         desc.update(descriptor)
         self._uv.Desc.Dict = desc
         self._uv.UpdateDesc(err)
-        handle_obit_err("Error updating UV Descriptor", err)
+        handle_obit_err("Error updating UV Descriptor on '{}'"
+                            .format(self._name), err)
 
     def create_antenna_table(self, header, rows):
         """
@@ -77,9 +190,9 @@ class UVFacade(object):
         err = obit_err()
 
         ant_table = self._uv.NewTable(Table.READWRITE, "AIPS AN", 1, err)
-        handle_obit_err("Error creating AN table.", err)
+        handle_obit_err("Error creating '%s' AN table." % self._name, err)
         ant_table.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening AN table.", err)
+        handle_obit_err("Error opening '%s' AN table." % self._name, err)
 
         # Update header, forcing underlying table update
         ant_table.keys.update(header)
@@ -88,12 +201,12 @@ class UVFacade(object):
         # Write each row to the antenna table
         for ri, row in enumerate(rows, 1):
             ant_table.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in AN table. "
-                            "Row data is '%s'" % (ri, row), err)
+            handle_obit_err("Error writing row %d in '%s' AN table. "
+                            "Row data is '%s'" % (ri, self._name, row), err)
 
         # Close table
         ant_table.Close(err)
-        handle_obit_err("Error closing AN table.", err)
+        handle_obit_err("Error closing '%s' AN table." % self._name, err)
 
     def create_frequency_table(self, header, rows):
         """
@@ -143,9 +256,9 @@ class UVFacade(object):
 
         # Create and open a new FQ table
         fqtab = self._uv.NewTable(Table.READWRITE, "AIPS FQ",1, err, numIF=noif)
-        handle_obit_err("Error creating FQ table,", err)
+        handle_obit_err("Error creating '%s' FQ table." % self._name, err)
         fqtab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening FQ table,", err)
+        handle_obit_err("Error opening '%s' FQ table." % self._name, err)
 
         # Update header, forcing underlying table update
         fqtab.keys.update(header)
@@ -154,12 +267,12 @@ class UVFacade(object):
         # Write spectral window rows
         for ri, row in enumerate(rows, 1):
             fqtab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in FQ table. "
-                            "Row data is '%s'" % (ri, row), err)
+            handle_obit_err("Error writing row %d in '%s' FQ table. "
+                            "Row data is '%s'" % (ri, self._name, row), err)
 
         # Close
         fqtab.Close(err)
-        handle_obit_err("Error closing FQ table.")
+        handle_obit_err("Error closing '%s' FQ table." % self._name, err)
 
     def create_index_table(self, header, rows):
         """
@@ -170,20 +283,19 @@ class UVFacade(object):
 
         # Create and open the SU table
         nxtab = self._uv.NewTable(Table.READWRITE, "AIPS NX", 1, err)
-        handle_obit_err("Error creating NX table", err)
+        handle_obit_err("Error creating '%s' NX table." % self._name, err)
         nxtab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening NX table", err)
+        handle_obit_err("Error opening '%s' NX table." % self._name, err)
 
-        # Update header
+        # Update header, forcing underlying table update
         nxtab.keys.update(header)
-        # Force update
         Table.PDirty(nxtab)
 
         # Write index table rows
         for ri, row in enumerate(rows, 1):
             nxtab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in NX table. "
-                            "Row data is '%s'" % (ri, row), err)
+            handle_obit_err("Error writing row %d in '%s' NX table. "
+                            "Row data is '%s'" % (ri, self._name, row), err)
 
 
         nxtab.Close(err)
@@ -226,9 +338,9 @@ class UVFacade(object):
 
         # Create and open the SU table
         sutab = self._uv.NewTable(Table.READWRITE, "AIPS SU",1,err)
-        handle_obit_err("Error creating SU table", err)
+        handle_obit_err("Error creating '%s' SU table." % self._name, err)
         sutab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening SU table", err)
+        handle_obit_err("Error opening '%s' SU table." % self._name, err)
 
         # Update header, forcing underlying table update
         sutab.keys.update(header)
@@ -237,11 +349,12 @@ class UVFacade(object):
         # Write rows
         for ri, row in enumerate(rows, 1):
             sutab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing SU table", err)
+            handle_obit_err("Error writing row %d in '%s' SU table. "
+                            "Row data is '%s'" % (ri, self._name, row), err)
 
         # Close the table
         sutab.Close(err)
-        handle_obit_err("Error closing SU table", err)
+        handle_obit_err("Error closing '%s' SU table." % self._name, err)
 
     def create_calibration_table(self, header, rows):
         """
@@ -250,24 +363,22 @@ class UVFacade(object):
         err = obit_err()
 
         cltab = self._uv.NewTable(Table.READWRITE, "AIPS CL", 1, err)
-        handle_obit_err("Error creating CL table", err)
+        handle_obit_err("Error creating '%s' CL table." % self._name, err)
         cltab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening CL table", err)
+        handle_obit_err("Error opening '%s' CL table." % self._name, err)
 
         # Update header, forcing underlying table update
         cltab.keys.update(header)
-        pprint("CLTAB Header")
-        pprint(cltab.keys)
         Table.PDirty(cltab)
 
         # Write calibration table rows
         for ri, row in enumerate(rows, 1):
             cltab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in CL table. "
-                            "Row data is '%s'" % (ri, row), err)
+            handle_obit_err("Error writing row %d in '%s' CL table. "
+                            "Row data is '%s'" % (ri, self._name, row), err)
 
         cltab.Close(err)
-        handle_obit_err("Error closing CL table", err)
+        handle_obit_err("Error closing '%s' CL table" % self._name, err)
 
     def create_calibration_table_from_index(self, max_ant_nr):
         """
@@ -281,4 +392,5 @@ class UVFacade(object):
         """
         err = obit_err()
         UV.PTableCLfromNX(self._uv, max_ant_nr, err)
-        handle_obit_err("Error creating CL table from NX table", err)
+        handle_obit_err("Error creating '%s' CL table from NX table"
+                                                    % self._name, err)
