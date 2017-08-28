@@ -11,8 +11,10 @@ import UV
 import katdal
 
 import katsdpcontim
-from katsdpcontim import KatdalAdapter, UVFacade, handle_obit_err, obit_context, obit_err
-from katsdpcontim.uvfits_utils import open_aips_file_from_fits_template
+from katsdpcontim import (KatdalAdapter, UVFacade,
+                        open_uv,
+                        handle_obit_err, obit_context,
+                        obit_err,)
 from katsdpcontim.util import parse_katdal_select
 
 log = logging.getLogger('katsdpcontim')
@@ -58,12 +60,7 @@ with obit_context():
     log.info("Creating '{}.{}.{}' on AIPS disk '{}'"
         .format(args.name, args.aclass, args.seq, args.disk))
 
-    # Create the AIPS UV file
-    uv = UV.newPAUV(args.label, args.name, args.aclass, args.disk, args.seq, False, err)
-    uv.Open(UV.READWRITE, err)
-    handle_obit_err("Error creating UV file", err)
-
-    uvf = UVFacade(uv)
+    uvf = open_uv(args.name, args.disk, args.aclass, args.seq, mode="w")
     uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
     uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
     uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
@@ -72,16 +69,15 @@ with obit_context():
     uvf.update_descriptor(KA.uv_descriptor())
 
     # Set number of visibilities read/written at a time
-    uv.List.set("nVisPIO", nVisPIO)
+    uvf.List.set("nVisPIO", nVisPIO)
 
     # WRITEONLY correctly creates a buffer on the UV object
     # READWRITE only creates a buffer
     # on the UV object if the underlying file exists...
-    uv.Open(UV.WRITEONLY, err)
-    handle_obit_err("Error opening UV file", err)
+    uvf.Open(UV.WRITEONLY)
 
     # Configure number of visibilities written in a batch
-    desc = uv.Desc.Dict
+    desc = uvf.Desc.Dict
 
     # Number of random parameters
     nrparm = desc['nrparm']
@@ -108,7 +104,7 @@ with obit_context():
     KA.select(**args.select)
 
     for u, v, w, time, baselines, source_id, vis in KA.uv_scans():
-        def _write_buffer(uv, firstVis, numVisBuff):
+        def _write_buffer(uvf, firstVis, numVisBuff):
             """
             Use as follows:
 
@@ -131,26 +127,25 @@ with obit_context():
 
             """
             # Update descriptor
-            desc = uv.Desc.Dict
+            desc = uvf.Desc.Dict
             desc['numVisBuff'] = numVisBuff
             # If firstVis is passed through via the descriptor it uses C indexing (0)
             # desc['firstVis'] = firstVis - 1
-            uv.Desc.Dict = desc
+            uvf.Desc.Dict = desc
 
             nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
             log.info("Writing {:.2f}MB visibilities. firstVis={} numVisBuff={}."
                 .format(nbytes / (1024.*1024.), firstVis, numVisBuff))
 
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
-            uv.Write(err, firstVis=firstVis)
-            handle_obit_err("Error writing UV file", err)
+            uvf.Write(firstVis=firstVis)
 
             # Pass through firstVis and 0 numVisBuff
             return firstVis + numVisBuff, 0
 
         # Starting visibility of this scan
         start_vis = firstVis
-        vis_buffer = np.frombuffer(uv.VisBuf, count=-1, dtype=np.float32)
+        vis_buffer = np.frombuffer(uvf.VisBuf, count=-1, dtype=np.float32)
 
         ntime, nbl = u.shape
 
@@ -175,11 +170,11 @@ with obit_context():
 
                 # Hit the limit, write
                 if numVisBuff == nVisPIO:
-                    firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+                    firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff)
 
         # Write out any remaining visibilities
         if numVisBuff > 0:
-            firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+            firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff)
 
         # Create an index for this scan
         nx_rows.append({
@@ -201,5 +196,4 @@ with obit_context():
     uvf.create_index_table({}, nx_rows)
     uvf.create_calibration_table_from_index(KA.max_antenna_number)
 
-    uv.Close(err)
-    handle_obit_err("Error closing UV file", err)
+    uvf.Close()
