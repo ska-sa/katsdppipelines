@@ -50,8 +50,6 @@ if args.name is None:
 
 KA = KatdalAdapter(katdal.open(args.katdata))
 
-descriptor = KA.uv_descriptor()
-
 nVisPIO = 1024
 
 with obit_context():
@@ -60,13 +58,13 @@ with obit_context():
     log.info("Creating '{}.{}.{}' on AIPS disk '{}'"
         .format(args.name, args.aclass, args.seq, args.disk))
 
+    # Create a UV file and subtables, then update it
+    # with MeerKAT descriptor data
     uvf = open_uv(args.name, args.disk, args.aclass, args.seq, mode="w")
     uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
     uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
     uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
-
-    # Update the UV descriptor with MeerKAT metadata
-    uvf.update_descriptor(KA.uv_descriptor())
+    uvf.update_descriptor(KA.uv_descriptor()) # Needs to happen after subtables
 
     # Set number of visibilities read/written at a time
     uvf.List.set("nVisPIO", nVisPIO)
@@ -76,11 +74,10 @@ with obit_context():
     # on the UV object if the underlying file exists...
     uvf.Open(UV.WRITEONLY)
 
-    # Configure number of visibilities written in a batch
-    desc = uvf.Desc.Dict
-
     # Number of random parameters
+    desc = uvf.Desc.Dict
     nrparm = desc['nrparm']
+    lrec = desc['lrec']       # Length of visibility buffer record
 
     # Random parameter indices
     ilocu = desc['ilocu']     # U
@@ -90,17 +87,14 @@ with obit_context():
     ilocb = desc['ilocb']     # baseline id
     ilocsu = desc['ilocsu']   # source id
 
-    lrec = desc['lrec']       # Length of visibility buffer record
-    inaxes = tuple(desc['inaxes'][:6])  # Visibility shape, strip out trailing 0
-    flat_inaxes = np.product(inaxes)
-
     # UV file location variables
-    firstVis = 1    # FORTRAN indexing
+    firstVis = 0    # C indexing
     numVisBuff = 0  # Number of visibilities in the buffer
 
     # NX table rows
     nx_rows = []
 
+    # Perform selection on the katdal object
     KA.select(**args.select)
 
     for u, v, w, time, baselines, source_id, vis in KA.uv_scans():
@@ -114,9 +108,9 @@ with obit_context():
 
             Parameters
             ----------
-            uv: Obit UV object
+            uvf: :class:`UVFacade` object
             firstVis: integer
-                First visibility to write in the file (FORTRAN indexing)
+                First visibility to write in the file (C indexing)
             numVisBuff: integer
                 Number of visibilities to write to the file.
 
@@ -128,9 +122,7 @@ with obit_context():
             """
             # Update descriptor
             desc = uvf.Desc.Dict
-            desc['numVisBuff'] = numVisBuff
-            # If firstVis is passed through via the descriptor it uses C indexing (0)
-            # desc['firstVis'] = firstVis - 1
+            desc.update(firstVis=firstVis, numVisBuff=numVisBuff)
             uvf.Desc.Dict = desc
 
             nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
@@ -138,7 +130,7 @@ with obit_context():
                 .format(nbytes / (1024.*1024.), firstVis, numVisBuff))
 
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
-            uvf.Write(firstVis=firstVis)
+            uvf.Write()
 
             # Pass through firstVis and 0 numVisBuff
             return firstVis + numVisBuff, 0
@@ -188,12 +180,12 @@ with obit_context():
             'SOURCE ID': [source_id],
             'SUBARRAY': [1],                  # Should match 'AIPS AN' header
             'FREQ ID': [1],                   # Should match 'AIPS FQ' row
-            'START VIS': [start_vis],
-            'END VIS': [firstVis-1]
+            'START VIS': [start_vis+1],       # FORTRAN indexing
+            'END VIS': [firstVis]
         })
 
     # Create the index and calibration tables
     uvf.create_index_table({}, nx_rows)
     uvf.create_calibration_table_from_index(KA.max_antenna_number)
 
-    uvf.Close()
+    uvf.close()
