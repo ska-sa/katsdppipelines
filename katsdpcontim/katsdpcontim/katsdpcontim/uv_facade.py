@@ -226,7 +226,7 @@ class UVFacade(object):
 
         Parameters
         ----------
-        uv: UV
+        uv: :class:`UV`
             An Obit UV object
         """
         err = obit_err()

@@ -430,10 +430,21 @@ class AIPSTable(object):
         self._rows = AIPSTableRows(table, nrow, self._default_row, err)
 
     def _clobber_old_tables(self, uv, name, err):
+        """
+        Removes all previously existing versions of table.
+
+        Parameters
+        ----------
+        uv: :class:`UV`
+            Obit UV object
+        name: string
+            AIPS Table name, "AIPS AN" for instance.
+        err: :class:`OErr`
+            Obit error stack object
+        """
         prev_ver = uv.GetHighVer(name)
 
         while prev_ver > 0:
-            log.info("Removing version '%d' of '%s' table" % (prev_ver, name))
             uv.ZapTable(name, prev_ver, err)
             handle_obit_err("Error removing old '%s' table" % name, err)
             prev_ver = uv.GetHighVer(name)
@@ -561,6 +572,8 @@ class AIPSTable(object):
         return self._version
 
     def close(self):
+        """ Close the AIPS table """
+
         # Flush
         Table.PDirty(self._table)
 

@@ -427,7 +427,7 @@ class KatdalAdapter(object):
             'ARRNAM': MEERKAT,
             'FREQ': self.channel_freqs[0],  # Reference frequency
             'FREQID': self.frqsel,          # Frequency setup id
-            'RDATE': self.obsdat,         # Reference date
+            'RDATE': self.obsdat,           # Reference date
             'NO_IF': self.nif,              # Number of spectral windows
             # GST at 0h on reference data in degrees
             'GSTIA0': UVDesc.GST0(julian_date)*15.0,
