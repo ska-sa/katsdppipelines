@@ -441,16 +441,7 @@ class KatdalAdapter(object):
         Returns
         -------
         list
-            List of dictionaries describing each antenna, each
-            with the following form:
-
-            .. code-block:: python
-
-                { 'NOSTA': [1],
-                  'ANNAME': ['m003'],
-                  'STABXYZ': [100.0, 200.0, 300.0],
-                  'DIAMETER': [13.4],
-                  'POLAA': [90.0] }
+            List of dictionaries describing each antenna.
         """
 
 
@@ -496,21 +487,7 @@ class KatdalAdapter(object):
         Returns
         -------
         list
-            List of dictionaries describing sources,
-            each with the following form
-
-            .. code-block:: python
-
-                {'BANDWIDTH': 855791015.625,
-                  'DECAPP': [-37.17505555555555],
-                  'DECEPO': [-37.23916666666667],
-                  'DECOBS': [-37.17505555555555],
-                  'EPOCH': [2000.0],
-                  'ID. NO.': 1,
-                  'RAAPP': [50.81529166666667],
-                  'RAEPO': [50.65166666666667],
-                  'RAOBS': [50.81529166666667],
-                  'SOURCE': 'For A           '},
+            List of dictionaries describing sources.
         """
         return self.uv_source_map.values()
 
@@ -630,16 +607,7 @@ class KatdalAdapter(object):
         -------
         list
             List of dictionaries describing each
-            spectral window each with the following form:
-
-            .. code-block:: python
-
-                {'CH WIDTH': [208984.375],
-                  'FRQSEL': [1],
-                  'IF FREQ': [0.0],
-                  'RXCODE': ['L'],
-                  'SIDEBAND': [1],
-                  'TOTAL BANDWIDTH': [856000000.0] }
+            spectral window.
         """
         return [{
             # Fill in data from MeerKAT spectral window
