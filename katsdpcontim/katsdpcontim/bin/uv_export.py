@@ -15,7 +15,7 @@ from katsdpcontim import (KatdalAdapter, UVFacade,
                         uv_factory,
                         handle_obit_err, obit_context,
                         obit_err,)
-from katsdpcontim.util import parse_python_assigns
+from katsdpcontim.util import parse_python_assigns, task_factory
 
 log = logging.getLogger('katsdpcontim')
 
@@ -41,6 +41,8 @@ def create_parser():
                                              "Should only contain python "
                                              "assignment statements to python "
                                              "literals, separated by semi-colons")
+    parser.add_argument("--blavg", default=False, action="store_true",
+                                    help="Apply baseline dependent averaging")
     return parser
 
 args = create_parser().parse_args()
@@ -175,3 +177,11 @@ with obit_context():
     uvf.create_calibration_table_from_index(KA.max_antenna_number)
 
     uvf.close()
+
+    if args.blavg == True:
+        blavg = task_factory("UVBlAvg",
+            DataType="AIPS", inName=args.name,
+            inClass=args.aclass, inDisk=args.disk, inSeq=args.seq,
+            outDType="AIPS", outName=args.name,
+            outClass="uvav", outDisk=args.disk, outSeq=args.seq)
+        blavg.go()
