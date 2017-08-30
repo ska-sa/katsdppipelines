@@ -5,23 +5,22 @@ from katsdpcontim.configuration import get_config
 
 log = logging.getLogger('katsdpcontim')
 
-def parse_katdal_select(select_str):
+def parse_python_assigns(assign_str):
     """
     Parses a string, containing assign statements
-    that will turned be into kwargs suitable for
-    passing to :meth:`katdal.DataSet.select`.
+    into a dictionary.
 
     .. code-block:: python
 
         h5 = katdal.open('123456789.h5')
-        kwargs = parse_katdal_select("spw=3; scans=[1,2];
+        kwargs = parse_python_assigns("spw=3; scans=[1,2];
                                       targets='bpcal,radec'")
         h5.select(**kwargs)
 
     Parameters
     ----------
-    select_str: str
-        Selection string. Should only contain
+    assign_str: str
+        Assignment string. Should only contain
         assignment statements assigning
         python literal values to names,
         separated by semi-colons.
@@ -33,16 +32,16 @@ def parse_katdal_select(select_str):
         assignment results.
     """
 
-    if not select_str:
+    if not assign_str:
         return {}
 
     try:
         return { target.id: ast.literal_eval(stmt.value)
-                for stmt in ast.parse(select_str, mode='single').body
+                for stmt in ast.parse(assign_str, mode='single').body
                 for target in stmt.targets}
     except SyntaxError as e:
-        log.exception("Exception parsing katdal selection string "
-                    "'{}'".format(select_str))
+        log.exception("Exception parsing assignment string "
+                    "'{}'".format(assign_str))
         raise e
 
 def task_factory(name, aips_cfg_file=None, **kwargs):

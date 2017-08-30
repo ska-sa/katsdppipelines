@@ -27,7 +27,7 @@ from katim import KATH5toAIPS
 from katim import KATCal
 
 from katsdpcontim import obit_context, obit_err, handle_obit_err
-from katsdpcontim.util import parse_katdal_select
+from katsdpcontim.util import parse_python_assigns
 
 import warnings
 warnings.simplefilter('ignore')
@@ -44,7 +44,7 @@ def create_parser():
     parser.add_argument("-s", "--seq", default=1,
                                         help="AIPS sequence")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=parse_katdal_select,
+                                        type=parse_python_assigns,
                                         help="katdal select statement "
                                              "Should only contain python "
                                              "assignment statements to python "

@@ -15,7 +15,7 @@ from katsdpcontim import (KatdalAdapter, UVFacade,
                         uv_factory,
                         handle_obit_err, obit_context,
                         obit_err,)
-from katsdpcontim.util import parse_katdal_select
+from katsdpcontim.util import parse_python_assigns
 
 log = logging.getLogger('katsdpcontim')
 
@@ -36,7 +36,7 @@ def create_parser():
                                         help="Number of visibilities "
                                              "read/written per IO call")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=parse_katdal_select,
+                                        type=parse_python_assigns,
                                         help="katdal select statement "
                                              "Should only contain python "
                                              "assignment statements to python "
