@@ -1,12 +1,14 @@
+import logging
 from functools import partial
 
-import AIPSDir
-import OSystem
+import TableList
 import UV
 import UVDesc
-import Table
 
-from obit_context import obit_err, handle_obit_err
+from katsdpcontim import obit_err, handle_obit_err
+
+log = logging.getLogger('katsdpcontim')
+
 
 def uv_file_mode(mode):
     """ Returns UV file mode given string mode """
@@ -34,30 +36,76 @@ def _open_aips_uv(name, disk, aclass=None, seq=None, mode=None):
     if seq is None:
         seq = 1
 
-    # Possibly abstract this too
-    label = "katuv"
-    uv = UV.newPAUV(label, name, aclass, disk, seq, False, err)
+    label = "katuv" # Possibly abstract this too
+    exists = False  # Test if the file exists
+    uv = UV.newPAUV(label, name, aclass, disk, seq, exists, err)
     handle_obit_err("Error opening uv file", err)
     return uv
 
-def open_uv(name, disk, aclass=None, seq=None, data_type=None, mode=None):
+def _aips_filename(name, aclass, seq):
+    """
+    Parameters
+    ----------
+    name: string
+        AIPS file name
+    aclass: string
+        AIPS file class
+    seq: integer
+        AIPS file sequence number
+
+    Returns
+    -------
+    string
+        String describing the AIPS filename
+    """
+    return "{}.{}.{}".format(name, aclass, seq)
+
+def open_uv(name, disk, aclass=None, seq=None, dtype=None, mode=None):
+    """
+    Opens an AIPS/FITS UV file and returns a wrapped :class:`UVFacade` object.
+
+    Parameters
+    ----------
+    name: str
+        Name of the file.
+    disk: integer
+        The AIPS or FITS disk on which the file is located.
+    aclass (optional): str
+        The class of the AIPS file. Only applies to AIPS types.
+        Defaults to "raw"
+    seq (optional): integer
+        The sequence of the AIPS file. Only applies to AIPS types.
+        Defaults to 1.
+    dtype (optional): str
+        Data type, or type of file system to write to.
+        Should be either "AIPS" or "FITS".
+        Defaults to "AIPS".
+    mode: str
+        "r" to read, "w" to write, "rw" to read and write.
+
+    Returns
+    -------
+    :class:`UVFacade`
+        A UVFacade object
+    """
+
     err = obit_err()
 
     if mode is None:
         mode = "r"
 
-    if data_type is None:
-        data_type = "AIPS"
+    if dtype is None:
+        dtype = "AIPS"
 
     uv_mode = uv_file_mode(mode)
 
-    if data_type.upper() == "AIPS":
+    if dtype.upper() == "AIPS":
         method = partial(_open_aips_uv, name, disk, aclass, seq, mode)
-    elif data_type.upper() == "FITS":
+    elif dtype.upper() == "FITS":
         raise NotImplementedError("FITS UV creation via newPFUV "
                                   "not yet supported.")
     else:
-        raise ValueError("Invalid data_type '{}'".format(data_type))
+        raise ValueError("Invalid dtype '{}'".format(dtype))
 
     uv = method()
     uv.Open(uv_mode, err)
@@ -89,9 +137,9 @@ class UVFacade(object):
 
         # Construct a name for this object
         if uv.FileType == "AIPS":
-            self._name = "{}.{}.{}".format(uv.Aname, uv.Aclass, uv.Aseq)
+            self._name = name = _aips_filename(uv.Aname, uv.Aclass, uv.Aseq)
         elif uv.FileType == "FITS":
-            self._name = uv.FileName
+            self._name = name = uv.FileName
         else:
             raise ValueError("Invalid uv.FileType '{}'".format(uv.FileType))
 
