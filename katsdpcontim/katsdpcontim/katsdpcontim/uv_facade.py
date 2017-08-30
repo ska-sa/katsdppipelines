@@ -325,7 +325,7 @@ class UVFacade(object):
         handle_obit_err("Error updating UV Descriptor on '{}'"
                             .format(self._name), err)
 
-    def create_calibration_table_from_index(self, max_ant_nr):
+    def attach_CL_from_NX_table(self, max_ant_nr):
         """
         Creates a CL table associated with this UV file
         from an NX table.

@@ -174,7 +174,7 @@ with obit_context():
     uvf.attach_table("AIPS NX", 1)
     uvf.tables["AIPS NX"].rows = nx_rows
     uvf.tables["AIPS NX"].write()
-    uvf.create_calibration_table_from_index(KA.max_antenna_number)
+    uvf.attach_CL_from_NX_table(KA.max_antenna_number)
 
     uvf.close()
 
