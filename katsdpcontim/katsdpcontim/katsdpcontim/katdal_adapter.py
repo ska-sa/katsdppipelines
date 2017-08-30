@@ -412,32 +412,27 @@ class KatdalAdapter(object):
         return 2.997924562e8/self.reffreq
 
     @boltons.cacheutils.cachedproperty
-    def uv_antenna_header(self):
+    def uv_antenna_keywords(self):
         """
         Returns
         -------
         dict
-            Dictionary containing elements necessary
-            for constructing an AN table header. Of the form:
-
-            .. code-block:: python
-
-                { 'RefDate': self.obsdat,
-                  'Freq': self.channel_freqs[0] }
+            Dictionary containing updates to the AIPS AN
+            antenna table keywords.
         """
 
         julian_date = UVDesc.PDate2JD(self.obsdat)
 
         return {
-            'ArrName': MEERKAT,
-            'Freq': self.channel_freqs[0],  # Reference frequency
-            'FreqID': self.frqsel,          # Frequency setup id
-            'numIF': self.nif,              # Number of spectral windows
-            'RefDate': self.obsdat,         # Reference date
+            'ARRNAM': MEERKAT,
+            'FREQ': self.channel_freqs[0],  # Reference frequency
+            'FREQID': self.frqsel,          # Frequency setup id
+            'RDATE': self.obsdat,         # Reference date
+            'NO_IF': self.nif,              # Number of spectral windows
             # GST at 0h on reference data in degrees
-            'GSTiat0': UVDesc.GST0(julian_date)*15.0,
+            'GSTIA0': UVDesc.GST0(julian_date)*15.0,
             # Earth's rotation rate (degrees/day)
-            'DegDay': UVDesc.ERate(julian_date)*360.0,
+            'DEGPDY': UVDesc.ERate(julian_date)*360.0,
         }
 
     @boltons.cacheutils.cachedproperty
@@ -460,11 +455,6 @@ class KatdalAdapter(object):
 
 
         return [{
-            # Book-keeping
-            'Table name': 'AIPS AN',
-            'NumFields': 15,
-            '_status': [0],
-
             # MeerKAT antenna information
             'NOSTA': [i],
             'ANNAME': [a.name],
@@ -485,19 +475,19 @@ class KatdalAdapter(object):
         } for i, a in enumerate(sorted(self._katds.ants), 1)]
 
     @boltons.cacheutils.cachedproperty
-    def uv_source_header(self):
+    def uv_source_keywords(self):
         """
         Returns
         -------
         dict
-            Dictionary containing elements necessary
-            for constructing a SU table header. Of the form:
+            Dictionary containing updates to the AIPS SU
+            source table keywords.
         """
         return {
-            'numIF': self.nif,     # Number of spectral windows
-            'FreqID': self.frqsel, # Frequency setup ID
-            'velDef': 'RADIO',     # Radio/Optical Velocity?
-            'velType': 'LSR'       # Velocity Frame of Reference (LSR is default)
+            'NO_IF': self.nif,     # Number of spectral windows
+            'FREQID': self.frqsel, # Frequency setup ID
+            'VELDEF': 'RADIO',     # Radio/Optical Velocity?
+            'VELTYP': 'LSR'        # Velocity Frame of Reference (LSR is default)
         }
 
     @boltons.cacheutils.cachedproperty
@@ -561,11 +551,6 @@ class KatdalAdapter(object):
             deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
 
             targets[target.name] = {
-                    # Book-keeping
-                    'Table name': 'AIPS SU',
-                    'NumFields': 22,
-                    '_status'  : [0],
-
                     # Fill in data derived from katpoint targets
                     'ID. NO.'  : [aips_src_index],
                     'SOURCE'   : [name],
@@ -600,17 +585,15 @@ class KatdalAdapter(object):
         return targets
 
     @boltons.cacheutils.cachedproperty
-    def uv_spw_header(self):
+    def uv_spw_keywords(self):
         """
         Returns
         -------
         dict
-            Dictionary used in construction of
-            the FQ table. Currently only contains
-            :code:`{ 'numIF' : 1 }`, the (singular)
-            number of spectral windows.
+            Dictionary containing updates to the AIPS FQ
+            frequency table keywords.
         """
-        return { 'numIF': self.nif }
+        return { 'NO_IF': self.nif }
 
     @boltons.cacheutils.cachedproperty
     def max_antenna_number(self):
@@ -623,19 +606,20 @@ class KatdalAdapter(object):
         return max(r['NOSTA'][0] for r in self.uv_antenna_rows)
 
     @boltons.cacheutils.cachedproperty
-    def uv_calibration_header(self):
+    def uv_calibration_keywords(self):
         """
         Returns
         -------
         dict
-            Dictionary used to construct the CL table header.
+            Dictionary containing updates to the AIPS CL
+            calibration table keywords.
         """
         return {
-            'numIF': self.nif,
-            'numPol': self.nstokes,
-            'numAnt': self.max_antenna_number,
-            'numTerm': 1,
-            'mGMod': 1
+            'NO_IF': self.nif,
+            'NO_POL': self.nstokes,
+            'NO_ANT': self.max_antenna_number,
+            'NO_TERM': 1,
+            'MFMOD': 1
         }
 
 
@@ -658,11 +642,6 @@ class KatdalAdapter(object):
                   'TOTAL BANDWIDTH': [856000000.0] }
         """
         return [{
-            # Book-keeping
-            'Table name': 'AIPS FQ',
-            'NumFields': 7,
-            '_status': [0],
-
             # Fill in data from MeerKAT spectral window
             'FRQSEL': [i],
             'IF FREQ': [0.0],
