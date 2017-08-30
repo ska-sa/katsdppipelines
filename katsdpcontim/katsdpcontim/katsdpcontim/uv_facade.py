@@ -115,6 +115,100 @@ def open_uv(name, disk, aclass=None, seq=None, dtype=None, mode=None):
 
     return UVFacade(uv)
 
+def uv_factory(**kwargs):
+    """
+    Factory for creating a UV observation file.
+    If a `katdata` parameter is passed, this will be used
+    to condition the UV file.
+
+    Parameters
+    ----------
+    name: string
+        AIPS/FITS filename passed to :func:`uv_open`
+    aclass (optional): string
+        AIPS file class passed to :func:`uv_open`
+    seq (optional): string
+        AIPS file sequence number passed to :func:`uv_open`
+    dtype (optional): string
+        Data type passed to :func:`uv_open`
+    mode (optional): string
+        File opening mode passed to :func:`uv_open`.
+    nvispio (optional): integer
+        Number of visibilities processed during a
+        UV Read/Write operation.
+    katdata (optional): :class:`katdal.DataSet`
+        A katdal data set. If present, this data will
+        be used to condition the UV file and create
+        tables.
+
+    Returns
+    -------
+    :class:`UVFacade`
+        Object representing the UV observation.
+    """
+    try:
+        name = kwargs.pop('name')
+    except KeyError as e:
+        raise ValueError("No 'name' specified for UV object")
+
+    disk = kwargs.pop('disk', 1)
+    aclass = kwargs.pop('aclass', None)
+    seq = kwargs.pop('seq', None)
+    mode = kwargs.pop('mode', 'r')
+    dtype = kwargs.pop('dtype', None)
+    nvispio = kwargs.pop('nvispio', None)
+
+    uvf = open_uv(name, disk, aclass, seq, dtype, mode=mode)
+
+    modified = False
+
+    # If we have a katdal adapter,
+    # create subtables and update the descriptor
+    KA = kwargs.pop('katdata', None)
+
+    if KA is not None:
+        # Attach tables
+        uvf.attach_table("AIPS AN", 1)
+        uvf.attach_table("AIPS FQ", 1, numIF=KA.nif)
+        uvf.attach_table("AIPS SU", 1)
+
+        # Update their keywords
+        uvf.tables["AIPS AN"].keywords.update(KA.uv_antenna_keywords)
+        uvf.tables["AIPS FQ"].keywords.update(KA.uv_spw_keywords)
+        uvf.tables["AIPS SU"].keywords.update(KA.uv_source_keywords)
+
+        # Set their rows
+        uvf.tables["AIPS AN"].rows = KA.uv_antenna_rows
+        uvf.tables["AIPS FQ"].rows = KA.uv_spw_rows
+        uvf.tables["AIPS SU"].rows = KA.uv_source_rows
+
+        # Write them
+        uvf.tables["AIPS AN"].write()
+        uvf.tables["AIPS FQ"].write()
+        uvf.tables["AIPS SU"].write()
+
+        # Close them
+        uvf.tables["AIPS AN"].close()
+        uvf.tables["AIPS FQ"].close()
+        uvf.tables["AIPS SU"].close()
+
+        # Needs to happen after subtables
+        # so that uv.TableList is updated
+        uvf.update_descriptor(KA.uv_descriptor())
+        modified = True
+
+    # Set number of visibilities read/written at a time
+    if nvispio is not None:
+        uvf.List.set("nVisPIO", nvispio)
+        modified = True
+
+    # If modified, reopen the file to trigger descriptor
+    # and header updates
+    if modified:
+        uvf.Open(uv_file_mode(mode))
+
+    return uvf
+
 class UVFacade(object):
     """
     Provides a simplified interface to an Obit UV object.
