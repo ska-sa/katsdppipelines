@@ -62,7 +62,7 @@ with obit_context():
                     katdata=KA, nvispio=args.nvispio)
 
     log.info("Created '%s' on AIPS disk '%d'" % (uvf.name, args.disk))
-    firstVis = 0    # C indexing
+    firstVis = 1    # FORTRAN indexing
     numVisBuff = 0  # Number of visibilities in the buffer
 
     # NX table rows
@@ -85,7 +85,7 @@ with obit_context():
             ----------
             uvf: :class:`UVFacade` object
             firstVis: integer
-                First visibility to write in the file (C indexing)
+                First visibility to write in the file (FORTRAN indexing)
             numVisBuff: integer
                 Number of visibilities to write to the file.
 
@@ -97,7 +97,7 @@ with obit_context():
             """
             # Update descriptor
             desc = uvf.Desc.Dict
-            desc.update(firstVis=firstVis, numVisBuff=numVisBuff)
+            desc.update(numVisBuff=numVisBuff)
             uvf.Desc.Dict = desc
 
             nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
@@ -105,9 +105,9 @@ with obit_context():
                 .format(nbytes / (1024.*1024.), firstVis, numVisBuff))
 
             # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
-            uvf.Write()
+            uvf.Write(firstVis=firstVis)
 
-            # Pass through firstVis and 0 numVisBuff
+            # Pass through new firstVis and 0 numVisBuff
             return firstVis + numVisBuff, 0
 
         # Starting visibility of this scan
@@ -158,18 +158,14 @@ with obit_context():
 
         # Create an index for this scan
         nx_rows.append({
-            # Book-keeping
-            'Table name': 'AIPS NX',
-            'NumFields': 8,
-            '_status': [0],
-
-            'TIME': [(time[-1] + time[0])/2],      # Time Centroid
+            'TIME': [(time[-1] + time[0])/2], # Time Centroid
             'TIME INTERVAL': [time[-1] - time[0]],
             'SOURCE ID': [source_id],
-            'SUBARRAY': [1],                  # Should match 'AIPS AN' header
-            'FREQ ID': [1],                   # Should match 'AIPS FQ' row
-            'START VIS': [start_vis+1],       # FORTRAN indexing
-            'END VIS': [firstVis]
+            'SUBARRAY': [1],           # Should match 'AIPS AN' table version
+                                       # Each AN table defines a subarray
+            'FREQ ID': [1],            # Should match 'AIPS FQ' row FRQSEL
+            'START VIS': [start_vis],  # FORTRAN indexing
+            'END VIS': [firstVis-1]    # FORTRAN indexing
         })
 
     # Create the index and calibration tables
