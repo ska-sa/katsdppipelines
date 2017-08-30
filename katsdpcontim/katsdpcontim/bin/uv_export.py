@@ -12,7 +12,7 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, UVFacade,
-                        open_uv,
+                        uv_factory,
                         handle_obit_err, obit_context,
                         obit_err,)
 from katsdpcontim.util import parse_katdal_select
@@ -56,39 +56,12 @@ KA = KatdalAdapter(katdal.open(args.katdata))
 with obit_context():
     err = obit_err()
 
-    log.info("Creating '{}.{}.{}' on AIPS disk '{}'"
-        .format(args.name, args.aclass, args.seq, args.disk))
-
-    # Create a UV file and subtables, then update it
-    # with MeerKAT descriptor data
-    uvf = open_uv(args.name, args.disk, args.aclass, args.seq, mode="w")
-    uvf.create_antenna_table(KA.uv_antenna_header, KA.uv_antenna_rows)
-    uvf.create_frequency_table(KA.uv_spw_header, KA.uv_spw_rows)
-    uvf.create_source_table(KA.uv_source_header, KA.uv_source_rows)
-    uvf.update_descriptor(KA.uv_descriptor()) # Needs to happen after subtables
-
-    # Set number of visibilities read/written at a time
-    uvf.List.set("nVisPIO", args.nvispio)
-
-    # WRITEONLY correctly creates a buffer on the UV object
-    # READWRITE only creates a buffer
-    # on the UV object if the underlying file exists...
-    uvf.Open(UV.WRITEONLY)
-
-    # Number of random parameters
-    desc = uvf.Desc.Dict
-    nrparm = desc['nrparm']
-    lrec = desc['lrec']       # Length of visibility buffer record
-
-    # Random parameter indices
-    ilocu = desc['ilocu']     # U
-    ilocv = desc['ilocv']     # V
-    ilocw = desc['ilocw']     # W
-    iloct = desc['iloct']     # time
-    ilocb = desc['ilocb']     # baseline id
-    ilocsu = desc['ilocsu']   # source id
-
     # UV file location variables
+    uvf = uv_factory(dtype="AIPS", name=args.name, disk=args.disk,
+                    aclass=args.aclass, seq=args.seq, mode="w",
+                    katdata=KA, nvispio=args.nvispio)
+
+    log.info("Created '%s' on AIPS disk '%d'" % (uvf.name, args.disk))
     firstVis = 0    # C indexing
     numVisBuff = 0  # Number of visibilities in the buffer
 
@@ -141,6 +114,19 @@ with obit_context():
         start_vis = firstVis
         vis_buffer = np.frombuffer(uvf.VisBuf, count=-1, dtype=np.float32)
 
+        # Number of random parameters
+        desc = uvf.Desc.Dict
+        nrparm = desc['nrparm']
+        lrec = desc['lrec']       # Length of visibility buffer record
+
+        # Random parameter indices
+        ilocu = desc['ilocu']     # U
+        ilocv = desc['ilocv']     # V
+        ilocw = desc['ilocw']     # W
+        iloct = desc['iloct']     # time
+        ilocb = desc['ilocb']     # baseline id
+        ilocsu = desc['ilocsu']   # source id
+
         ntime, nbl = u.shape
 
         for t in range(ntime):
@@ -156,7 +142,7 @@ with obit_context():
                 vis_buffer[idx+ilocb] = baselines[bl]     # baseline id
                 vis_buffer[idx+ilocsu] = source_id        # source id
 
-                # Visibilities should be written to the buffer in FORTRAN order
+                # Flatten visibilities for buffer write
                 flat_vis = vis[t,bl].ravel()
                 vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
 
@@ -187,7 +173,9 @@ with obit_context():
         })
 
     # Create the index and calibration tables
-    uvf.create_index_table({}, nx_rows)
+    uvf.attach_table("AIPS NX", 1)
+    uvf.tables["AIPS NX"].rows = nx_rows
+    uvf.tables["AIPS NX"].write()
     uvf.create_calibration_table_from_index(KA.max_antenna_number)
 
     uvf.close()
