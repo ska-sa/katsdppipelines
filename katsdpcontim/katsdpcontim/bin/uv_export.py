@@ -98,7 +98,8 @@ with obit_context():
     # Perform selection on the katdal object
     KA.select(**args.select)
 
-    for u, v, w, time, baselines, source_id, vis in KA.uv_scans():
+    for si, (u, v, w, time, baselines, source_id, vis) in KA.uv_scans():
+
         def _write_buffer(uvf, firstVis, numVisBuff):
             """
             Use as follows:

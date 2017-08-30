@@ -149,7 +149,7 @@ class KatdalAdapter(object):
             aips_time = (times - midnight) / 86400.0
 
             # Yield this scan's data
-            yield (aips_u, aips_v, aips_w,
+            yield si, (aips_u, aips_v, aips_w,
                   aips_time, aips_baselines, aips_source_id,
                   vis)
 
