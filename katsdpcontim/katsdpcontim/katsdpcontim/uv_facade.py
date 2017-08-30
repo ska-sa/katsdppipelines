@@ -5,7 +5,9 @@ import TableList
 import UV
 import UVDesc
 
-from katsdpcontim import obit_err, handle_obit_err
+from katsdpcontim import (AIPSTable,
+                        obit_err,
+                        handle_obit_err)
 
 log = logging.getLogger('katsdpcontim')
 
@@ -102,7 +104,7 @@ def open_uv(name, disk, aclass=None, seq=None, dtype=None, mode=None):
     if dtype.upper() == "AIPS":
         method = partial(_open_aips_uv, name, disk, aclass, seq, mode)
     elif dtype.upper() == "FITS":
-        raise NotImplementedError("FITS UV creation via newPFUV "
+        raise NotImplementedError("FITS UV open via newPFUV "
                                   "not yet supported.")
     else:
         raise ValueError("Invalid dtype '{}'".format(dtype))
@@ -133,6 +135,8 @@ class UVFacade(object):
         uv: UV
             An Obit UV object
         """
+        err = obit_err()
+
         self._uv = uv
 
         # Construct a name for this object
@@ -143,17 +147,36 @@ class UVFacade(object):
         else:
             raise ValueError("Invalid uv.FileType '{}'".format(uv.FileType))
 
+        tables = TableList.PGetList(uv.TableList, err)
+        handle_obit_err("Error getting '%s' table list" % name)
+
+        self._tables = { name: AIPSTable(uv, name, version, 'r', err)
+                                      for version, name in tables }
+
+    def close(self):
+        """ Closes the wrapped UV file """
+
+        # Close all attached tables
+        for table in self._tables.values():
+            table.close()
+
+        err = obit_err()
+        self._uv.Close(err)
+        handle_obit_err("Error closing uv file", err)
+
     def __enter__(self):
         return self
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
 
-    def close(self):
-        """ Closes the wrapped UV file """
-        err = obit_err()
-        self._uv.Close(err)
-        handle_obit_err("Error closing uv file", err)
+    @property
+    def tables(self):
+        return self._tables
+
+    def attach_table(self, name, version, **kwargs):
+        self._tables[name] = AIPSTable(self._uv, name, version, 'r',
+                                               obit_err(), **kwargs)
 
     @property
     def name(self):
@@ -207,226 +230,6 @@ class UVFacade(object):
         self._uv.UpdateDesc(err)
         handle_obit_err("Error updating UV Descriptor on '{}'"
                             .format(self._name), err)
-
-    def create_antenna_table(self, header, rows):
-        """
-        Creates an AN table associated with this UV file.
-
-        Parameters
-        ----------
-        header: dict
-            Dictionary containing updates for the antenna table
-            header. Should contain:
-
-            .. code-block:: python
-
-                { 'RefDate' : ...,
-                  'Freq': ..., }
-
-        rows: list
-            List of dictionaries describing each antenna, with
-            the following form:
-
-            .. code-block:: python
-
-                { 'NOSTA': [1],
-                  'ANNAME': ['m003'],
-                  'STABXYZ': [100.0, 200.0, 300.0],
-                  'DIAMETER': [13.4],
-                  'POLAA': [90.0] }
-        """
-        err = obit_err()
-
-        ant_table = self._uv.NewTable(Table.READWRITE, "AIPS AN", 1, err)
-        handle_obit_err("Error creating '%s' AN table." % self._name, err)
-        ant_table.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening '%s' AN table." % self._name, err)
-
-        # Update header, forcing underlying table update
-        ant_table.keys.update(header)
-        Table.PDirty(ant_table)
-
-        # Write each row to the antenna table
-        for ri, row in enumerate(rows, 1):
-            ant_table.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in '%s' AN table. "
-                            "Row data is '%s'" % (ri, self._name, row), err)
-
-        # Close table
-        ant_table.Close(err)
-        handle_obit_err("Error closing '%s' AN table." % self._name, err)
-
-    def create_frequency_table(self, header, rows):
-        """
-        Creates an FQ table associated this UV file.
-
-        Parameters
-        ----------
-        header: dict
-            Dictionary containing updates for the antenna table
-            header. Should contain number of spectral windows (1):
-
-            .. code-block:: python
-
-                { 'numIF' : 1 }
-
-        rows: list
-            List of dictionaries describing each spectral window, with
-            the following form:
-
-            .. code-block:: python
-
-                {'CH WIDTH': [208984.375],
-                  'FRQSEL': [1],
-                  'IF FREQ': [-428000000.0],
-                  'RXCODE': ['L'],
-                  'SIDEBAND': [1],
-                  'TOTAL BANDWIDTH': [856000000.0] }
-        """
-        err = obit_err()
-
-        # If an old table exists, delete it
-        if self._uv.GetHighVer("AIPS FQ") > 0:
-            self._uv.ZapTable("AIPS FQ", 1, err)
-            handle_obit_err("Error zapping old FQ table", err)
-
-        # Get the number of spectral windows from the header
-        noif = header['numIF']
-
-        if not noif == 1:
-            raise ValueError("Only handling 1 IF at present. "
-                             "'%s' specified in header" % noif)
-
-        if not len(rows) == 1:
-            raise ValueError("Only handling 1 IF at present. "
-                             "'%s' rows supplied" % len(rows))
-
-
-        # Create and open a new FQ table
-        fqtab = self._uv.NewTable(Table.READWRITE, "AIPS FQ",1, err, numIF=noif)
-        handle_obit_err("Error creating '%s' FQ table." % self._name, err)
-        fqtab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening '%s' FQ table." % self._name, err)
-
-        # Update header, forcing underlying table update
-        fqtab.keys.update(header)
-        Table.PDirty(fqtab)
-
-        # Write spectral window rows
-        for ri, row in enumerate(rows, 1):
-            fqtab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in '%s' FQ table. "
-                            "Row data is '%s'" % (ri, self._name, row), err)
-
-        # Close
-        fqtab.Close(err)
-        handle_obit_err("Error closing '%s' FQ table." % self._name, err)
-
-    def create_index_table(self, header, rows):
-        """
-        Creates an NX table associated with this UV file.
-        """
-
-        err = obit_err()
-
-        # Create and open the SU table
-        nxtab = self._uv.NewTable(Table.READWRITE, "AIPS NX", 1, err)
-        handle_obit_err("Error creating '%s' NX table." % self._name, err)
-        nxtab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening '%s' NX table." % self._name, err)
-
-        # Update header, forcing underlying table update
-        nxtab.keys.update(header)
-        Table.PDirty(nxtab)
-
-        # Write index table rows
-        for ri, row in enumerate(rows, 1):
-            nxtab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in '%s' NX table. "
-                            "Row data is '%s'" % (ri, self._name, row), err)
-
-
-        nxtab.Close(err)
-        handle_obit_err("Error closing NX table", err)
-
-    def create_source_table(self, header, rows):
-        """
-        Creates an SU table associated with this UV file.
-
-        Parameters
-        ----------
-        header: dict
-            Dictionary containing updates for the source table
-            header. Should contain:
-
-            .. code-block:: python
-
-                { 'numIF' : 1,
-                  'FreqID': 1, }
-
-        rows: list
-            List of dictionaries describing each antenna, with
-            the following form:
-
-            .. code-block:: python
-
-                {'BANDWIDTH': 855791015.625,
-                  'DECAPP': [-37.17505555555555],
-                  'DECEPO': [-37.23916666666667],
-                  'DECOBS': [-37.17505555555555],
-                  'EPOCH': [2000.0],
-                  'ID. NO.': 1,
-                  'RAAPP': [50.81529166666667],
-                  'RAEPO': [50.65166666666667],
-                  'RAOBS': [50.81529166666667],
-                  'SOURCE': 'For A           '},
-        """
-
-        err = obit_err()
-
-        # Create and open the SU table
-        sutab = self._uv.NewTable(Table.READWRITE, "AIPS SU",1,err)
-        handle_obit_err("Error creating '%s' SU table." % self._name, err)
-        sutab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening '%s' SU table." % self._name, err)
-
-        # Update header, forcing underlying table update
-        sutab.keys.update(header)
-        Table.PDirty(sutab)
-
-        # Write rows
-        for ri, row in enumerate(rows, 1):
-            sutab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in '%s' SU table. "
-                            "Row data is '%s'" % (ri, self._name, row), err)
-
-        # Close the table
-        sutab.Close(err)
-        handle_obit_err("Error closing '%s' SU table." % self._name, err)
-
-    def create_calibration_table(self, header, rows):
-        """
-        Creates a CL table associated with this UV file.
-        """
-        err = obit_err()
-
-        cltab = self._uv.NewTable(Table.READWRITE, "AIPS CL", 1, err)
-        handle_obit_err("Error creating '%s' CL table." % self._name, err)
-        cltab.Open(Table.READWRITE, err)
-        handle_obit_err("Error opening '%s' CL table." % self._name, err)
-
-        # Update header, forcing underlying table update
-        cltab.keys.update(header)
-        Table.PDirty(cltab)
-
-        # Write calibration table rows
-        for ri, row in enumerate(rows, 1):
-            cltab.WriteRow(ri, row, err)
-            handle_obit_err("Error writing row %d in '%s' CL table. "
-                            "Row data is '%s'" % (ri, self._name, row), err)
-
-        cltab.Close(err)
-        handle_obit_err("Error closing '%s' CL table" % self._name, err)
 
     def create_calibration_table_from_index(self, max_ant_nr):
         """
