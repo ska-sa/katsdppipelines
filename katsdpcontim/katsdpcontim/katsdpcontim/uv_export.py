@@ -11,14 +11,10 @@ from katsdpcontim.util import parse_python_assigns, task_factory
 log = logging.getLogger('katsdpcontim')
 
 
-def uv_export(kat_adapter, name, aclass, seq, disk,
-                        dtype=None, kat_select=None):
+def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
     """
     Exports a katdal selection to an AIPS/FITS file.
     """
-    if dtype is None:
-        dtype = "AIPS"
-
     if kat_select is None:
         kat_select = { "scans" : "track", "spw": 0 }
 
@@ -27,11 +23,10 @@ def uv_export(kat_adapter, name, aclass, seq, disk,
     KA = kat_adapter
 
     # UV file location variables
-    with uv_factory(dtype=dtype, name=name, disk=disk,
-                    aclass=aclass, seq=seq, mode="w",
+    with uv_factory(obit_file=obit_file, mode="w",
                     katdata=KA, nvispio=nvispio) as uvf:
 
-        log.info("Created '%s' on AIPS disk '%d'" % (uvf.name, disk))
+        log.info("Created '%s' on AIPS disk '%d'" % (uvf.name, obit_file.disk))
         firstVis = 1    # FORTRAN indexing
         numVisBuff = 0  # Number of visibilities in the buffer
 
@@ -146,12 +141,14 @@ def uv_export(kat_adapter, name, aclass, seq, disk,
 
 
     # Possibly perform baseline dependent averaging
-    if True == True:
+    if blavg == True:
         blavg = task_factory("UVBlAvg",
-            DataType=dtype, inName=name,
-            inClass=aclass, inDisk=disk, inSeq=seq,
-            outDType=dtype, outName=name,
-            outClass="uvav", outDisk=disk, outSeq=seq)
+            DataType=obit_file.dtype, inName=obit_file.name,
+            inClass=obit_file.aclass, inDisk=obit_file.disk,
+            inSeq=obit_file.seq,
+            outDType=obit_file.dtype, outName=obit_file.name,
+            outClass="uvav", outDisk=obit_file.disk,
+            outSeq=obit_file.seq)
         blavg.go()
 
 

@@ -8,7 +8,7 @@ import UV
 import katdal
 
 import katsdpcontim
-from katsdpcontim import KatdalAdapter, obit_context
+from katsdpcontim import KatdalAdapter, obit_context, ObitFile
 from katsdpcontim.uv_export import uv_export
 from katsdpcontim.util import parse_python_assigns
 
@@ -49,5 +49,8 @@ if args.name is None:
 KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
-    uv_export(KA, args.name, args.aclass, args.seq, args.disk,
-        dtype="AIPS", kat_select=args.select)
+    ofile = ObitFile(args.name, args.disk,
+                      args.aclass, args.seq,
+                      dtype="AIPS")
+
+    uv_export(KA, ofile, kat_select=args.select, blavg=args.blavg)

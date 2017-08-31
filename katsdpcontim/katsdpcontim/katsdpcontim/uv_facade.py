@@ -123,14 +123,8 @@ def uv_factory(**kwargs):
 
     Parameters
     ----------
-    name: string
-        AIPS/FITS filename passed to :func:`uv_open`
-    aclass (optional): string
-        AIPS file class passed to :func:`uv_open`
-    seq (optional): string
-        AIPS file sequence number passed to :func:`uv_open`
-    dtype (optional): string
-        Data type passed to :func:`uv_open`
+    obit_file: :class:`ObitFile`
+        Obit file class
     mode (optional): string
         File opening mode passed to :func:`uv_open`.
     nvispio (optional): integer
@@ -147,18 +141,18 @@ def uv_factory(**kwargs):
         Object representing the UV observation.
     """
     try:
-        name = kwargs.pop('name')
+        ofile = kwargs.pop('obit_file')
     except KeyError as e:
-        raise ValueError("No 'name' specified for UV object")
+        raise ValueError("No 'obit_file' argument supplied.")
 
-    disk = kwargs.pop('disk', 1)
-    aclass = kwargs.pop('aclass', None)
-    seq = kwargs.pop('seq', None)
     mode = kwargs.pop('mode', 'r')
-    dtype = kwargs.pop('dtype', None)
     nvispio = kwargs.pop('nvispio', None)
 
-    uvf = open_uv(name, disk, aclass, seq, dtype, mode=mode)
+    aclass = None if ofile.dtype == "FITS" else ofile.aclass
+    seq = None if ofile.seq == "FITS" else ofile.seq
+
+    uvf = open_uv(ofile.name, ofile.disk, aclass, seq,
+                                ofile.dtype, mode=mode)
 
     modified = False
 
