@@ -10,7 +10,7 @@ def _check_disk_type(dtype, check=True):
     dtype: string
         AIPS disk type
     check: boolean
-        False to avoid the check and
+        False to avoid the check and raise ValueError anyway
 
     Raises
     ------
