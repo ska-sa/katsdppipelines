@@ -8,7 +8,9 @@ import UV
 import katdal
 
 import katsdpcontim
-from katsdpcontim import KatdalAdapter, obit_context, ObitFile
+from katsdpcontim import (KatdalAdapter, obit_context, ObitFile,
+                        task_factory, task_input_kwargs,
+                        task_output_kwargs)
 from katsdpcontim.uv_export import uv_export
 from katsdpcontim.util import parse_python_assigns
 
@@ -49,8 +51,16 @@ if args.name is None:
 KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
-    ofile = ObitFile(args.name, args.disk,
+    obit_file = ObitFile(args.name, args.disk,
                       args.aclass, args.seq,
                       dtype="AIPS")
 
-    uv_export(KA, ofile, kat_select=args.select, blavg=args.blavg)
+    uv_export(KA, obit_file, kat_select=args.select)
+
+    # Possibly perform baseline dependent averaging
+    if args.blavg == True:
+        task_kwargs = task_input_kwargs(obit_file)
+        task_kwargs.update(task_output_kwargs(obit_file, aclass='uvav'))
+        blavg = task_factory("UVBlAvg", **task_kwargs)
+
+        blavg.go()

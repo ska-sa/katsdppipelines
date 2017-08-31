@@ -3,16 +3,12 @@ import logging
 import numpy as np
 
 from katsdpcontim import (KatdalAdapter, UVFacade,
-                        uv_factory,
-                        task_input_kwargs,
-                        task_output_kwargs)
-
-from katsdpcontim.util import task_factory
+                        uv_factory)
 
 log = logging.getLogger('katsdpcontim')
 
 
-def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
+def uv_export(kat_adapter, obit_file, kat_select=None):
     """
     Exports a katdal selection to an AIPS/FITS file.
 
@@ -26,9 +22,6 @@ def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
         Dictionary of keyword arguments to apply
         to katdal selection. Defaults to
         :code:`{ "scans" : "track", "spw": 0 }`
-    blavg (optional): bool
-        Perform baseline dependent averaging
-        on the resultant data. Defaults to `False`.
     """
     if kat_select is None:
         kat_select = { "scans" : "track", "spw": 0 }
@@ -153,15 +146,3 @@ def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
         uvf.tables["AIPS NX"].rows = nx_rows
         uvf.tables["AIPS NX"].write()
         uvf.attach_CL_from_NX_table(KA.max_antenna_number)
-
-
-    # Possibly perform baseline dependent averaging
-    if blavg == True:
-        task_kwargs = task_input_kwargs(obit_file)
-        task_kwargs.update(task_output_kwargs(obit_file, aclass='uvav'))
-        blavg = task_factory("UVBlAvg", **task_kwargs)
-
-        blavg.go()
-
-
-

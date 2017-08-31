@@ -12,6 +12,7 @@ from obit_file import (ObitFile,
                         task_output_kwargs,
                         task_output2_kwargs)
 
+from util import task_factory
 from configuration import get_config
 from katdal_adapter import KatdalAdapter
 from aips_table import AIPSTable
