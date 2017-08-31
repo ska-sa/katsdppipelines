@@ -28,6 +28,7 @@ def create_parser():
     parser.add_argument("-s", "--seq", default=1,
                                         help="AIPS sequence")
     parser.add_argument("--nvispio", default=1024,
+                                     type=int,
                                         help="Number of visibilities "
                                              "read/written per IO call")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
@@ -51,11 +52,12 @@ if args.name is None:
 KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
-    obit_file = ObitFile(args.name, args.disk,
-                      args.aclass, args.seq,
-                      dtype="AIPS")
+    # Construct file object
+    obit_file = ObitFile(args.name, args.disk,  args.aclass,
+                                     args.seq, dtype="AIPS")
 
-    uv_export(KA, obit_file, kat_select=args.select)
+    # Perform export to the file
+    uv_export(KA, obit_file, nvispio=args.nvispio, kat_select=args.select)
 
     # Possibly perform baseline dependent averaging
     if args.blavg == True:

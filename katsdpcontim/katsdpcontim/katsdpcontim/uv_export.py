@@ -8,7 +8,7 @@ from katsdpcontim import (KatdalAdapter, UVFacade,
 log = logging.getLogger('katsdpcontim')
 
 
-def uv_export(kat_adapter, obit_file, kat_select=None):
+def uv_export(kat_adapter, obit_file, nvispio=1024, kat_select=None):
     """
     Exports a katdal selection to an AIPS/FITS file.
 
@@ -18,6 +18,8 @@ def uv_export(kat_adapter, obit_file, kat_select=None):
         Katdal Adapter supplying data for export
     obit_file: :class:`ObitFile`
         Obit file to which data should be exported
+    nvispio: integer
+        Number of visibilities to read/write per I/O operation
     kat_select (optional): dict
         Dictionary of keyword arguments to apply
         to katdal selection. Defaults to
@@ -25,8 +27,6 @@ def uv_export(kat_adapter, obit_file, kat_select=None):
     """
     if kat_select is None:
         kat_select = { "scans" : "track", "spw": 0 }
-
-    nvispio = 1024
 
     KA = kat_adapter
 

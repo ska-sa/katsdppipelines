@@ -29,7 +29,7 @@ def uv_file_mode(mode):
     else:
         return UV.READONLY
 
-def _open_aips_uv(obit_file, mode=None):
+def _open_aips_uv(obit_file, nvispio=1024, mode=None):
     """ Open/create the specified AIPS UV file """
     err = obit_err()
 
@@ -37,11 +37,11 @@ def _open_aips_uv(obit_file, mode=None):
     exists = False  # Test if the file exists
     uv = UV.newPAUV(label, obit_file.name, obit_file.aclass,
                         obit_file.disk, obit_file.seq,
-                        exists, err)
+                        exists, err, nvis=nvispio)
     handle_obit_err("Error opening uv file", err)
     return uv
 
-def open_uv(obit_file, mode=None):
+def open_uv(obit_file, nvispio=1024, mode=None):
     """
     Opens an AIPS/FITS UV file and returns a wrapped :class:`UVFacade` object.
 
@@ -49,8 +49,11 @@ def open_uv(obit_file, mode=None):
     ----------
     obit_file: :class:`ObitFile`
         Obit file object.
-    mode: str
+    nvispio: integer
+        Number of visibilities to read/write per I/O operation
+    mode(optional): str
         "r" to read, "w" to write, "rw" to read and write.
+        Defaults to "r"
 
     Returns
     -------
@@ -66,7 +69,7 @@ def open_uv(obit_file, mode=None):
     uv_mode = uv_file_mode(mode)
 
     if obit_file.dtype == "AIPS":
-        method = partial(_open_aips_uv, obit_file, mode)
+        method = partial(_open_aips_uv, obit_file, mode=mode, nvispio=nvispio)
     elif obit_file.dtype == "FITS":
         raise NotImplementedError("FITS UV open via newPFUV "
                                   "not yet supported.")
@@ -91,9 +94,8 @@ def uv_factory(**kwargs):
         Obit file class
     mode (optional): string
         File opening mode passed to :func:`uv_open`.
-    nvispio (optional): integer
-        Number of visibilities processed during a
-        UV Read/Write operation.
+    nvispio: integer
+        Number of visibilities to read/write per I/O operation
     katdata (optional): :class:`katdal.DataSet`
         A katdal data set. If present, this data will
         be used to condition the UV file and create
@@ -112,7 +114,7 @@ def uv_factory(**kwargs):
     mode = kwargs.pop('mode', 'r')
     nvispio = kwargs.pop('nvispio', None)
 
-    uvf = open_uv(ofile, mode=mode)
+    uvf = open_uv(ofile, nvispio=nvispio, mode=mode)
 
     modified = False
 
@@ -149,11 +151,6 @@ def uv_factory(**kwargs):
         # Needs to happen after subtables
         # so that uv.TableList is updated
         uvf.update_descriptor(KA.uv_descriptor())
-        modified = True
-
-    # Set number of visibilities read/written at a time
-    if nvispio is not None:
-        uvf.List.set("nVisPIO", nvispio)
         modified = True
 
     # If modified, reopen the file to trigger descriptor
