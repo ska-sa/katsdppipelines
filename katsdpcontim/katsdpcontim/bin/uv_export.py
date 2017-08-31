@@ -3,12 +3,10 @@ import os.path
 
 import numpy as np
 
-import UV
-
 import katdal
 
 import katsdpcontim
-from katsdpcontim import (KatdalAdapter, obit_context, ObitFile,
+from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         task_factory, task_input_kwargs,
                         task_output_kwargs)
 from katsdpcontim.uv_export import uv_export
@@ -53,16 +51,16 @@ KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
     # Construct file object
-    obit_file = ObitFile(args.name, args.disk,  args.aclass,
+    aips_path = AIPSPath(args.name, args.disk,  args.aclass,
                                      args.seq, dtype="AIPS")
 
     # Perform export to the file
-    uv_export(KA, obit_file, nvispio=args.nvispio, kat_select=args.select)
+    uv_export(KA, aips_path, nvispio=args.nvispio, kat_select=args.select)
 
     # Possibly perform baseline dependent averaging
     if args.blavg == True:
-        task_kwargs = task_input_kwargs(obit_file)
-        task_kwargs.update(task_output_kwargs(obit_file, aclass='uvav'))
+        task_kwargs = task_input_kwargs(aips_path)
+        task_kwargs.update(task_output_kwargs(aips_path, aclass='uvav'))
         blavg = task_factory("UVBlAvg", **task_kwargs)
 
         blavg.go()

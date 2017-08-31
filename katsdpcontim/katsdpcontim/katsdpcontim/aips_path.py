@@ -23,12 +23,12 @@ def _check_disk_type(dtype, check=True):
                         "Should be one of '%s'" % (
                             dtype, _VALID_DISK_TYPES))
 
-class ObitFile(object):
+class AIPSPath(object):
     """
-    A class representing the naming properties of
+    A class representing the path properties of
     either an AIPS or FITS file.
 
-    Note instances of this merely abstract and encapsulate
+    Instances merely abstract and encapsulate
     the naming properties of AIPS and FITS files,
     making it easier to pass this data as arguments.
     They do not abstract file access.
@@ -38,7 +38,7 @@ class ObitFile(object):
     """
     def __init__(self, name, disk, aclass=None, seq=None, dtype=None):
         """
-        Constructs an :class:`ObitFile`.
+        Constructs an :class:`AIPSPath`.
 
         Parameters
         ----------
@@ -79,7 +79,7 @@ class ObitFile(object):
         Returns a copy of this object. Supplied parameters can
         override properties transferred to the new object.
         """
-        return ObitFile(self._name if name is None else name,
+        return AIPSPath(self._name if name is None else name,
                         self._disk if disk is None else disk,
                         self._aclass if aclass is None else aclass,
                         self._seq if seq is None else seq,

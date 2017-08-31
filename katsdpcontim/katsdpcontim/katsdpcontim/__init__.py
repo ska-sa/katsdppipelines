@@ -7,7 +7,7 @@ from obit_context import (obit_context,
                           obit_sys,
                           handle_obit_err)
 
-from obit_file import (ObitFile,
+from aips_path import (AIPSPath,
                         task_input_kwargs,
                         task_output_kwargs,
                         task_output2_kwargs)
@@ -18,3 +18,5 @@ from katdal_adapter import KatdalAdapter
 from aips_table import AIPSTable
 from uv_facade import (UVFacade, open_uv,
                         uv_factory)
+from uv_export import uv_export
+from uv_merge import uv_merge

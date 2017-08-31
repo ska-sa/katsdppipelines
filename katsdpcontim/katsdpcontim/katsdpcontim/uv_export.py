@@ -8,7 +8,7 @@ from katsdpcontim import (KatdalAdapter, UVFacade,
 log = logging.getLogger('katsdpcontim')
 
 
-def uv_export(kat_adapter, obit_file, nvispio=1024, kat_select=None):
+def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
     """
     Exports a katdal selection to an AIPS/FITS file.
 
@@ -16,7 +16,7 @@ def uv_export(kat_adapter, obit_file, nvispio=1024, kat_select=None):
     ----------
     kat_adapter: :class:`KatdalAdapter`
         Katdal Adapter supplying data for export
-    obit_file: :class:`ObitFile`
+    aips_path: :class:`AIPSPath`
         Obit file to which data should be exported
     nvispio: integer
         Number of visibilities to read/write per I/O operation
@@ -31,10 +31,10 @@ def uv_export(kat_adapter, obit_file, nvispio=1024, kat_select=None):
     KA = kat_adapter
 
     # UV file location variables
-    with uv_factory(obit_file=obit_file, mode="w",
+    with uv_factory(aips_path=aips_path, mode="w",
                     katdata=KA, nvispio=nvispio) as uvf:
 
-        log.info("Created '%s'" % obit_file)
+        log.info("Created '%s'" % aips_path)
         firstVis = 1    # FORTRAN indexing
         numVisBuff = 0  # Number of visibilities in the buffer
 

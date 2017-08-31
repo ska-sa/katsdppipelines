@@ -6,7 +6,7 @@ import UV
 import UVDesc
 
 from katsdpcontim import (AIPSTable,
-                        ObitFile,
+                        AIPSPath,
                         obit_err,
                         handle_obit_err)
 
@@ -29,13 +29,13 @@ def uv_file_mode(mode):
     else:
         return UV.READONLY
 
-def open_uv(obit_file, nvispio=1024, mode=None):
+def open_uv(aips_path, nvispio=1024, mode=None):
     """
     Opens an AIPS/FITS UV file and returns a wrapped :class:`UVFacade` object.
 
     Parameters
     ----------
-    obit_file: :class:`ObitFile`
+    aips_path: :class:`AIPSPath`
         Obit file object.
     nvispio: integer
         Number of visibilities to read/write per I/O operation
@@ -58,22 +58,22 @@ def open_uv(obit_file, nvispio=1024, mode=None):
     label = "katuv" # Possibly abstract this too
     exists = False  # Test if the file exists
 
-    if obit_file.dtype == "AIPS":
-        uv = UV.newPAUV(label, obit_file.name, obit_file.aclass,
-                            obit_file.disk, obit_file.seq,
+    if aips_path.dtype == "AIPS":
+        uv = UV.newPAUV(label, aips_path.name, aips_path.aclass,
+                            aips_path.disk, aips_path.seq,
                             exists, err, nvis=nvispio)
-    elif obit_file.dtype == "FITS":
+    elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFUV calls do not currently work")
 
-        uv = UV.newPFUV(label, obit_file.name, obit_file.disk,
+        uv = UV.newPFUV(label, aips_path.name, aips_path.disk,
                             exists, err, nvis=nvispio)
     else:
-        raise ValueError("Invalid dtype '{}'".format(obit_file.dtype))
+        raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
-    handle_obit_err("Error opening '%s'" % obit_file, err)
+    handle_obit_err("Error opening '%s'" % aips_path, err)
 
     uv.Open(uv_mode, err)
-    handle_obit_err("Error opening '%s'" % obit_file, err)
+    handle_obit_err("Error opening '%s'" % aips_path, err)
 
     return UVFacade(uv)
 
@@ -85,7 +85,7 @@ def uv_factory(**kwargs):
 
     Parameters
     ----------
-    obit_file: :class:`ObitFile`
+    aips_path: :class:`AIPSPath`
         Obit file class
     mode (optional): string
         File opening mode passed to :func:`uv_open`.
@@ -102,9 +102,9 @@ def uv_factory(**kwargs):
         Object representing the UV observation.
     """
     try:
-        ofile = kwargs.pop('obit_file')
+        ofile = kwargs.pop('aips_path')
     except KeyError as e:
-        raise ValueError("No 'obit_file' argument supplied.")
+        raise ValueError("No 'aips_path' argument supplied.")
 
     mode = kwargs.pop('mode', 'r')
     nvispio = kwargs.pop('nvispio', None)
@@ -172,21 +172,21 @@ class UVFacade(object):
 
         Parameters
         ----------
-        uv: :class:`UV` or :class:`ObitFile`
-            Either a Obit UV object or an ObitFile describing it
+        uv: :class:`UV` or :class:`AIPSPath`
+            Either a Obit UV object or an AIPSPath describing it
         mode: string
             Mode string passed through to :function:`open_uv`
-            if `uv` is supplied with a :class:`ObitFile`
+            if `uv` is supplied with a :class:`AIPSPath`
         """
         err = obit_err()
 
-        # Given an ObitFile. open it.
-        if isinstance(uv, ObitFile):
-            self._obit_file = uv
+        # Given an AIPSPath. open it.
+        if isinstance(uv, AIPSPath):
+            self._aips_path = uv
             mode = kwargs.pop(mode, 'r')
             self._uv = open_uv(uv, mode=mode)
         # Given an Obit UV file.
-        # Construct an ObitFile
+        # Construct an AIPSPath
         elif isinstance(uv, UV.UV):
             # FITS and AIPS files have different properties
             if uv.FileType == "FITS":
@@ -200,14 +200,14 @@ class UVFacade(object):
             else:
                 raise ValueError("Invalid FileType '%s'" % uv.FileType)
 
-            self._obit_file = ObitFile(name, uv.Disk, aclass,
+            self._aips_path = AIPSPath(name, uv.Disk, aclass,
                                        seq, dtype=uv.FileType)
 
             self._uv = uv
         else:
             raise TypeError("Invalid type '%s'. "
                             "Must be Obit UV object "
-                            "or an ObitFile." % type(uv))
+                            "or an AIPSPath." % type(uv))
 
 
         # Open tables attached to this UV file.
@@ -243,12 +243,12 @@ class UVFacade(object):
                                                obit_err(), **kwargs)
 
     @property
-    def obit_file(self):
-        return self._obit_file
+    def aips_path(self):
+        return self._aips_path
 
     @property
     def name(self):
-        return str(self._obit_file)
+        return str(self._aips_path)
 
     @property
     def Desc(self):
