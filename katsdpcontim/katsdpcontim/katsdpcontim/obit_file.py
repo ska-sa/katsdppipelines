@@ -142,11 +142,17 @@ def task_input_kwargs(ofile):
         Keyword arguments suitable for applying
         to an ObitTask as an input file.
     """
-    return { "DataType" : ofile.dtype,
-             "inName" : ofile.name,
-             "inClass" : ofile.aclass,
-             "inSeq" : ofile.seq,
-             "inDisk": ofile.disk }
+    if ofile.dtype == "AIPS":
+        return { "DataType" : ofile.dtype,
+                 "inName" : ofile.name,
+                 "inClass" : ofile.aclass,
+                 "inSeq" : ofile.seq,
+                 "inDisk": ofile.disk }
+    elif ofile.dtype == "FITS":
+        return { "DataType" : ofile.dtype,
+                 "inFile" : ofile.name }
+    else:
+        _check_disk_type(ofile.dtype, False)
 
 def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
     """
@@ -155,10 +161,39 @@ def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype
     dict
         Keyword arguments suitable for applying
         to an ObitTask as an output file.
-        Arguments can override.
     """
-    return { "outDType" : ofile.dtype if dtype is None else dtype,
-             "outName" : ofile.name if name is None else name,
-             "outClass" : ofile.aclass if aclass is None else aclass,
-             "outSeq" : ofile.seq if seq is None else seq,
-             "outDisk" : ofile.disk if disk is None else disk }
+    dtype = ofile.dtype if dtype is None else dtype
+
+    if dtype == "AIPS":
+        return { "outDType" : dtype,
+                 "outName" : ofile.name if name is None else name,
+                 "outClass" : ofile.aclass if aclass is None else aclass,
+                 "outSeq" : ofile.seq if seq is None else seq,
+                 "outDisk" : ofile.disk if disk is None else disk }
+    elif dtype == "FITS":
+        return { "outDType" : dtype,
+                 "outFile" : ofile.name }
+    else:
+        _check_disk_type(dtype, False)
+
+def task_output2_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
+    """
+    Returns
+    -------
+    dict
+        Keyword arguments suitable for applying
+        to an ObitTask as an output file.
+    """
+    dtype = ofile.dtype if dtype is None else dtype
+
+    # NB. There doesn't seem to be an out2DType
+
+    if dtype == "AIPS":
+        return { "out2Name" : ofile.name if name is None else name,
+                 "out2Class" : ofile.aclass if aclass is None else aclass,
+                 "out2Seq" : ofile.seq if seq is None else seq,
+                 "out2Disk" : ofile.disk if disk is None else disk }
+    elif dtype == "FITS":
+        return { "out2File" : ofile.name }
+    else:
+        _check_disk_type(dtype, False)
