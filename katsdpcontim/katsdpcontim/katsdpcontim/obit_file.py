@@ -4,6 +4,19 @@ def _check_disk_type(dtype, check=True):
     """
     Checks that `dtype` is either "AIPS" or FITS",
     raising a `ValueError` if this is not the case.
+
+    Parameters
+    ----------
+    dtype: string
+        AIPS disk type
+    check: boolean
+        False to avoid the check and
+
+    Raises
+    ------
+    ValueError
+        Raised if `dtype` is not "AIPS" or "FITS"
+        or if check is `False`
     """
     if not check or not dtype in _VALID_DISK_TYPES:
         raise ValueError("Invalid disk type '%s'. "
