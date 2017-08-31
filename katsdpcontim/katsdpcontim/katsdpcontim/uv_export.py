@@ -3,10 +3,9 @@ import logging
 import numpy as np
 
 from katsdpcontim import (KatdalAdapter, UVFacade,
-                        uv_factory,
-                        handle_obit_err, obit_context,
-                        obit_err,)
-from katsdpcontim.util import parse_python_assigns, task_factory
+                        uv_factory)
+
+from katsdpcontim.util import task_factory
 
 log = logging.getLogger('katsdpcontim')
 
@@ -14,6 +13,20 @@ log = logging.getLogger('katsdpcontim')
 def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
     """
     Exports a katdal selection to an AIPS/FITS file.
+
+    Parameters
+    ----------
+    kat_adapter: :class:`KatdalAdapter`
+        Katdal Adapter supplying data for export
+    obit_file: :class:`ObitFile`
+        Obit file to which data should be exported
+    kat_select (optional): dict
+        Dictionary of keyword arguments to apply
+        to katdal selection. Defaults to
+        :code:`{ "scans" : "track", "spw": 0 }`
+    blavg (optional): bool
+        Perform baseline dependent averaging
+        on the resultant data. Defaults to `False`.
     """
     if kat_select is None:
         kat_select = { "scans" : "track", "spw": 0 }
