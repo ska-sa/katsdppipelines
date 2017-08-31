@@ -178,7 +178,7 @@ class UVFacade(object):
             Mode string passed through to :function:`open_uv`
             if `uv` is supplied with a :class:`AIPSPath`
         """
-        err = obit_err()
+        self._err = err = obit_err()
 
         # Given an AIPSPath. open it.
         if isinstance(uv, AIPSPath):
@@ -224,9 +224,8 @@ class UVFacade(object):
         for table in self._tables.values():
             table.close()
 
-        err = obit_err()
-        self._uv.Close(err)
-        handle_obit_err("Error closing uv file", err)
+        self._uv.Close(self._err)
+        handle_obit_err("Error closing uv file", self._err)
 
     def __enter__(self):
         return self
@@ -240,7 +239,7 @@ class UVFacade(object):
 
     def attach_table(self, name, version, **kwargs):
         self._tables[name] = AIPSTable(self._uv, name, version, 'r',
-                                               obit_err(), **kwargs)
+                                               self._err, **kwargs)
 
     @property
     def aips_path(self):
@@ -263,22 +262,19 @@ class UVFacade(object):
         return self._uv.VisBuf
 
     def Open(self, mode):
-        err = obit_err()
-        self._uv.Open(mode, err)
-        handle_obit_err("Error opening UV file '%s'" % self.name, err)
+        self._uv.Open(mode, self._err)
+        handle_obit_err("Error opening UV file '%s'" % self.name, self._err)
 
     def Close(self):
         return self.close()
 
     def Read(self, firstVis=None):
-        err = obit_err()
-        self._uv.Read(err, firstVis=firstVis)
-        handle_obit_err("Error reading UV file '%s'" % self.name)
+        self._uv.Read(self._err, firstVis=firstVis)
+        handle_obit_err("Error reading UV file '%s'" % self.name, self._err)
 
     def Write(self, firstVis=None):
-        err = obit_err()
-        self._uv.Write(err, firstVis=firstVis)
-        handle_obit_err("Error writing UV file '%s'" % self.name)
+        self._uv.Write(self._err, firstVis=firstVis)
+        handle_obit_err("Error writing UV file '%s'" % self.name, self._err)
 
     def update_descriptor(self, descriptor):
         """
@@ -290,14 +286,12 @@ class UVFacade(object):
             Dictionary containing updates applicable to
             :code:`uv.Desc.Dict`.
         """
-        err = obit_err()
-
         desc = self._uv.Desc.Dict
         desc.update(descriptor)
         self._uv.Desc.Dict = desc
-        self._uv.UpdateDesc(err)
+        self._uv.UpdateDesc(self._err)
         handle_obit_err("Error updating UV Descriptor on '{}'"
-                            .format(self.name), err)
+                            .format(self.name), self._err)
 
     def attach_CL_from_NX_table(self, max_ant_nr):
         """
@@ -309,7 +303,6 @@ class UVFacade(object):
         max_ant_nr : integer
             Maximum antenna number written to the AIPS AN table.
         """
-        err = obit_err()
-        UV.PTableCLfromNX(self._uv, max_ant_nr, err)
+        UV.PTableCLfromNX(self._uv, max_ant_nr, self._err)
         handle_obit_err("Error creating '%s' CL table from NX table"
-                                                    % self.name, err)
+                                             % self.name, self._err)
