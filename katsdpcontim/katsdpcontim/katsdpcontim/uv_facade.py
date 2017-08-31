@@ -193,7 +193,8 @@ class UVFacade(object):
         # Given an Obit UV file.
         # Construct an ObitFile
         elif isinstance(uv, UV.UV):
-            self._obit_file = ObitFile(uv.Aname, uv.Disk, uv.Aclass,
+            name = uv.Aname if uv.FileType == "AIPS" else uv.FileName
+            self._obit_file = ObitFile(name, uv.Disk, uv.Aclass,
                                        uv.Aseq, dtype=uv.FileType)
 
             self._uv = uv
