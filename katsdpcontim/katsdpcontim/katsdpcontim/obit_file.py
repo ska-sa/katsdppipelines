@@ -53,10 +53,17 @@ class ObitFile(object):
         self._name = name
         self._disk = disk
 
-    def copy(self):
-        """ Returns a copy of this object """
-        return ObitFile(self._name, self._disk, self._aclass,
-                        self._seq, self.dtype)
+    def copy(self, name=None, disk=None, aclass=None, seq=None, dtype=None):
+        """
+        Returns a copy of this object. Supplied parameters can
+        override properties transferred to the new object.
+        """
+        return ObitFile(self._name if name is None else name,
+                        self._disk if disk is None else disk,
+                        self._aclass if aclass is None else aclass,
+                        self._seq if seq is None else seq,
+                        self._dtype if dtype is None else dtype)
+
 
     @property
     def name(self):
@@ -112,3 +119,32 @@ class ObitFile(object):
     def seq(self, value):
         """ File sequence number """
         self._seq = value
+
+def task_input_kwargs(ofile):
+    """
+    Returns
+    -------
+    dict
+        Keyword arguments suitable for applying
+        to an ObitTask as an input file.
+    """
+    return { "DataType" : ofile.dtype,
+             "inName" : ofile.name,
+             "inClass" : ofile.aclass,
+             "inSeq" : ofile.seq,
+             "inDisk": ofile.disk }
+
+def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
+    """
+    Returns
+    -------
+    dict
+        Keyword arguments suitable for applying
+        to an ObitTask as an output file.
+        Arguments can override.
+    """
+    return { "outDType" : ofile.dtype if dtype is None else dtype,
+             "outName" : ofile.name if name is None else name,
+             "outClass" : ofile.aclass if aclass is None else aclass,
+             "outSeq" : ofile.seq if seq is None else seq,
+             "outDisk" : ofile.disk if disk is None else disk }

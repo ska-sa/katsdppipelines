@@ -7,7 +7,7 @@ from obit_context import (obit_context,
                           obit_sys,
                           handle_obit_err)
 
-from obit_file import ObitFile
+from obit_file import ObitFile, task_input_kwargs, task_output_kwargs
 
 from configuration import get_config
 from katdal_adapter import KatdalAdapter

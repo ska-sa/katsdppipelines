@@ -3,7 +3,9 @@ import logging
 import numpy as np
 
 from katsdpcontim import (KatdalAdapter, UVFacade,
-                        uv_factory)
+                        uv_factory,
+                        task_input_kwargs,
+                        task_output_kwargs)
 
 from katsdpcontim.util import task_factory
 
@@ -155,13 +157,10 @@ def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
 
     # Possibly perform baseline dependent averaging
     if blavg == True:
-        blavg = task_factory("UVBlAvg",
-            DataType=obit_file.dtype, inName=obit_file.name,
-            inClass=obit_file.aclass, inDisk=obit_file.disk,
-            inSeq=obit_file.seq,
-            outDType=obit_file.dtype, outName=obit_file.name,
-            outClass="uvav", outDisk=obit_file.disk,
-            outSeq=obit_file.seq)
+        task_kwargs = task_input_kwargs(obit_file)
+        task_kwargs.update(task_output_kwargs(obit_file, aclass='uvav'))
+        blavg = task_factory("UVBlAvg", **task_kwargs)
+
         blavg.go()
 
 
