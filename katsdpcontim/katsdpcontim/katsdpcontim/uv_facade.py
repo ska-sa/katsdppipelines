@@ -29,18 +29,6 @@ def uv_file_mode(mode):
     else:
         return UV.READONLY
 
-def _open_aips_uv(obit_file, nvispio=1024, mode=None):
-    """ Open/create the specified AIPS UV file """
-    err = obit_err()
-
-    label = "katuv" # Possibly abstract this too
-    exists = False  # Test if the file exists
-    uv = UV.newPAUV(label, obit_file.name, obit_file.aclass,
-                        obit_file.disk, obit_file.seq,
-                        exists, err, nvis=nvispio)
-    handle_obit_err("Error opening uv file", err)
-    return uv
-
 def open_uv(obit_file, nvispio=1024, mode=None):
     """
     Opens an AIPS/FITS UV file and returns a wrapped :class:`UVFacade` object.
@@ -67,18 +55,25 @@ def open_uv(obit_file, nvispio=1024, mode=None):
         mode = "r"
 
     uv_mode = uv_file_mode(mode)
+    label = "katuv" # Possibly abstract this too
+    exists = False  # Test if the file exists
 
     if obit_file.dtype == "AIPS":
-        method = partial(_open_aips_uv, obit_file, mode=mode, nvispio=nvispio)
+        uv = UV.newPAUV(label, obit_file.name, obit_file.aclass,
+                            obit_file.disk, obit_file.seq,
+                            exists, err, nvis=nvispio)
     elif obit_file.dtype == "FITS":
-        raise NotImplementedError("FITS UV open via newPFUV "
-                                  "not yet supported.")
+        raise NotImplementedError("newPFUV calls do not currently work")
+
+        uv = UV.newPFUV(label, obit_file.name, obit_file.disk,
+                            exists, err, nvis=nvispio)
     else:
         raise ValueError("Invalid dtype '{}'".format(obit_file.dtype))
 
-    uv = method()
+    handle_obit_err("Error opening '%s'" % obit_file, err)
+
     uv.Open(uv_mode, err)
-    handle_obit_err("Error opening uv file", err)
+    handle_obit_err("Error opening '%s'" % obit_file, err)
 
     return UVFacade(uv)
 
@@ -193,9 +188,20 @@ class UVFacade(object):
         # Given an Obit UV file.
         # Construct an ObitFile
         elif isinstance(uv, UV.UV):
-            name = uv.Aname if uv.FileType == "AIPS" else uv.FileName
-            self._obit_file = ObitFile(name, uv.Disk, uv.Aclass,
-                                       uv.Aseq, dtype=uv.FileType)
+            # FITS and AIPS files have different properties
+            if uv.FileType == "FITS":
+                name = uv.FileName
+                aclass = None
+                seq = None
+            elif uv.FileType == "AIPS":
+                name = uv.Aname
+                aclass = uv.Aclass
+                seq = uv.Aseq
+            else:
+                raise ValueError("Invalid FileType '%s'" % uv.FileType)
+
+            self._obit_file = ObitFile(name, uv.Disk, aclass,
+                                       seq, dtype=uv.FileType)
 
             self._uv = uv
         else:
