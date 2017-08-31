@@ -1,7 +1,12 @@
 import ast
 import logging
 
+import six
+
+from katsdpcontim.aips_parser import obit_config_from_aips
 from katsdpcontim.configuration import get_config
+
+import ObitTask
 
 log = logging.getLogger('katsdpcontim')
 
@@ -78,11 +83,6 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
     :class:`ObitTask.ObitTask`
         Obit task object
     """
-
-    import ObitTask
-    from katsdpcontim.aips_parser import (obit_config_from_aips,
-                                        apply_cfg_to_task)
-
     # Load any supplied file configuration first,
     # then apply kwargs on top of this
     if aips_cfg_file is not None:
@@ -105,6 +105,15 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
     task = ObitTask.ObitTask(name)
 
     # Apply configuration options to the task
-    apply_cfg_to_task(task, kwargs)
+    for k, v in six.iteritems(kwargs):
+        try:
+            setattr(task, k, v)
+        except AttributeError as e:
+            attr_err = "ObitTask instance has no attribute '{}'".format(k)
+            if attr_err in e.message:
+                log.warn("Key '{}' is not valid for this "
+                             "task and will be ignored".format(k))
+            else:
+                raise
 
     return task

@@ -1,8 +1,6 @@
 from collections import OrderedDict
 import logging
 
-import six
-
 import InfoList
 import ParserUtil
 
@@ -105,23 +103,3 @@ def obit_config_from_aips(aips_cfg_file):
 
     return { k: _massage(o) for k, o
             in parse_aips_config(aips_cfg_file).iteritems() }
-
-
-def apply_cfg_to_task(task, cfg):
-    """
-    Applies supplied configuration to task
-    by setting attributes on the task object.
-
-    Will warn if the attribute does not exist,
-    but will continue
-    """
-    for k, v in six.iteritems(cfg):
-        try:
-            setattr(task, k, v)
-        except AttributeError as e:
-            attr_err = "ObitTask instance has no attribute '{}'".format(k)
-            if attr_err in e.message:
-                log.warn("Key '{}' is not valid for this "
-                             "task and will be ignored".format(k))
-            else:
-                raise
