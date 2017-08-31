@@ -1,5 +1,15 @@
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
+def _check_disk_type(dtype, check=True):
+    """
+    Checks that `dtype` is either "AIPS" or FITS",
+    raising a `ValueError` if this is not the case.
+    """
+    if not check or not dtype in _VALID_DISK_TYPES:
+        raise ValueError("Invalid disk type '%s'. "
+                        "Should be one of '%s'" % (
+                            dtype, _VALID_DISK_TYPES))
+
 class ObitFile(object):
     """
     A class representing the naming properties of
@@ -45,9 +55,7 @@ class ObitFile(object):
             self._aclass = "fits"
             self._seq = 1
         else:
-            raise ValueError("Invalid disk type '%s'. "
-                            "Should be one of '%s'" % (
-                                dtype, _VALID_DISK_TYPES))
+            _check_disk_type(dtype, False)
 
         self._dtype = dtype
         self._name = name
@@ -93,11 +101,7 @@ class ObitFile(object):
     @dtype.setter
     def dtype(self, value):
         """ File disk type """
-        if not value in _VALID_DISK_TYPES:
-            raise ValueError("Invalid disk type '%s'. "
-                            "Should be one of '%s'" % (
-                                dtype, _VALID_DISK_TYPES))
-
+        _check_disk_type(value)
         self._dtype = value
 
     @property
@@ -119,6 +123,16 @@ class ObitFile(object):
     def seq(self, value):
         """ File sequence number """
         self._seq = value
+
+    def __str__(self):
+        """ String representation """
+        if self._dtype == "AIPS":
+            return "%s.%s.%s on AIPS %d" % (self._name, self._aclass,
+                                            self._seq, self._disk)
+        elif self._dtype == "FITS":
+            return "%s on FITS %d" % (self._name, self._disk)
+        else:
+            _check_disk_type(self._dtype, False)
 
 def task_input_kwargs(ofile):
     """

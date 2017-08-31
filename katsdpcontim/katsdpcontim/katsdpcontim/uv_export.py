@@ -41,7 +41,7 @@ def uv_export(kat_adapter, obit_file, kat_select=None, blavg=False):
     with uv_factory(obit_file=obit_file, mode="w",
                     katdata=KA, nvispio=nvispio) as uvf:
 
-        log.info("Created '%s' on AIPS disk '%d'" % (uvf.name, obit_file.disk))
+        log.info("Created '%s'" % obit_file)
         firstVis = 1    # FORTRAN indexing
         numVisBuff = 0  # Number of visibilities in the buffer
 
