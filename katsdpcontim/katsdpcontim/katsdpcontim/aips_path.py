@@ -1,3 +1,5 @@
+import os
+
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
 def _check_disk_type(dtype, check=True):
@@ -22,6 +24,41 @@ def _check_disk_type(dtype, check=True):
         raise ValueError("Invalid disk type '%s'. "
                         "Should be one of '%s'" % (
                             dtype, _VALID_DISK_TYPES))
+
+def katdal_aips_path(katdata, name=None, disk=None, aclass=None,
+                    seq=None, label=None, dtype=None):
+    """
+    Constructs an aips path from a :class:`KatdalAdapter`
+
+    Parameters
+    ----------
+    katdata: :class:`KatdalAdapter`
+        Object from which to extract path information
+    **kwargs (optional): :obj:
+        See :class:`AIPSPath` for information on
+        keyword arguments.
+
+    Returns
+    -------
+    :class:`AIPSPath`
+        AIPS path describing this observation
+    """
+    if dtype is None:
+        dtype = "AIPS"
+
+    if name is None:
+        path, file  = os.path.split(katdata.katdal.name)
+        name, ext = os.path.splitext(file)
+
+        if dtype == "FITS":
+            name += '.uvfits'
+
+    if disk is None:
+        disk = 1
+
+    return AIPSPath(name=name, disk=disk, aclass=aclass,
+                    seq=seq, label=label, dtype=dtype)
+
 
 class AIPSPath(object):
     """

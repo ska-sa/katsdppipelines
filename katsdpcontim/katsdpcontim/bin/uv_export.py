@@ -7,6 +7,7 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
+                        katdal_aips_path,
                         task_factory, task_input_kwargs,
                         task_output_kwargs, uv_export)
 from katsdpcontim.util import parse_python_assigns
@@ -44,8 +45,8 @@ KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
     # Construct file object
-    aips_path = KA.aips_path(args.name, args.disk,  args.aclass,
-                                     args.seq, dtype="AIPS")
+    aips_path = katdal_aips_path(KA, args.name, args.disk,
+                                    args.aclass, args.seq, dtype="AIPS")
 
     # Perform export to the file
     uv_export(KA, aips_path, nvispio=args.nvispio, kat_select=args.select)

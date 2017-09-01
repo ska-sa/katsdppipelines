@@ -8,6 +8,7 @@ from obit_context import (obit_context,
                           handle_obit_err)
 
 from aips_path import (AIPSPath,
+                        katdal_aips_path,
                         task_input_kwargs,
                         task_output_kwargs,
                         task_output2_kwargs)

@@ -1,7 +1,6 @@
 from collections import OrderedDict, Counter
 import datetime
 import logging
-import os
 import time
 
 import attr
@@ -169,33 +168,15 @@ class KatdalAdapter(object):
                             in enumerate(sorted(self._katds.ants)))
 
 
-    def aips_path(self, name=None, disk=None, aclass=None,
-                        seq=None, label=None, dtype=None):
-        """
-        Returns
-        -------
-        :class:`AIPSPath`
-            AIPS path describing this observation
-        """
-        if dtype is None:
-            dtype = "AIPS"
-
-        if name is None:
-            path, file  = os.path.split(self._katds.name)
-            name, ext = os.path.splitext(file)
-
-            if dtype == "FITS":
-                name += '.uvfits'
-
-        if disk is None:
-            disk = 1
-
-        return AIPSPath(name=name, disk=disk, aclass=aclass,
-                        seq=seq, label=label, dtype=dtype)
 
     @property
     def scan_indices(self):
         return self._katds.scan_indices
+
+    @property
+    def katdal(self):
+        """ The `katdal.DataSet` adapted by this object """
+        return self._katds
 
     @property
     def obsdat(self):
