@@ -231,6 +231,12 @@ class AIPSTableRow(object):
 
         p.pretty(self._row)
 
+    def asdict(self):
+        if self._row is None:
+            self.read()
+
+        return self._row
+
     def __getitem__(self, key):
         """
         Parameters
@@ -328,10 +334,10 @@ class AIPSTableRows(object):
 
         Returns
         -------
-        :class:`AIPSTableRow`
+        dict
             row at the specified index
         """
-        return self._rows[index]
+        return self._rows[index].asdict()
 
     def __setitem__(self, index, row):
         """
