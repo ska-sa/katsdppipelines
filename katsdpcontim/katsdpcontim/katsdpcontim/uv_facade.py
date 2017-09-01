@@ -148,10 +148,6 @@ def uv_factory(**kwargs):
         uvf.tables["AIPS FQ"].write()
         uvf.tables["AIPS SU"].write()
 
-        # Close them
-        uvf.tables["AIPS AN"].close()
-        uvf.tables["AIPS FQ"].close()
-        uvf.tables["AIPS SU"].close()
         # Use base descriptor if no descriptor supplied
         desc = KA.uv_descriptor() if desc is None else desc
 
