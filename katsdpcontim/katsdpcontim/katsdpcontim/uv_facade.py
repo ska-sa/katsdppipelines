@@ -45,8 +45,8 @@ def open_uv(aips_path, nvispio=1024, mode=None):
 
     Returns
     -------
-    :class:`UVFacade`
-        A UVFacade object
+    :class:`UV`
+        An Obit UV object
     """
 
     err = obit_err()
@@ -74,7 +74,7 @@ def open_uv(aips_path, nvispio=1024, mode=None):
     uv.Open(uv_mode, err)
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
-    return UVFacade(uv)
+    return uv
 
 def uv_factory(**kwargs):
     """
@@ -108,7 +108,8 @@ def uv_factory(**kwargs):
     mode = kwargs.pop('mode', 'r')
     nvispio = kwargs.pop('nvispio', None)
 
-    uvf = open_uv(ofile, nvispio=nvispio, mode=mode)
+    uv = open_uv(ofile, nvispio=nvispio, mode=mode)
+    uvf = UVFacade(uv)
 
     modified = False
 
@@ -182,8 +183,8 @@ class UVFacade(object):
         # Given an AIPSPath. open it.
         if isinstance(uv, AIPSPath):
             self._aips_path = uv
-            mode = kwargs.pop(mode, 'r')
-            self._uv = open_uv(uv, mode=mode)
+            mode = kwargs.pop('mode', 'r')
+            self._uv = uv = open_uv(uv, mode=mode)
         # Given an Obit UV file.
         # Construct an AIPSPath
         elif isinstance(uv, UV.UV):
