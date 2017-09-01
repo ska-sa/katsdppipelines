@@ -188,6 +188,11 @@ class UVFacade(object):
             if `uv` is supplied with a :class:`AIPSPath`
         """
         self._err = err = obit_err()
+        self._open_logic(uv, err, **kwargs)
+
+    def _open_logic(self, uv, err, **kwargs):
+        if getattr(self, '_uv', None) is not None:
+            self.close()
 
         # Given an AIPSPath. open it.
         if isinstance(uv, AIPSPath):
@@ -235,6 +240,8 @@ class UVFacade(object):
         # Close all attached tables
         for table in self._tables.values():
             table.close()
+
+        self._tables = {}
 
         self._uv.Close(self._err)
         handle_obit_err("Error closing uv file", self._err)
