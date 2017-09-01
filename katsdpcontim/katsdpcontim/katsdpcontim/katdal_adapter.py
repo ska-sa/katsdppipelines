@@ -166,6 +166,10 @@ class KatdalAdapter(object):
                             in enumerate(sorted(self._katds.ants)))
 
     @property
+    def scan_indices(self):
+        return self._katds.scan_indices
+
+    @property
     def obsdat(self):
         """
         Returns
