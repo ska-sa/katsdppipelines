@@ -8,8 +8,7 @@ import katdal
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         task_factory, task_input_kwargs,
-                        task_output_kwargs)
-from katsdpcontim.uv_export import uv_export
+                        task_output_kwargs, uv_export)
 from katsdpcontim.util import parse_python_assigns
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
@@ -41,17 +40,11 @@ def create_parser():
 
 args = create_parser().parse_args()
 
-# Use the hdf5file name if none is supplied
-if args.name is None:
-    path, file  = os.path.split(args.katdata)
-    base_filename, ext = os.path.splitext(file)
-    args.name = base_filename
-
 KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
     # Construct file object
-    aips_path = AIPSPath(args.name, args.disk,  args.aclass,
+    aips_path = KA.aips_path(args.name, args.disk,  args.aclass,
                                      args.seq, dtype="AIPS")
 
     # Perform export to the file
