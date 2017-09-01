@@ -129,16 +129,19 @@ def uv_factory(**kwargs):
         uvf.attach_table("AIPS AN", 1)
         uvf.attach_table("AIPS FQ", 1, numIF=KA.nif)
         uvf.attach_table("AIPS SU", 1)
+        uvf.attach_table("AIPS NX", 1)
 
         # Update their keywords
         uvf.tables["AIPS AN"].keywords.update(KA.uv_antenna_keywords)
         uvf.tables["AIPS FQ"].keywords.update(KA.uv_spw_keywords)
         uvf.tables["AIPS SU"].keywords.update(KA.uv_source_keywords)
+            # AIPS NX table has no keywords
 
         # Set their rows
         uvf.tables["AIPS AN"].rows = KA.uv_antenna_rows
         uvf.tables["AIPS FQ"].rows = KA.uv_spw_rows
         uvf.tables["AIPS SU"].rows = KA.uv_source_rows
+            # AIPS NX have no rows at this point
 
         # Write them
         uvf.tables["AIPS AN"].write()
@@ -218,7 +221,6 @@ class UVFacade(object):
             raise TypeError("Invalid type '%s'. "
                             "Must be Obit UV object "
                             "or an AIPSPath." % type(uv))
-
 
         # Open tables attached to this UV file.
         tables = TableList.PGetList(uv.TableList, err)
