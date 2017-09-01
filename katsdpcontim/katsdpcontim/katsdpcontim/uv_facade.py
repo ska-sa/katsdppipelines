@@ -1,6 +1,8 @@
 import logging
 from functools import partial
 
+import numpy as np
+
 import TableList
 import UV
 import UVDesc
@@ -264,6 +266,10 @@ class UVFacade(object):
     @property
     def VisBuf(self):
         return self._uv.VisBuf
+
+    @property
+    def np_visbuf(self):
+        return np.frombuffer(self._uv.VisBuf, count=-1, dtype=np.float32)
 
     def Open(self, mode):
         self._uv.Open(mode, self._err)
