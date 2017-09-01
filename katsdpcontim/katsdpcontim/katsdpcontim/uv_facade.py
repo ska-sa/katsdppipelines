@@ -108,7 +108,7 @@ def uv_factory(**kwargs):
         raise ValueError("No 'aips_path' argument supplied.")
 
     mode = kwargs.pop('mode', 'r')
-    nvispio = kwargs.pop('nvispio', None)
+    nvispio = kwargs.pop('nvispio', 1024)
 
     uv = open_uv(ofile, nvispio=nvispio, mode=mode)
     uvf = UVFacade(uv)
