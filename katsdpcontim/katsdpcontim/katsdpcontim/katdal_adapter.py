@@ -1,6 +1,7 @@
+from collections import OrderedDict, Counter
 import datetime
 import logging
-from collections import OrderedDict, Counter
+import os
 import time
 
 import attr
@@ -8,6 +9,8 @@ import boltons.cacheutils
 import numpy as np
 
 import UVDesc
+
+from katsdpcontim.aips_path import AIPSPath
 
 log = logging.getLogger('katsdpcontim')
 
@@ -164,6 +167,31 @@ class KatdalAdapter(object):
         A = attr.make_class("IndexedAntenna", ["index", "antenna"])
         return OrderedDict((a.name, A(i, a)) for i, a
                             in enumerate(sorted(self._katds.ants)))
+
+
+    def aips_path(self, name=None, disk=None, aclass=None,
+                        seq=None, label=None, dtype=None):
+        """
+        Returns
+        -------
+        :class:`AIPSPath`
+            AIPS path describing this observation
+        """
+        if dtype is None:
+            dtype = "AIPS"
+
+        if name is None:
+            path, file  = os.path.split(self._katds.name)
+            name, ext = os.path.splitext(file)
+
+            if dtype == "FITS":
+                name += '.uvfits'
+
+        if disk is None:
+            disk = 1
+
+        return AIPSPath(name=name, disk=disk, aclass=aclass,
+                        seq=seq, label=label, dtype=dtype)
 
     @property
     def scan_indices(self):
