@@ -55,18 +55,17 @@ def open_uv(aips_path, nvispio=1024, mode=None):
         mode = "r"
 
     uv_mode = uv_file_mode(mode)
-    label = "katuv" # Possibly abstract this too
     exists = False  # Test if the file exists
 
     if aips_path.dtype == "AIPS":
-        uv = UV.newPAUV(label, aips_path.name, aips_path.aclass,
-                            aips_path.disk, aips_path.seq,
-                            exists, err, nvis=nvispio)
+        uv = UV.newPAUV(aips_path.label, aips_path.name,
+                            aips_path.aclass, aips_path.disk,
+                            aips_path.seq, exists, err, nvis=nvispio)
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFUV calls do not currently work")
 
-        uv = UV.newPFUV(label, aips_path.name, aips_path.disk,
-                            exists, err, nvis=nvispio)
+        uv = UV.newPFUV(aips_path.label, aips_path.name, aips_path.disk,
+                                                exists, err, nvis=nvispio)
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 

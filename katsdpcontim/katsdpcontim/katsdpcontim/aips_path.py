@@ -36,7 +36,8 @@ class AIPSPath(object):
     Also, while FITS files don't technically have classes
     or sequences, these are defaulted to "fits" and 1, respectively.
     """
-    def __init__(self, name, disk, aclass=None, seq=None, dtype=None):
+    def __init__(self, name, disk, aclass=None,
+                seq=None, label=None, dtype=None):
         """
         Constructs an :class:`AIPSPath`.
 
@@ -50,6 +51,8 @@ class AIPSPath(object):
             AIPS file class
         seq (optional): integer
             AIPS file sequence number
+        label (optional): string
+            AIPS label
         dtype (optional): string
             Disk type. Should be "AIPS" or "FITS".
             Defaults to "AIPS" if not provided.
@@ -57,6 +60,9 @@ class AIPSPath(object):
         """
         if dtype is None:
             dtype = "AIPS"
+
+        if label is None:
+            label = "katuv"
 
         if dtype == "AIPS":
             # Provide sensible defaults for missing class and sequence
@@ -70,11 +76,13 @@ class AIPSPath(object):
         else:
             _check_disk_type(dtype, False)
 
+        self._label = label
         self._dtype = dtype
         self._name = name
         self._disk = disk
 
-    def copy(self, name=None, disk=None, aclass=None, seq=None, dtype=None):
+    def copy(self, name=None, disk=None, aclass=None,
+            seq=None, label=None, dtype=None):
         """
         Returns a copy of this object. Supplied parameters can
         override properties transferred to the new object.
@@ -83,6 +91,7 @@ class AIPSPath(object):
                         self._disk if disk is None else disk,
                         self._aclass if aclass is None else aclass,
                         self._seq if seq is None else seq,
+                        self._label if label is None else label,
                         self._dtype if dtype is None else dtype)
 
 
@@ -136,6 +145,16 @@ class AIPSPath(object):
     def seq(self, value):
         """ File sequence number """
         self._seq = value
+
+    @property
+    def label(self):
+        """ File label """
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        """ File label """
+        self._label = value
 
     def __str__(self):
         """ String representation """
