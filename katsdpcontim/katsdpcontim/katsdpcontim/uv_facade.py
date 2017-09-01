@@ -214,8 +214,12 @@ class UVFacade(object):
         tables = TableList.PGetList(uv.TableList, err)
         handle_obit_err("Error getting '%s' table list" % self.name)
 
+        # History tables don't work like the other tables
+        ignored_tables = ["AIPS HI"]
+
         self._tables = { name: AIPSTable(uv, name, version, 'r', err)
-                                      for version, name in tables }
+                                      for version, name in tables
+                                      if not name in ignored_tables }
 
     def close(self):
         """ Closes the wrapped UV file """
