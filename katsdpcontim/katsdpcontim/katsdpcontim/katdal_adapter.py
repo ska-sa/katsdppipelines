@@ -39,15 +39,6 @@ class KatdalAdapter(object):
         self._katds = katds
         self._cache = {}
 
-    def select(self, **kwargs):
-        """ Proxies :meth:`katdal.DataSet.select` """
-        return self._katds.select(**kwargs)
-
-    @property
-    def shape(self):
-        """ Proxies :meth:`katdal.DataSet.shape` """
-        return self._katds.shape
-
     def uv_scans(self):
         """
         Generator returning vibility data for scan's selected
@@ -167,10 +158,18 @@ class KatdalAdapter(object):
         return OrderedDict((a.name, A(i, a)) for i, a
                             in enumerate(sorted(self._katds.ants)))
 
+    def select(self, **kwargs):
+        """ Proxies :meth:`katdal.DataSet.select` """
+        return self._katds.select(**kwargs)
 
+    @property
+    def shape(self):
+        """ Proxies :meth:`katdal.DataSet.shape` """
+        return self._katds.shape
 
     @property
     def scan_indices(self):
+        """ Proxies :attr:`katdal.DataSet.scan_indices` """
         return self._katds.scan_indices
 
     @property
