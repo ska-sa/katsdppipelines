@@ -53,7 +53,7 @@ setup(name=PKG,
                       'pretty >= 0.1',
                       'ruamel.yaml >= 0.15.23',
                       'six >= 1.10.0'],
-    scripts=glob(pjoin('bin', '*.py')),
+    scripts=glob(pjoin('scripts', '*.py')),
     packages=find_packages(),
     package_data={PKG: [pjoin('conf', '*.in')]}
 )
