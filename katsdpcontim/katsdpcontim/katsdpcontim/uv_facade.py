@@ -96,6 +96,10 @@ def uv_factory(**kwargs):
         A katdal data set. If present, this data will
         be used to condition the UV file and create
         tables.
+    desc (optional): dict
+        A dictionary descriptor suitable for conditioning the
+        UV file. If not present, this will be derived from the
+        `katdata` object.
 
     Returns
     -------
@@ -109,6 +113,7 @@ def uv_factory(**kwargs):
 
     mode = kwargs.pop('mode', 'r')
     nvispio = kwargs.pop('nvispio', 1024)
+    desc = kwargs.pop('desc', None)
 
     uv = open_uv(ofile, nvispio=nvispio, mode=mode)
     uvf = UVFacade(uv)
@@ -144,10 +149,13 @@ def uv_factory(**kwargs):
         uvf.tables["AIPS AN"].close()
         uvf.tables["AIPS FQ"].close()
         uvf.tables["AIPS SU"].close()
+        # Use base descriptor if no descriptor supplied
+        desc = KA.uv_descriptor() if desc is None else desc
 
-        # Needs to happen after subtables
-        # so that uv.TableList is updated
-        uvf.update_descriptor(KA.uv_descriptor())
+    # Needs to happen after subtables
+    # so that uv.TableList is updated
+    if desc is not None:
+        uvf.update_descriptor(desc)
         modified = True
 
     # If modified, reopen the file to trigger descriptor
