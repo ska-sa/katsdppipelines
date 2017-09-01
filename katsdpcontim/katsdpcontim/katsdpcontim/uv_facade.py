@@ -276,6 +276,10 @@ class UVFacade(object):
         self._uv.Write(self._err, firstVis=firstVis)
         handle_obit_err("Error writing UV file '%s'" % self.name, self._err)
 
+    def Zap(self):
+        self._uv.Zap(self._err)
+        handle_obit_err("Error deleting UV file '%s'" % self.name, self._err)
+
     def update_descriptor(self, descriptor):
         """
         Update the UV descriptor.
