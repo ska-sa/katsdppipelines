@@ -703,14 +703,16 @@ class KatdalAdapter(object):
             RP('iloct', 4, 'TIME1'),     # Timestamp
             RP('iloscu', 5, 'SOURCE'),   # Source Index
 
-            RP('ilocfq', -1, ''),        # FREQSEL
-            RP('ilocit', -1, ''),        # INTTIM
-            RP('ilocid', -1, ''),        # CORR-ID
-            RP('ilocws', -1, ''),        # WEIGHT
+            RP('ilocfq', -1, 'FREQSEL'), # Frequency setup ID
+            RP('ilocit', -1, 'INTTIM'),  # Integration Time
+            RP('ilocid', -1, 'CORR-ID'), # VLBA-specific
+            RP('ilocws', -1, 'WEIGHT'),  # Ignore
 
-            RP('iloca1', -1, ''),        # ANTENNA 1
-            RP('iloca2', -1, ''),        # ANTENNA 2
-            RP('ilocsa', -1, ''),        # SUBARRAY
+            # The following used when 'BASELINE' id
+            # can't be calculated because number of antenna > 255
+            RP('iloca1', -1, 'ANTENNA1'),
+            RP('iloca2', -1, 'ANTENNA2'),
+            RP('ilocsa', -1, 'SUBARRAY'),
         ]
 
         # Construct parameter types for existent random parameters
