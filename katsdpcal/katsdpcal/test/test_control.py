@@ -225,16 +225,23 @@ class TestCalDeviceServer(unittest.TestCase):
             bls_ordering.append((a + 'h', b + 'v'))
             bls_ordering.append((a + 'v', b + 'h'))
         telstate.clear()     # Prevent state leaks
-        telstate.add('sdp_l0_int_time', 4.0, immutable=True)
         telstate.add('antenna_mask', ','.join(self.antennas), immutable=True)
         telstate.add('cbf_n_ants', self.n_antennas, immutable=True)
         telstate.add('cbf_n_chans', self.n_channels, immutable=True)
         telstate.add('cbf_n_pols', 4, immutable=True)
-        telstate.add('cbf_center_freq', 428000000.0, immutable=True)
+        telstate.add('cbf_center_freq', 1712000000.0, immutable=True)
         telstate.add('cbf_bandwidth', 856000000.0, immutable=True)
-        telstate.add('sdp_l0_bls_ordering', bls_ordering, immutable=True)
         telstate.add('cbf_sync_time', 1400000000.0, immutable=True)
         telstate.add('subarray_product_id', 'c856M4k', immutable=True)
+        telstate.add('sdp_l0_int_time', 4.0, immutable=True)
+        telstate.add('sdp_l0_bls_ordering', bls_ordering, immutable=True)
+        telstate.add('sdp_l0_n_bls', len(bls_ordering), immutable=True)
+        # At present, cal doesn't work with L0 being different to CBF
+        telstate.add('sdp_l0_bandwidth', telstate.cbf_bandwidth)
+        telstate.add('sdp_l0_center_freq', telstate.cbf_center_freq)
+        telstate.add('sdp_l0_n_chans', self.n_channels)
+        telstate.add('sdp_l0_n_chans_per_substream', self.n_channels_per_substream)
+        telstate.add('sdp_l0_sync_time', telstate.cbf_sync_time)
         for antenna in self.antennas:
             telstate.add('{}_activity'.format(antenna), 'track', ts=0)
             telstate.add('{}_target'.format(antenna), target, ts=0)
@@ -251,7 +258,7 @@ class TestCalDeviceServer(unittest.TestCase):
         pipelineprocs.setup_ts(telstate)
 
     def add_items(self, ig):
-        channels = self.telstate.cbf_n_chans
+        channels = self.telstate.sdp_l0_n_chans_per_substream
         baselines = len(self.telstate.sdp_l0_bls_ordering)
         ig.add_item(id=None, name='correlator_data', description="Visibilities",
                     shape=(channels, baselines), dtype=np.complex64)
@@ -276,6 +283,9 @@ class TestCalDeviceServer(unittest.TestCase):
 
     def setUp(self):
         self.n_channels = 4096
+        self.n_substreams = 4
+        assert self.n_channels % self.n_substreams == 0
+        self.n_channels_per_substream = self.n_channels // self.n_substreams
         self.antennas = ["m090", "m091", "m092", "m093"]
         self.n_antennas = len(self.antennas)
         self.n_baselines = self.n_antennas * (self.n_antennas + 1) * 2
@@ -302,7 +312,7 @@ class TestCalDeviceServer(unittest.TestCase):
         self.server = control.create_server(
             False, 'localhost', 0, buffers,
             Endpoint('239.102.255.1', 7148), None,
-            None, 0, None, self.telstate,
+            None, 0, None, self.telstate, 'sdp_l0',
             self.report_path, self.log_path, None)
         self.server.start()
         self.addCleanup(self.ioloop.run_sync, self.stop_server)
@@ -426,15 +436,22 @@ class TestCalDeviceServer(unittest.TestCase):
         weights = rs.uniform(64, 255, vis.shape).astype(np.uint8)
         weights_channel = rs.uniform(1.0, 4.0, (self.n_channels,)).astype(np.float32)
 
+        channel_slices = [np.s_[i * self.n_channels_per_substream
+                                : (i+1) * self.n_channels_per_substream]
+                          for i in range(self.n_substreams)]
         for i in range(10):
             # Corrupt some times, to check that the RFI flagging is working
-            self.heaps.append({
-                'correlator_data': corrupted_vis if i in (3, 7) else vis,
-                'flags': flags,
-                'weights': weights,
-                'weights_channel': weights_channel,
-                'timestamp': ts
-            })
+            dump_heaps = [
+                {
+                    'correlator_data': corrupted_vis[s]if i in (3, 7) else vis[s],
+                    'flags': flags[s],
+                    'weights': weights[s],
+                    'weights_channel': weights_channel[s],
+                    'timestamp': ts,
+                    'frequency': np.uint32(s.start)
+                } for s in channel_slices]
+            rs.shuffle(dump_heaps)
+            self.heaps.extend(dump_heaps)
             ts += self.telstate.sdp_l0_int_time
         yield self.make_request('capture-init')
         yield tornado.gen.sleep(1)
@@ -445,7 +462,8 @@ class TestCalDeviceServer(unittest.TestCase):
                       'Pipeline stopped',
                       'Report writer stopped'], progress)
         assert_equal(0, int((yield self.get_sensor('accumulator-capture-active'))))
-        assert_equal(10, int((yield self.get_sensor('accumulator-input-heaps'))))
+        assert_equal(10 * self.n_substreams,
+                     int((yield self.get_sensor('accumulator-input-heaps'))))
         assert_equal(1, int((yield self.get_sensor('accumulator-batches'))))
         assert_equal(1, int((yield self.get_sensor('accumulator-observations'))))
         assert_equal(10, int((yield self.get_sensor('pipeline-last-slots'))))
@@ -476,8 +494,6 @@ class TestCalDeviceServer(unittest.TestCase):
         BG = np.broadcast_to(G[np.newaxis, :, :], ret_BG.shape)
         # TODO: enable when fixed.
         # This test won't work yet:
-        # - cal uses the baseband center frequency instead of L band, which breaks
-        #   both the phase of G and the flux model
         # - cal puts NaNs in B in the channels for which it applies the static
         #   RFI mask, instead of interpolating
         # np.testing.assert_allclose(np.abs(BG), np.abs(ret_BG), rtol=1e-3)
@@ -497,20 +513,28 @@ class TestCalDeviceServer(unittest.TestCase):
         """Test capture with more heaps than buffer slots, to check that it handles
         wrapping around the end of the buffer.
         """
+        rs = np.random.RandomState(seed=1)
         vis = np.ones((self.n_channels, self.n_baselines), np.complex64)
         weights = np.ones(vis.shape, np.uint8)
         weights_channel = np.ones((self.n_channels,), np.float32)
         flags = np.zeros(vis.shape, np.uint8)
-        ts = 0
+        ts = 0.0
         n_times = 90
+        channel_slices = [np.s_[i * self.n_channels_per_substream
+                                : (i+1) * self.n_channels_per_substream]
+                          for i in range(self.n_substreams)]
         for i in range(n_times):
-            self.heaps.append({
-                'correlator_data': vis,
-                'flags': flags,
-                'weights': weights,
-                'weights_channel': weights_channel,
-                'timestamp': ts
-            })
+            dump_heaps = [
+                {
+                    'correlator_data': vis[s],
+                    'flags': flags[s],
+                    'weights': weights[s],
+                    'weights_channel': weights_channel[s],
+                    'timestamp': ts,
+                    'frequency': np.uint32(s.start)
+                } for s in channel_slices]
+            rs.shuffle(dump_heaps)
+            self.heaps.extend(dump_heaps)
             ts += self.telstate.sdp_l0_int_time
         # Add a target change at an uneven time, so that the batches won't
         # neatly align with the buffer end. We also have to fake a slew to make
@@ -528,14 +552,15 @@ class TestCalDeviceServer(unittest.TestCase):
         # Wait until all the heaps have been delivered, timing out eventually.
         # This will take a while because it needs to allow the pipeline to run.
         for i in range(180):
-            print('waiting', i)
             yield tornado.gen.sleep(0.5)
             heaps = int((yield self.get_sensor('accumulator-input-heaps')))
-            if heaps == n_times:
+            if heaps == n_times * self.n_substreams:
+                print('all heaps received')
                 break
+            print('waiting {} ({}/{} received)'.format(i, heaps, n_times * self.n_substreams))
         else:
             raise RuntimeError('Timed out waiting for the heaps to be received')
-        informs = yield self.make_request('shutdown', timeout=180)
+        informs = yield self.make_request('shutdown', timeout=60)
         progress = [inform.arguments[0] for inform in informs]
         assert_equal(['Accumulator stopped',
                       'Pipeline stopped',
