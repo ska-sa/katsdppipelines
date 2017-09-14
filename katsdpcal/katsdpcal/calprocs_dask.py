@@ -8,6 +8,7 @@ rather than numpy arrays.
 """
 
 import logging
+from functools import wraps
 
 import numpy as np
 import dask.array as da
@@ -53,8 +54,8 @@ def stefcal(rawvis, num_ants, corrprod_lookup, weights=None, ref_ant=0,
 
     # Determine the output dtype, since the gufunc has two signatures
     if (np.can_cast(rawvis.dtype, np.complex64)
-            and np.can_cast(weights.dtype, np.float32)
-            and np.can_cast(init_gain, np.complex64)):
+        and np.can_cast(weights.dtype, np.float32)
+        and np.can_cast(init_gain, np.complex64)):
         dtype = np.complex64
     else:
         dtype = np.complex128
@@ -205,11 +206,11 @@ def bp_fit(data, corrprod_lookup, bp0=None, refant=0, normalise=True, **kwargs):
                  init_gain=bp0, **kwargs)
     # centre the phase on zero
     angle = da.angle(bp)
-    base_angle = da.nanmin(angle, axis=-1,keepdims=True) - np.pi
+    base_angle = da.nanmin(angle, axis=-1, keepdims=True) - np.pi
     # angle relative to base_angle, wrapped to range [0, 2pi], with
     # some data point sitting at pi.
     rel_angle = da.fmod(angle - base_angle, 2 * np.pi)
-    mid_angle = da.nanmean(rel_angle, axis=-1,keepdims=True) + base_angle
+    mid_angle = da.nanmean(rel_angle, axis=-1, keepdims=True) + base_angle
     centre_rotation = da.exp(-1.0j * mid_angle)
     rotated_bp = bp * centre_rotation
     # normalise bandpasses by dividing through by the average
