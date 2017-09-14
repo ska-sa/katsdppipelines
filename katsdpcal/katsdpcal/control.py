@@ -4,6 +4,8 @@ import os
 import shutil
 import logging
 from collections import deque
+import multiprocessing
+import multiprocessing.dummy
 
 import spead2
 import spead2.recv.trollius
@@ -83,6 +85,34 @@ def shared_empty(shape, dtype):
     array = np.frombuffer(raw, dtype)
     array.shape = shape
     return array
+
+
+def _inc_sensor(sensor, delta, status=katcp.Sensor.NOMINAL, timestamp=None):
+    """Increment sensor value by `delta`."""
+    sensor.set_value(sensor.value() + delta, status, timestamp)
+
+
+def _slots_slices(slots):
+    """Compresses a list of slot positions to a list of ranges (given as slices).
+
+    This is a generator that yields the slices
+
+    Example
+    -------
+    >>> list(_slots_slices([2, 3, 4, 6, 7, 8, 0, 1]))
+    [slice(2, 5, None), slice(6, 9, None), slice(0, 2, None)]
+    """
+    start = None
+    end = None
+    for slot in slots:
+        if end is not None and slot != end:
+            yield slice(start, end)
+            start = end = None
+        if start is None:
+            start = slot
+        end = slot + 1
+    if end is not None:
+        yield slice(start, end)
 
 
 class Task(object):
@@ -224,11 +254,25 @@ class Accumulator(object):
                 'accumulator-input-heaps',
                 'number of L0 heaps received',
                 default=0, initial_status=katcp.Sensor.NOMINAL),
-            katcp.Sensor.float(
-                'accumulator-buffer-filled',
-                'fraction of buffer that the current accumulation has written to',
-                params=(0.0, 1.0),
-                default=0.0, initial_status=katcp.Sensor.NOMINAL),
+            katcp.Sensor.integer(
+                'slots',
+                'total number of buffer slots',
+                default=self.nslots, initial_status=katcp.Sensor.NOMINAL),
+            katcp.Sensor.integer(
+                'accumulator-slots',
+                'number of buffer slots the current accumulation has written to',
+                default=0, initial_status=katcp.Sensor.NOMINAL),
+            katcp.Sensor.integer(
+                'free-slots',
+                'number of unused buffer slots',
+                default=self.nslots, initial_status=katcp.Sensor.NOMINAL),
+            # pipeline-slots gives information about the pipeline, but is
+            # produced in the accumulator because the pipeline doesn't get
+            # interrupted when more work is added to it.
+            katcp.Sensor.integer(
+                'pipeline-slots',
+                'number of buffer slots in use by the pipeline',
+                default=0, initial_status=katcp.Sensor.NOMINAL),
             katcp.Sensor.float(
                 'accumulator-last-wait',
                 'time the accumulator had to wait for a free buffer',
@@ -248,7 +292,6 @@ class Accumulator(object):
                 raise Return(None)
             elif self._free_slots:
                 wait_sensor.set_value(0.0)
-                raise Return(self._free_slots.popleft())
             else:
                 logger.warn('no slots available - waiting for pipeline to return buffers')
                 loop = trollius.get_event_loop()
@@ -260,7 +303,12 @@ class Accumulator(object):
                 elapsed = loop.time() - now
                 logger.info('slot acquired')
                 wait_sensor.set_value(elapsed, status=katcp.Sensor.WARN)
-                raise Return(self._free_slots.popleft())
+            slot = self._free_slots.popleft()
+            now = time.time()
+            status = katcp.Sensor.WARN if not self._free_slots else katcp.Sensor.NOMINAL
+            _inc_sensor(self.sensors['free-slots'], -1, status, timestamp=now)
+            _inc_sensor(self.sensors['accumulator-slots'], 1, timestamp=now)
+            raise Return(slot)
 
     @trollius.coroutine
     def buffer_free(self, event):
@@ -271,9 +319,12 @@ class Accumulator(object):
         event : :class:`BufferFreeEvent`
             Event listing the slots that are now available
         """
-        with (yield From(self._slots_cond)):
-            self._free_slots.extend(event.slots)
-            if self._free_slots:
+        if event.slots:
+            with (yield From(self._slots_cond)):
+                self._free_slots.extend(event.slots)
+                now = time.time()
+                _inc_sensor(self.sensors['free-slots'], len(event.slots), timestamp=now)
+                _inc_sensor(self.sensors['pipeline-slots'], -len(event.slots), timestamp=now)
                 self._slots_cond.notify()
 
     @trollius.coroutine
@@ -285,26 +336,27 @@ class Accumulator(object):
             # Increment between buffers, filling and releasing iteratively
             # Initialise current buffer counter
             obs_stopped = False
-            batches_sensor = self.sensors['accumulator-batches']
             while not obs_stopped:
                 # accumulate data scan by scan into buffer arrays
                 logger.info('max buffer length for batch: %d', self.max_length)
                 slots, obs_stopped = yield From(self.accumulate(rx, ig))
+                now = time.time()
                 logger.info('Accumulated %d timestamps', len(slots))
-                batches_sensor.set_value(batches_sensor.value() + 1)
+                _inc_sensor(self.sensors['accumulator-batches'], 1, timestamp=now)
 
                 # pass the buffer to the pipeline
                 if len(slots) > 0:
                     self.accum_pipeline_queue.put(BufferReadyEvent(slots))
                     logger.info('accum_pipeline_queue updated by %s', self.name)
+                    _inc_sensor(self.sensors['pipeline-slots'], len(slots), timestamp=now)
+                    _inc_sensor(self.sensors['accumulator-slots'], -len(slots), timestamp=now)
 
             # Tell the pipeline that the observation ended, but only if there
             # was something to work on.
             if self._obs_end is not None:
                 self.accum_pipeline_queue.put(
                     ObservationEndEvent(index, self._obs_start, self._obs_end))
-                obs_sensor = self.sensors['accumulator-observations']
-                obs_sensor.set_value(obs_sensor.value() + 1)
+                _inc_sensor(self.sensors['accumulator-observations'], 1)
             else:
                 logger.info(' --- no data flowed ---')
             logger.info('Observation ended')
@@ -463,10 +515,6 @@ class Accumulator(object):
         """
 
         start_flag = True
-        array_index = -1
-        fill_sensor = self.sensors['accumulator-buffer-filled']
-        fill_sensor.set_value(0.0)
-        heaps_sensor = self.sensors['accumulator-input-heaps']
 
         prev_activity = 'none'
         prev_activity_time = 0.
@@ -573,8 +621,7 @@ class Accumulator(object):
             self._update_buffer(self.buffers['weights'][slot],
                                 weights * weights_channel, self.ordering)
             self.buffers['times'][slot] = data_ts
-            fill_sensor.set_value(len(slots) / self.nslots)
-            heaps_sensor.set_value(heaps_sensor.value() + 1)
+            _inc_sensor(self.sensors['accumulator-input-heaps'], 1)
 
             # **************** ACCUMULATOR BREAK CONDITIONS ****************
             # ********** THIS BREAKING NEEDS TO BE THOUGHT THROUGH CAREFULLY **********
@@ -628,7 +675,7 @@ class Pipeline(Task):
     def __init__(self, task_class, buffers,
                  accum_pipeline_queue, pipeline_report_queue, master_queue,
                  l1_endpoint, l1_level, l1_rate, telstate,
-                 diagnostics_file=None):
+                 diagnostics_file=None, num_workers=None):
         super(Pipeline, self).__init__(task_class, master_queue, 'Pipeline')
         self.buffers = buffers
         self.accum_pipeline_queue = accum_pipeline_queue
@@ -638,6 +685,10 @@ class Pipeline(Task):
         self.l1_rate = l1_rate
         self.l1_endpoint = l1_endpoint
         self.diagnostics_file = diagnostics_file
+        if num_workers is None:
+            # Leave a core free to avoid starving the accumulator
+            num_workers = max(1, multiprocessing.cpu_count() - 1)
+        self.num_workers = num_workers
 
     def get_sensors(self):
         return [
@@ -656,18 +707,19 @@ class Pipeline(Task):
         This is a wrapper around :meth:`_run` which just handles the
         diagnostics option.
         """
-        if self.diagnostics_file is not None:
-            profilers = [
-                dask.diagnostics.Profiler(),
-                dask.diagnostics.ResourceProfiler(),
-                dask.diagnostics.CacheProfiler()]
-            with profilers[0], profilers[1], profilers[2]:
+        with dask.set_options(pool=multiprocessing.pool.ThreadPool(self.num_workers)):
+            if self.diagnostics_file is not None:
+                profilers = [
+                    dask.diagnostics.Profiler(),
+                    dask.diagnostics.ResourceProfiler(),
+                    dask.diagnostics.CacheProfiler()]
+                with profilers[0], profilers[1], profilers[2]:
+                    self._run_impl()
+                dask.diagnostics.visualize(
+                    profilers, file_path=self.diagnostics_file, show=False)
+                logger.info('wrote diagnostics to %s', self.diagnostics_file)
+            else:
                 self._run_impl()
-            dask.diagnostics.visualize(
-                profilers, file_path=self.diagnostics_file, show=False)
-            logger.info('wrote diagnostics to %s', self.diagnostics_file)
-        else:
-            self._run_impl()
 
     def _run_impl(self):
         """
@@ -686,12 +738,12 @@ class Pipeline(Task):
                     start_time = time.time()
                     # set up dask arrays around the chosen slots
                     data = {'times': self.buffers['times'][event.slots]}
+                    slices = list(_slots_slices(event.slots))
                     for key in ('vis', 'flags', 'weights'):
                         buffer = self.buffers[key]
-                        chunks = (4096,) + buffer.shape[2:]
-                        parts = [da.from_array(buffer[slot], chunks=chunks, name=False)
-                                 for slot in event.slots]
-                        data[key] = da.stack(parts)
+                        parts = [da.from_array(buffer[s], chunks=buffer[s].shape, name=False)
+                                 for s in slices]
+                        data[key] = da.concatenate(parts, axis=0)
                     # run the pipeline
                     self.run_pipeline(data)
                     end_time = time.time()
@@ -1080,32 +1132,32 @@ def create_buffer_arrays(buffer_shape, use_multiprocessing=True):
 def create_server(use_multiprocessing, host, port, buffers,
                   l0_endpoint, l0_interface_address,
                   l1_endpoint, l1_level, l1_rate, telstate,
-                  report_path, log_path, full_log, diagnostics_file=None):
+                  report_path, log_path, full_log,
+                  diagnostics_file=None, num_workers=None):
     # threading or multiprocessing imports
     if use_multiprocessing:
         logger.info("Using multiprocessing")
-        import multiprocessing
+        module = multiprocessing
     else:
         logger.info("Using threading")
-        import multiprocessing.dummy as multiprocessing
+        module = multiprocessing.dummy
 
-    num_buffers = len(buffers)
     # set up inter-task synchronisation primitives.
     # passed events to indicate buffer transfer, end-of-observation, or stop
-    accum_pipeline_queue = multiprocessing.Queue()
+    accum_pipeline_queue = module.Queue()
     # signalled by pipelines when they shut down or finish an observation
-    pipeline_report_queue = multiprocessing.Queue()
+    pipeline_report_queue = module.Queue()
     # other tasks send up sensor updates
-    master_queue = multiprocessing.Queue()
+    master_queue = module.Queue()
 
     # Set up the pipelines (one per buffer)
     pipeline = Pipeline(
-        multiprocessing.Process, buffers,
+        module.Process, buffers,
         accum_pipeline_queue, pipeline_report_queue, master_queue,
-        l1_endpoint, l1_level, l1_rate, telstate, diagnostics_file)
+        l1_endpoint, l1_level, l1_rate, telstate, diagnostics_file, num_workers)
     # Set up the report writer
     report_writer = ReportWriter(
-        multiprocessing.Process, pipeline_report_queue, master_queue, telstate,
+        module.Process, pipeline_report_queue, master_queue, telstate,
         l1_endpoint, l1_level, report_path, log_path, full_log)
 
     # Start the child tasks.

@@ -316,7 +316,7 @@ class TestCalDeviceServer(unittest.TestCase):
         self.ioloop.run_sync(self.client.until_protocol)
 
     @tornado.gen.coroutine
-    def make_request(self, name, *args):
+    def make_request(self, name, *args, **kwargs):
         """Issue a request to the server, and check that the result is an ok.
 
         Parameters
@@ -325,13 +325,16 @@ class TestCalDeviceServer(unittest.TestCase):
             Request name
         args : list
             Arguments to the request
+        kwargs : dict
+            Arguments to ``future_request``
 
         Returns
         -------
         informs : list
             Informs returned with the reply
         """
-        reply, informs = yield self.client.future_request(katcp.Message.request(name, *args))
+        reply, informs = yield self.client.future_request(
+            katcp.Message.request(name, *args), **kwargs)
         assert_true(reply.reply_ok(), str(reply))
         raise tornado.gen.Return(informs)
 
@@ -397,8 +400,6 @@ class TestCalDeviceServer(unittest.TestCase):
         """Tests the capture with some data, and checks that solutions are
         computed and a report written.
         """
-        channels = self.telstate.cbf_n_chans
-        baselines = len(self.telstate.sdp_l0_bls_ordering)
         ts = 100
         rs = np.random.RandomState(seed=1)
 
@@ -420,13 +421,15 @@ class TestCalDeviceServer(unittest.TestCase):
 
         vis = flux_density * np.exp(2j * np.pi * (K[pol1, ant1] - K[pol2, ant2]) * freqs) \
             * (G[pol1, ant1] * G[pol2, ant2].conj())
+        corrupted_vis = vis + 1e9j
         flags = np.zeros(vis.shape, np.uint8)
         weights = rs.uniform(64, 255, vis.shape).astype(np.uint8)
         weights_channel = rs.uniform(1.0, 4.0, (self.n_channels,)).astype(np.float32)
 
         for i in range(10):
+            # Corrupt some times, to check that the RFI flagging is working
             self.heaps.append({
-                'correlator_data': vis,
+                'correlator_data': corrupted_vis if i in (3, 7) else vis,
                 'flags': flags,
                 'weights': weights,
                 'weights_channel': weights_channel,
@@ -436,7 +439,7 @@ class TestCalDeviceServer(unittest.TestCase):
         yield self.make_request('capture-init')
         yield tornado.gen.sleep(1)
         assert_equal(1, int((yield self.get_sensor('accumulator-capture-active'))))
-        informs = yield self.make_request('shutdown')
+        informs = yield self.make_request('shutdown', timeout=180)
         progress = [inform.arguments[0] for inform in informs]
         assert_equal(['Accumulator stopped',
                       'Pipeline stopped',
@@ -447,6 +450,11 @@ class TestCalDeviceServer(unittest.TestCase):
         assert_equal(1, int((yield self.get_sensor('accumulator-observations'))))
         assert_equal(10, int((yield self.get_sensor('pipeline-last-slots'))))
         assert_equal(1, int((yield self.get_sensor('reports-written'))))
+        # Check that the slot accounting all balances
+        assert_equal(40, int((yield self.get_sensor('slots'))))
+        assert_equal(0, int((yield self.get_sensor('accumulator-slots'))))
+        assert_equal(0, int((yield self.get_sensor('pipeline-slots'))))
+        assert_equal(40, int((yield self.get_sensor('free-slots'))))
 
         reports = os.listdir(self.report_path)
         assert_equal(1, len(reports))
@@ -458,10 +466,12 @@ class TestCalDeviceServer(unittest.TestCase):
         cal_product_B = self.telstate.get_range('cal_product_B', st=0)
         assert_equal(1, len(cal_product_B))
         ret_B, ret_B_ts = cal_product_B[0]
+        assert_equal(np.complex64, ret_B.dtype)
 
         cal_product_G = self.telstate.get_range('cal_product_G', st=0)
         assert_equal(1, len(cal_product_G))
         ret_G, ret_G_ts = cal_product_G[0]
+        assert_equal(np.complex64, ret_G.dtype)
         ret_BG = ret_B * ret_G[np.newaxis, :, :]
         BG = np.broadcast_to(G[np.newaxis, :, :], ret_BG.shape)
         # TODO: enable when fixed.
@@ -478,6 +488,7 @@ class TestCalDeviceServer(unittest.TestCase):
         cal_product_K = self.telstate.get_range('cal_product_K', st=0)
         assert_equal(1, len(cal_product_K))
         ret_K, ret_K_ts = cal_product_K[0]
+        assert_equal(np.float32, ret_K.dtype)
         np.testing.assert_allclose(K - K[:, [0]], ret_K - ret_K[:, [0]], rtol=1e-3)
 
     @async_test
@@ -516,7 +527,7 @@ class TestCalDeviceServer(unittest.TestCase):
         yield self.make_request('capture-init')
         # Wait until all the heaps have been delivered, timing out eventually.
         # This will take a while because it needs to allow the pipeline to run.
-        for i in range(60):
+        for i in range(180):
             print('waiting', i)
             yield tornado.gen.sleep(0.5)
             heaps = int((yield self.get_sensor('accumulator-input-heaps')))
@@ -524,7 +535,7 @@ class TestCalDeviceServer(unittest.TestCase):
                 break
         else:
             raise RuntimeError('Timed out waiting for the heaps to be received')
-        informs = yield self.make_request('shutdown')
+        informs = yield self.make_request('shutdown', timeout=180)
         progress = [inform.arguments[0] for inform in informs]
         assert_equal(['Accumulator stopped',
                       'Pipeline stopped',

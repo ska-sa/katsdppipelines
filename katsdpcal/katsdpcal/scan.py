@@ -9,9 +9,10 @@ import dask.array as da
 from scipy.constants import c as light_speed
 import scipy.interpolate
 
+from katdal.h5datav3 import FLAG_NAMES
 import katpoint
 
-from . import calprocs, calprocs_dask
+from . import calprocs, calprocs_dask, inplace
 from .calprocs import CalSolution
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,87 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------------------------------
 # --- CLASS :  Scan
 # --------------------------------------------------------------------------------------------------
+
+
+def _rfi(vis, flags, flagger, out_bit):
+    out_value = np.uint8(2**out_bit)
+    # flagger doesn't handle a separate pol axis, so the caller must use
+    # a chunk size of 1
+    assert flags.shape[2] == 1
+    # Mask out the output but from the input. This ensures that the process
+    # gives invariant values even if some chunks are updated in-place before
+    # they are used to compute other chunks (which shouldn't happen, but the
+    # safety check in the inplace module isn't smart enough to detect this).
+    flagger_mask = calprocs.asbool(flags[:, :, 0, :] & ~out_value)
+    out_flags = flagger.get_flags(vis[:, :, 0, :], flagger_mask)
+    return flags | (out_flags[:, :, np.newaxis, :] * out_value)
+
+
+class ScanData(object):
+    """Data in a scan with particular chunking scheme.
+
+    A :class:`Scan` stores several instances of :class:`ScanData`, representing
+    the same data but with chunking optimised for different algorithms.
+
+    TODO: document parameters
+    """
+    def __init__(self, vis, flags, weights, chunks=None, keep_splits=True):
+        if chunks is not None:
+            vis = self._rechunk(vis, chunks, keep_splits)
+            flags = self._rechunk(flags, chunks, keep_splits)
+            weights = self._rechunk(weights, chunks, keep_splits)
+        self.vis = vis
+        self.flags = flags
+        self.weights = weights
+
+    def __getitem__(self, idx):
+        return ScanData(self.vis[idx], self.flags[idx], self.weights[idx])
+
+    @property
+    def shape(self):
+        return self.vis.shape
+
+    def rechunk(self, chunks, keep_splits=True):
+        """Create a new view of the data with specified chunk sizes.
+
+        Parameters
+        ----------
+        chunks
+            New chunking scheme, in any format accepted by dask
+        keep_splits : bool
+            If true (default), existing chunk boundaries will remain in the new
+            scheme.
+        """
+        return ScanData(self.vis, self.flags, self.weights, chunks, keep_splits)
+
+    @classmethod
+    def _intersect_chunks(cls, chunks1, chunks2):
+        splits = set(np.cumsum(chunks1))
+        splits.update(np.cumsum(chunks2))
+        splits.add(0)
+        return tuple(np.diff(sorted(splits)))
+
+    @classmethod
+    def _rechunk(cls, array, chunks, keep_splits):
+        chunks = da.core.normalize_chunks(chunks, array.shape)
+        if keep_splits:
+            chunks = tuple(cls._intersect_chunks(c, e) for (c, e) in zip(chunks, array.chunks))
+        return da.rechunk(array, chunks)
+
+
+class ScanDataPair(object):
+    """Wraps a pair of :class:`ScanData` objects, one for auto-polarisations,
+    the other for cross-hand polarisations.
+    """
+    def __init__(self, auto, cross):
+        self.auto = auto
+        self.cross = cross
+
+    def __getitem__(self, idx):
+        return ScanDataPair(self.auto[idx], self.cross[idx])
+
+    def rechunk(self, idx):
+        return ScanDataPair(self.auto.rechunk(idx), self.cross.rechunk(idx))
 
 
 class Scan(object):
@@ -124,17 +206,12 @@ class Scan(object):
         self.bl_slice = xc_slice if corr is 'xc' else slice(None)
         self.corrprod_lookup = bls_lookup[self.bl_slice]
 
-        # get references to this time chunk of data, parallel hand polarisations only
+        # get references to this time chunk of data
         # data format is:   (time x channels x pol x bl).
-        # set to read-only to ensure that corrections are only applied to
-        # copies of the data, not the original.
-        self.vis = data['vis'][time_slice, :, 0:2, self.bl_slice]
-        self.flags = data['flags'][time_slice, :, 0:2, self.bl_slice]
-        self.weights = data['weights'][time_slice, :, 0:2, self.bl_slice]
-        # cross hand polarisations
-        self.cross_vis = data['vis'][time_slice, :, 2:, self.bl_slice]
-        self.cross_flags = data['flags'][time_slice, :, 2:, self.bl_slice]
-        self.cross_weights = data['weights'][time_slice, :, 2:, self.bl_slice]
+        all_data = ScanData(data['vis'], data['flags'], data['weights'])
+        all_data = all_data[time_slice, :, :, self.bl_slice]
+        self.orig = ScanDataPair(all_data[:, :, 0:2, :], all_data[:, :, 2:, :])
+        self.reset_chunked()
 
         self.timestamps = data['times'][time_slice]
         self.target = katpoint.Target(target)
@@ -144,7 +221,7 @@ class Scan(object):
 
         # scan meta-data
         self.dump_period = dump_period
-        self.nchan = self.vis.shape[1]
+        self.nchan = self.orig.auto.shape[1]
         # note - keep an eye on ordering of frequencies - increasing with index, or decreasing?
         if chans is None:
             self.channel_freqs = np.arange(self.nchan, dtype=np.float32)
@@ -162,6 +239,13 @@ class Scan(object):
 
         self.logger = logger
 
+    def reset_chunked(self):
+        """Recreate the :attr:`tf` and :attr:`pb` attributes after changing :attr:`orig`."""
+        # Arrays chunked up in time and frequency
+        self.tf = self.orig.rechunk((4, 4096, None, None))
+        # Arrays chunked up in polarization and baseline
+        self.pb = self.orig.rechunk((None, None, 1, 16))
+
     def logsolutiontime(f):
         """
         Decorator to log time duration of solver functions
@@ -173,7 +257,7 @@ class Scan(object):
             te = time()
 
             scanlogger = args[0].logger
-            scanlogger.info('  - Solution time: {0} s'.format(te-ts,))
+            scanlogger.info('  - Solution time ({0}): {1} s'.format(f.__name__, te-ts,))
             return result
         return timed
 
@@ -216,8 +300,8 @@ class Scan(object):
         # first averge in time over solution interval, for specified channel
         # range (no averaging over channel)
         ave_vis, ave_flags, ave_weights, ave_times = calprocs_dask.wavg_full_t(
-            fitvis, self.flags[chan_slice],
-            self.weights[chan_slice], dumps_per_solint, times=self.timestamps)
+            fitvis, self.tf.auto.flags[chan_slice],
+            self.tf.auto.weights[chan_slice], dumps_per_solint, times=self.timestamps)
         # secondly, average channels
         ave_vis = calprocs_dask.wavg(ave_vis, ave_flags, ave_weights, axis=1)
         # solve for gain
@@ -246,15 +330,16 @@ class Scan(object):
             self.logger.info('Cant solve for KCROSS without four polarisation products')
             return
         else:
-            modvis = self.pre_apply(pre_apply)
+            # TODO: pre_apply doesn't do the right thing for cross-hand data
+            modvis = self.pre_apply(pre_apply, self.tf.cross)
 
             # average over all time, for specified channel range (no averaging over channel)
             if echan == 0:
                 echan = None
             chan_slice = np.s_[:, bchan:echan, :, :]
             av_vis, av_flags, av_weights = calprocs_dask.wavg_full(
-                modvis[chan_slice], self.cross_flags[chan_slice],
-                self.cross_weights[chan_slice])
+                modvis[chan_slice], self.tf.cross.flags[chan_slice],
+                self.tf.cross.weights[chan_slice])
 
             # solve for cross hand delay KCROSS
             # note that the kcross solver needs the flags because it averages the data
@@ -302,9 +387,9 @@ class Scan(object):
             fitvis = self._get_solver_model(modvis, chan_select=chan_slice)
 
         # average over all time, for specified channel range (no averaging over channel)
-        ave_vis, ave_time = calprocs_dask.wavg(fitvis, self.flags[chan_slice],
-                                               self.weights[chan_slice], times=self.timestamps,
-                                               axis=0)
+        ave_vis, ave_time = calprocs_dask.wavg(fitvis, self.tf.auto.flags[chan_slice],
+                                               self.tf.auto.weights[chan_slice],
+                                               times=self.timestamps, axis=0)
         # fit for delay
         k_soln = calprocs.k_fit(ave_vis.compute(), self.corrprod_lookup, k_freqs, self.refant,
                                 chan_sample=chan_sample)
@@ -332,7 +417,7 @@ class Scan(object):
         fitvis = self._get_solver_model(modvis)
 
         # first average in time
-        ave_vis, ave_time = calprocs_dask.wavg(fitvis, self.flags, self.weights,
+        ave_vis, ave_time = calprocs_dask.wavg(fitvis, self.tf.auto.flags, self.tf.auto.weights,
                                                times=self.timestamps, axis=0)
         # solve for bandpass
         b_soln = calprocs_dask.bp_fit(ave_vis, self.corrprod_lookup, bp0).compute()
@@ -374,7 +459,7 @@ class Scan(object):
 
     def apply(self, soln, vis):
         # set up more complex interpolation methods later
-        soln_values = da.from_array(soln.values, chunks=(1,) + soln.values.shape[1:])
+        soln_values = da.asarray(soln.values)
         if soln.soltype is 'G':
             # add empty channel dimension if necessary
             full_sol = soln_values[:, np.newaxis, :, :] \
@@ -391,13 +476,17 @@ class Scan(object):
         else:
             raise ValueError('Solution type is invalid.')
 
-    def pre_apply(self, pre_apply_solns):
+    def pre_apply(self, pre_apply_solns, data=None):
         """Apply a set of solutions to the visibilities.
 
         Parameters
         ----------
         pre_apply_solns : list of :class:`~katsdpcal.calprocs.CalSolution`
             Solutions to apply
+        data : :class:`ScanData`
+            Data view to which to apply solutions. Defaults to
+            ``self.tf.auto``. Cross-hand visibilities are not currently
+            supported.
 
         Returns
         -------
@@ -406,12 +495,34 @@ class Scan(object):
             just be the original visibilities (not a copy), otherwise it will
             be a new array.
         """
-        modvis = self.vis
+        if data is None:
+            data = self.tf.auto
+        modvis = data.vis
         for soln in pre_apply_solns:
             self.logger.info(
                 '  - Pre-apply {0} solution to {1}'.format(soln.soltype, self.target.name))
             modvis = self.apply(soln, modvis)
         return modvis
+
+    @logsolutiontime
+    def apply_inplace(self, solns_to_apply):
+        """Apply a set of solutions to the visibilities, overwriting them.
+
+        Parameters
+        ----------
+        solns_to_apply : list of :class:`~katsdpcal.calprocs.CalSolution`
+            Solutions to apply
+        """
+        # TODO: also apply to cross-pols once such an apply function exists
+        vis = self.tf.auto.vis
+        for soln in solns_to_apply:
+            self.logger.info(
+                '  - Apply {0} solution to {1} (inplace)'.format(soln.soltype, self.target.name))
+            vis = self.apply(soln, vis)
+        inplace.store_inplace(vis, self.tf.auto.vis)
+        # bust any dask caches
+        inplace.rename(self.orig.auto.vis)
+        self.reset_chunked()
 
     # ---------------------------------------------------------------------------------------------
     # interpolation
@@ -616,3 +727,66 @@ class Scan(object):
                 # for full model, divide through selected channels by same
                 # channel selection in the model
                 return modvis[chan_select] / self.model[chan_select]
+
+    # ----------------------------------------------------------------------
+    # RFI Functions
+    @logsolutiontime
+    def rfi(self, flagger, mask=None, cross=False):
+        """Detect flags in the visibilities. Detected flags
+        are added to the cal_rfi bit of the flag array.
+        Optionally provide a channel mask, which is added to
+        the static bit of the flag array.
+
+        Parameters
+        ----------
+        flagger : :class:`SumThresholdFlagger`
+            Flagger, with :meth:`get_flags` to detect rfi
+        mask : 1d array, boolean, optional
+            Channel mask to apply
+        cross : boolean, optional
+            If True, flag the cross-pol data, otherwise
+            flag single-pol data (default).
+        """
+        if cross:
+            self.logger.info('  - Flag cross-pols')
+            data = self.pb.cross
+            orig = self.orig.cross
+        else:
+            self.logger.info('  - Flag single-pols')
+            data = self.pb.auto
+            orig = self.orig.auto
+        vis = data.vis
+        flags = data.flags
+
+        total_size = np.multiply.reduce(data.flags.shape) / 100.
+        self.logger.info('  - Start flags: %.3f%%',
+                         (da.sum(calprocs.asbool(data.flags)) / total_size).compute())
+
+        # Get the relevant flag bits from katdal
+        static_bit = FLAG_NAMES.index('static')
+        cal_rfi_bit = FLAG_NAMES.index('cal_rfi')
+
+        # do we have an rfi mask? In which case, use it
+        # Add to 'static' flag bit.
+        # TODO: Should mask_flags already be in static bit?
+        if mask is not None:
+            flags |= (mask[np.newaxis, :, np.newaxis, np.newaxis] * np.uint8(2**static_bit))
+
+        flags = da.atop(_rfi, 'TFpb', vis, 'tfpb', flags, 'tfpb',
+                        dtype=np.uint8,
+                        new_axes={'T': vis.shape[0], 'F': vis.shape[1]}, concatenate=True,
+                        flagger=flagger, out_bit=cal_rfi_bit)
+        # _rfi takes care to be idempotent, so we can use safe=False. The
+        # safety check doesn't handle the case of some chunks being
+        # concatenated, processed, then split back to the original chunks.
+        inplace.store_inplace(flags, data.flags, safe=False)
+        # Bust any caches of the old values
+        inplace.rename(orig.flags)
+        self.reset_chunked()
+        if cross:
+            flags = self.tf.cross.flags
+        else:
+            flags = self.tf.auto.flags
+        # Count the new flags
+        self.logger.info('  - New flags: %.3f%%',
+                         (da.sum(calprocs.asbool(flags)) / total_size).compute())

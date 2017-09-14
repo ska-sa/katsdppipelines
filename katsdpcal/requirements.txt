@@ -1,3 +1,4 @@
+appdirs
 argcomplete==1.0.0      # for tmuxp
 backports-abc           # for tornado
 backports.ssl-match-hostname  # for tornado
@@ -6,6 +7,7 @@ colorama==0.3.7         # for libtmux
 cycler                  # for matplotlib
 Cython                  # for h5py
 dask==0.15.1
+decorator
 docutils
 enum34                  # for numba
 fakeredis
@@ -14,21 +16,25 @@ functools32             # for matplotlib
 future                  # for katcp
 futures                 # for trollius
 h5py
+ipaddress               # for katsdptelstate
 katcp
 kaptan==0.5.8           # for tmuxp
 katversion
 libtmux==0.6.0
 llvmlite                # for numba
+mako
 manhole
+markupsafe
 matplotlib
 netifaces
 numba
 numpy
+pandas
 pkginfo
 ply                     # for katcp
 pyephem
 pyparsing
-python-casacore==2.0.0
+python-casacore
 python-dateutil
 pytz
 PyYAML==3.11
@@ -44,4 +50,5 @@ trollius
 git+ssh://git@github.com/ska-sa/katdal
 git+ssh://git@github.com/ska-sa/katpoint
 git+ssh://git@github.com/ska-sa/katsdpservices
+git+ssh://git@github.com/ska-sa/katsdpsigproc
 git+ssh://git@github.com/ska-sa/katsdptelstate

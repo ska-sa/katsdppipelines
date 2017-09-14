@@ -4,8 +4,8 @@ from setuptools import setup, find_packages
 setup(
     name="katsdpcal",
     description="MeerKAT calibration pipeline",
-    maintainer="Tom Mauch",
-    maintainer_email="tmauch@ska.ac.za",
+    maintainer="Ruby van Rooyen",
+    maintainer_email="ruby@ska.ac.za",
     packages=find_packages(),
     package_data={'': ['conf/*/*']},
     include_package_data=True,
@@ -34,7 +34,7 @@ setup(
         "numpy>=1.12", "scipy>=0.17", "numba>=0.19.0", "dask[array]",
         "manhole", "trollius", "futures",
         "katcp", "katpoint", "katdal", "katsdptelstate", "katsdpservices[asyncio,argparse]",
-        "spead2"
+        "katsdpsigproc", "spead2"
     ],
     tests_require=["mock", "nose"],
     use_katversion=True
