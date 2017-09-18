@@ -205,11 +205,11 @@ def bp_fit(data, corrprod_lookup, bp0=None, refant=0, normalise=True, **kwargs):
                  init_gain=bp0, **kwargs)
     # centre the phase on zero
     angle = da.angle(bp)
-    base_angle = da.nanmin(angle, axis=0) - np.pi
+    base_angle = da.nanmin(angle, axis=-1, keepdims=True) - np.pi
     # angle relative to base_angle, wrapped to range [0, 2pi], with
     # some data point sitting at pi.
     rel_angle = da.fmod(angle - base_angle, 2 * np.pi)
-    mid_angle = da.nanmean(rel_angle, axis=0) + base_angle
+    mid_angle = da.nanmean(rel_angle, axis=-1, keepdims=True) + base_angle
     centre_rotation = da.exp(-1.0j * mid_angle)
     rotated_bp = bp * centre_rotation
     # normalise bandpasses by dividing through by the average
