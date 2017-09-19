@@ -61,7 +61,7 @@ Two important points to note:
 - These will be **mounted as the root** and **consume large quantities of disk space**.
 - The mount points inside the container should match the configuration discussed in `AIPS Disk Setup`_.
 
-Its useful to mount the KAT archives and other volumes within these containers.
+It's useful to mount the KAT archives and other volumes within these containers.
 Edit ``docker-compose.yml`` to mount KAT NFS ``archive2`` within the container,
 for example.
 
@@ -91,7 +91,8 @@ For example:
 
     # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
-The AIPS filename is automatically derived from the input filename. Four command line options can be specified to further customise the AIPS filenames.
+The AIPS filename is automatically derived from the input filename.
+Five command line options can be specified to further customise the AIPS filenames.
 
 --disk  AIPS disk number
 --name  Name of the file. ``'1500148809'`` for example
