@@ -16,7 +16,9 @@ import argparse
 import collections
 import logging
 import os.path
+from os.path import join as pjoin
 
+import pkg_resources
 import six
 import numpy as np
 from pretty import pprint, pretty
@@ -178,7 +180,7 @@ with obit_context():
     # using no-self calibration config options (mfimage_nosc.in)
     task_kwargs = task_input_kwargs(merge_path)
     task_kwargs.update(task_output_kwargs(merge_path, name=None, aclass=None, seq=None))
-    mfimage_cfg = os.path.join(katsdpcontim.default_conf_path(), 'mfimage_nosc.in')
+    mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**task_kwargs)
     mfimage.go()
 

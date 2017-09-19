@@ -21,30 +21,3 @@ from uv_facade import (UVFacade, open_uv,
                         uv_factory)
 from uv_export import uv_export
 from uv_merge import uv_merge
-
-def install_path():
-    """
-    Returns
-    -------
-    str
-        `katsdpcontim` installation path.
-    """
-    import inspect
-    import os
-
-    import katsdpcontim
-
-    return os.path.dirname(inspect.getfile(katsdpcontim))
-
-def default_conf_path():
-    """
-    Returns
-    -------
-    str
-        Path containing default configurations.
-    """
-    import os
-
-    import katsdpcontim
-
-    return os.path.join(katsdpcontim.install_path(), 'conf')
