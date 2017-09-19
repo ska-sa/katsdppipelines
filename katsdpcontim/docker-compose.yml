@@ -6,7 +6,7 @@ services:
       dockerfile: katsdpcontim/Dockerfile.xenial.dev
 
     container_name: xenial-obit-dev
-    image: xenial/obit:dev
+    image: obit/xenial:dev
     network_mode: host
     restart: "no"
     hostname: xenial-obit
