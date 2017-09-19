@@ -4,8 +4,6 @@ services:
     build:
       context: ..
       dockerfile: katsdpcontim/Dockerfile.xenial.dev
-      args:
-        HTTP_PROXY: "http://localhost:3128"
 
     container_name: xenial-obit-dev
     image: xenial/obit:dev
