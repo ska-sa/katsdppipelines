@@ -1,34 +1,34 @@
 # Inputs for Obit program Imager
 $Key = DataType  Str (4) # Type, AIPS or FITS
-FITS
+AIPS
 $Key = nFITS Int (1) # Number of FITS directories
 1
 $Key = FITSdirs Str (48)   # Directories of FITS "disks"
-/scratch/sjperkins/data
+
 $Key = nAIPS Int (1) # Number of FITS directories
 1
 $Key = AIPSdirs Str (48)   # Directories of FITS "disks"
-/scratch/sjperkins/data
+
 $Key = AIPSuser Int (1)    # AIPS user number
 105
 $Key = inDisk     Int (1)  # input file disk number
 1
 $Key = inName  Str (12)    # Input name
-R_CNC
+
 $Key = inClass  Str (6)    # Input class
-CVel
+
 $Key = inSeq      Int (1)  # input Sequence number
 0
 $Key = outDisk    Int (1)  # output file disk number
 1
 $Key = outName  Str (12)    # Output name
-ImagerObit
+
 $Key = outClass  Str (6)    # Output class
-XOBIT1
+
 $Key = outSeq      Int (1)  # output Sequence number
 0
 $Key = Sources Str (16,30)
-DEEP_2
+
 
 
 
