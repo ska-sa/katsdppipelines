@@ -1,8 +1,8 @@
 import attr
 
 ObitType = attr.make_class("ObitType",
-                        ["enum", "name", "description", "coerce"],
-                        frozen=True, slots=True)
+                           ["enum", "name", "description", "coerce"],
+                           frozen=True, slots=True)
 
 # Derived from ObitTypes.h
 OBIT_TYPE_ENUM = [
@@ -34,5 +34,5 @@ OBIT_BOOLS = range(15, 16)
 OBIT_BITS = range(16, 17)
 
 OBIT_TYPE = (attr.make_class("ObitTypes",
-                [t.name for t in OBIT_TYPE_ENUM])
-                (*[t.enum for t in OBIT_TYPE_ENUM]))
+                             [t.name for t in OBIT_TYPE_ENUM])
+             (*[t.enum for t in OBIT_TYPE_ENUM]))

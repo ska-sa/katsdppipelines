@@ -10,6 +10,7 @@ import ObitTask
 
 log = logging.getLogger('katsdpcontim')
 
+
 def parse_python_assigns(assign_str):
     """
     Parses a string, containing assign statements
@@ -41,13 +42,14 @@ def parse_python_assigns(assign_str):
         return {}
 
     try:
-        return { target.id: ast.literal_eval(stmt.value)
+        return {target.id: ast.literal_eval(stmt.value)
                 for stmt in ast.parse(assign_str, mode='single').body
                 for target in stmt.targets}
     except SyntaxError as e:
         log.exception("Exception parsing assignment string "
-                    "'{}'".format(assign_str))
+                      "'{}'".format(assign_str))
         raise e
+
 
 def task_factory(name, aips_cfg_file=None, **kwargs):
     """
@@ -112,7 +114,7 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
                 log.warn("Key '{}' is not valid for this "
-                             "task and will be ignored".format(k))
+                         "task and will be ignored".format(k))
             else:
                 raise
 

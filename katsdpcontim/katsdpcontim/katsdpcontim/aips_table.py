@@ -8,13 +8,13 @@ import TableList
 
 from katsdpcontim import obit_err, handle_obit_err
 from katsdpcontim.obit_types import (OBIT_TYPE_ENUM,
-                                    OBIT_TYPE,
-                                    OBIT_INTS,
-                                    OBIT_FLOATS,
-                                    OBIT_COMPLEXES,
-                                    OBIT_STRINGS,
-                                    OBIT_BOOLS,
-                                    OBIT_BITS)
+                                     OBIT_TYPE,
+                                     OBIT_INTS,
+                                     OBIT_FLOATS,
+                                     OBIT_COMPLEXES,
+                                     OBIT_STRINGS,
+                                     OBIT_BOOLS,
+                                     OBIT_BITS)
 
 log = logging.getLogger('katsdpcontim')
 
@@ -25,11 +25,13 @@ def _scalarise(value):
         return value[0]
     return value
 
+
 def _vectorise(value):
     """ Converts singletons to length 1 lists """
     if not isinstance(value, list):
         return [value]
     return value
+
 
 class AIPSTableKeywords(object):
     def __init__(self, table, table_name):
@@ -50,9 +52,9 @@ class AIPSTableKeywords(object):
         self._dirty = False
         self._table = table
         self._tabname = table_name
-        self._schema = { key: (type_, dims) for
+        self._schema = {key: (type_, dims) for
                         key, (type_, dims, value) in
-                        table.IODesc.List.Dict.items() }
+                        table.IODesc.List.Dict.items()}
 
     def __getitem__(self, key):
         """
@@ -94,7 +96,7 @@ class AIPSTableKeywords(object):
             raise ValueError("'%s' is not a valid keyword "
                              "for table '%s' ."
                              "Valid keywords '%s'." % (
-                                key, self._tabname, self._schema.keys()))
+                                 key, self._tabname, self._schema.keys()))
 
         # Convert value into a list
         value = _vectorise(value)
@@ -108,7 +110,7 @@ class AIPSTableKeywords(object):
             value = [enum.coerce(v) for v in value]
 
         InfoList.PSetDict(self._table.IODesc.List,
-                        {key : [type_, dims, value]})
+                          {key: [type_, dims, value]})
 
         self._dirty = True
 
@@ -145,17 +147,18 @@ class AIPSTableKeywords(object):
         """
         return self._dirty
 
-
     def __str__(self):
         return str({key: _scalarise(value) for
                     key, (type_, dims, value) in
-                    self._table.IODesc.List.Dict.items() })
+                    self._table.IODesc.List.Dict.items()})
 
     __repr__ = __str__
 
+
 AIPSTableField = attr.make_class("AIPSTableField",
-    ["name", "unit", "dims", "repeat", "type"],
-    frozen=True, slots=True)
+                                 ["name", "unit", "dims", "repeat", "type"],
+                                 frozen=True, slots=True)
+
 
 def _default_row_base(row_def, row):
     """
@@ -292,6 +295,7 @@ class AIPSTableRow(object):
 
     __repr__ = __str__
 
+
 class AIPSTableRows(object):
     def __init__(self, table, nrow, row_def, err, rows=None):
         """
@@ -318,8 +322,8 @@ class AIPSTableRows(object):
         if rows is None:
             rows = nrow * [None]
 
-        self._rows = [AIPSTableRow(table, ri+1, row_def, err, row=row)
-                                   for ri, row in zip(range(nrow),rows)]
+        self._rows = [AIPSTableRow(table, ri + 1, row_def, err, row=row)
+                      for ri, row in zip(range(nrow), rows)]
 
         self._table = table
         self._row_def = row_def
@@ -357,9 +361,9 @@ class AIPSTableRows(object):
 
     def append(self, row):
         """ Appends a row to this list """
-        obj_row = AIPSTableRow(self._table, len(self)+1,
-                        self._row_def, self._err,
-                        row=_default_row_base(self._row_def, row))
+        obj_row = AIPSTableRow(self._table, len(self) + 1,
+                               self._row_def, self._err,
+                               row=_default_row_base(self._row_def, row))
         self._rows.append(obj_row)
 
     def read(self):
@@ -383,10 +387,11 @@ class AIPSTableRows(object):
 
     __repr__ = __str__
 
+
 class AIPSTable(object):
     FIELD_KEYS = ('FieldName', 'FieldUnit',
-                    'dim0', 'dim1', 'dim2',
-                    'repeat', 'type')
+                  'dim0', 'dim1', 'dim2',
+                  'repeat', 'type')
 
     def __init__(self, uv, name, version, mode, err, **kwargs):
         """
@@ -416,8 +421,8 @@ class AIPSTable(object):
             self._clobber_old_tables(uv, name, err)
 
         self._table = table = uv.NewTable(Table.READWRITE,
-                                            name, version,
-                                            err, **kwargs)
+                                          name, version,
+                                          err, **kwargs)
         handle_obit_err("Error creating table '%s'" % name, err)
 
         self._table.Open(Table.READWRITE, err)
@@ -474,7 +479,7 @@ class AIPSTable(object):
     def rows(self, rows):
         """ Set the table rows on this table """
         self._rows = AIPSTableRows(self._table, len(rows), self._default_row,
-                                                        self._err, rows=rows)
+                                   self._err, rows=rows)
 
     @classmethod
     def _get_field_defs(cls, desc):
@@ -494,8 +499,8 @@ class AIPSTable(object):
         """
         return collections.OrderedDict(
             (n, AIPSTableField(n, u, [d0, d1, d2], r, t)) for
-                n, u, d0, d1, d2, r, t in
-                zip(*(desc[k] for k in cls.FIELD_KEYS)))
+            n, u, d0, d1, d2, r, t in
+            zip(*(desc[k] for k in cls.FIELD_KEYS)))
 
     @classmethod
     def _get_row_definitions(cls, table_name, fields):
@@ -531,20 +536,20 @@ class AIPSTable(object):
             else:
                 enum = OBIT_TYPE_ENUM[f.type]
                 raise ValueError("Unhandled defaults for field "
-                                "'%s' with type '%s' (%d: %s)" %
-                                (f.name, enum.description,
-                                    enum.enum, enum.name))
+                                 "'%s' with type '%s' (%d: %s)" %
+                                 (f.name, enum.description,
+                                  enum.enum, enum.name))
 
-        defaults = { f.name: [f.type, f.dims + [1, 1], _repeat_default(f)]
-                                                 for f in fields.values() }
+        defaults = {f.name: [f.type, f.dims + [1, 1], _repeat_default(f)]
+                    for f in fields.values()}
 
         # This works and is pretty hacky since these aren't
         # technically fields, but they're needed
         # for a row definition.
         # TODO: Move this into AIPSTableRow
         defaults.update({"Table name": table_name,
-                        "NumFields": len(fields),
-                        "_status": [0] })
+                         "NumFields": len(fields),
+                         "_status": [0]})
         return defaults
 
     @property
@@ -585,11 +590,10 @@ class AIPSTable(object):
 
         self._table.Open(Table.READWRITE, self._err)
         handle_obit_err("Error opening table '%s' for flush" % self._name,
-                                                                self._err)
+                        self._err)
         # Close
         self._table.Close(self._err)
         handle_obit_err("Error closing '%s' table" % self._name, self._err)
-
 
     def __enter__(self):
         return self

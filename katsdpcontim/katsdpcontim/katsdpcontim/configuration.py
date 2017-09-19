@@ -3,6 +3,7 @@ import collections
 import os
 from os.path import join as pjoin
 
+
 def config_validator():
     """
     Returns
@@ -17,10 +18,10 @@ def config_validator():
     aipsroot = pjoin(os.sep, 'usr', 'local', 'AIPS')
 
     aips_schema = {
-        'aipsroot' : {'type': 'string', 'default': aipsroot },
-        'aipsversion' : {'type': 'string', 'default': '31DEC16' },
-        'da00': {'type':'string', 'default': pjoin(aipsroot, 'DA00') },
-        'userno': {'type': 'integer', 'default': 105 },
+        'aipsroot': {'type': 'string', 'default': aipsroot},
+        'aipsversion': {'type': 'string', 'default': '31DEC16'},
+        'da00': {'type': 'string', 'default': pjoin(aipsroot, 'DA00')},
+        'userno': {'type': 'integer', 'default': 105},
     }
 
     # Create the obit schema and defaults
@@ -32,26 +33,27 @@ def config_validator():
                 (None, pjoin(aipsroot, 'DATA', 'LOCALHOST_2'))]
 
     obit_schema = {
-        'obitroot': {'type': 'string', 'default': obitroot },
-        'obitexec': {'type': 'string', 'default': obitexec },
-        'fitsdirs' : {'type': 'list', 'default': fitsdirs },
-        'aipsdirs' : {'type': 'list', 'default': aipsdirs },
+        'obitroot': {'type': 'string', 'default': obitroot},
+        'obitexec': {'type': 'string', 'default': obitexec},
+        'fitsdirs': {'type': 'list', 'default': fitsdirs},
+        'aipsdirs': {'type': 'list', 'default': aipsdirs},
     }
 
     schema = {
-        'aips' : {
-            'type' : 'dict',
+        'aips': {
+            'type': 'dict',
             'schema': aips_schema,
             'default': Validator(aips_schema).validated({}),
         },
-        'obit' : {
-            'type' : 'dict',
+        'obit': {
+            'type': 'dict',
             'schema': obit_schema,
             'default': Validator(obit_schema).validated({}),
         }
     }
 
     return Validator(schema)
+
 
 def validate_configuration(configuration):
     """
@@ -89,6 +91,7 @@ def validate_configuration(configuration):
         return value
 
     return _dicts_to_attrs("main", cfg)
+
 
 def get_config():
     """

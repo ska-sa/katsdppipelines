@@ -2,6 +2,7 @@ import collections
 
 from katsdpcontim import UVFacade, AIPSPath, uv_factory
 
+
 def uv_merge(katdata, uv_merge_file, uv_scan_files):
     """
     Merges a list of scan files into a single observation.
@@ -21,7 +22,7 @@ def uv_merge(katdata, uv_merge_file, uv_scan_files):
     else:
         raise TypeError("uv_scan_files is '%s', but should be "
                         "an AIPSPath or an iterable of AIPSPaths." %
-                            type(uv_scan_files))
+                        type(uv_scan_files))
 
     with open_uv(merge_file, mode='w') as merge:
         for scan_file in uv_scan_files:

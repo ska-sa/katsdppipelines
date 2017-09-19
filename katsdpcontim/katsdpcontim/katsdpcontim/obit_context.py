@@ -13,11 +13,13 @@ log = logging.getLogger('katsdpcontim')
 # Single obit context class
 __obit_context = None
 
+
 class ObitContext(object):
     """
     Small wrapper class encapsulating
     the Obit error stack and Obit System
     """
+
     def __init__(self):
         """
         Constructor
@@ -30,9 +32,9 @@ class ObitContext(object):
         cfg = get_config()
 
         self.err = err = OErr.OErr()
-        self.obitsys =  OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
-                                            0, [" "], 0, [" "],
-                                            True, False, err)
+        self.obitsys = OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
+                                       0, [" "], 0, [" "],
+                                       True, False, err)
         OErr.printErrMsg(err, "Error starting Obit System")
 
         # Setup AIPS userno
@@ -55,6 +57,7 @@ class ObitContext(object):
             OErr.printErr(self.err)
 
         OSystem.Shutdown(self.obitsys)
+
 
 @contextmanager
 def obit_context():
@@ -85,6 +88,7 @@ def obit_context():
             __obit_context.close()
             __obit_context = None
 
+
 def handle_obit_err(msg="", err=None):
     """
     If the Obit error stack is in an error state,
@@ -112,6 +116,7 @@ def handle_obit_err(msg="", err=None):
     if err.isErr:
         err.printErrMsg(err, msg)
 
+
 def obit_err():
     """ Return the Obit Context error stack """
     try:
@@ -119,6 +124,7 @@ def obit_err():
     except AttributeError as e:
         if 'NoneType' in e.message:
             raise ValueError("Create a valid Obit context with obit_context()")
+
 
 def obit_sys():
     """ Return the Obit Context system """

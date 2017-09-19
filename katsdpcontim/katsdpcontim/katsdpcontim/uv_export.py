@@ -3,7 +3,7 @@ import logging
 import numpy as np
 
 from katsdpcontim import (KatdalAdapter, UVFacade,
-                        uv_factory)
+                          uv_factory)
 
 log = logging.getLogger('katsdpcontim')
 
@@ -26,7 +26,7 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
         :code:`{ "scans" : "track", "spw": 0 }`
     """
     if kat_select is None:
-        kat_select = { "scans" : "track", "spw": 0 }
+        kat_select = {"scans": "track", "spw": 0}
 
     KA = kat_adapter
 
@@ -73,11 +73,12 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
                 desc.update(numVisBuff=numVisBuff)
                 uvf.Desc.Dict = desc
 
-                nbytes = numVisBuff*lrec*np.dtype(np.float32).itemsize
+                nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
                 log.info("Writing {:.2f}MB visibilities. firstVis={} numVisBuff={}."
-                    .format(nbytes / (1024.*1024.), firstVis, numVisBuff))
+                         .format(nbytes / (1024. * 1024.), firstVis, numVisBuff))
 
-                # If firstVis is passed through to this method, it uses FORTRAN indexing (1)
+                # If firstVis is passed through to this method, it uses FORTRAN
+                # indexing (1)
                 uvf.Write(firstVis=firstVis)
 
                 # Pass through new firstVis and 0 numVisBuff
@@ -105,25 +106,27 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
             for t in range(ntime):
                 for bl in range(nbl):
                     # Index within vis_buffer
-                    idx = numVisBuff*lrec
+                    idx = numVisBuff * lrec
 
                     # Write random parameters
-                    vis_buffer[idx+ilocu] = u[t,bl]           # U
-                    vis_buffer[idx+ilocv] = v[t,bl]           # V
-                    vis_buffer[idx+ilocw] = w[t,bl]           # W
-                    vis_buffer[idx+iloct] = time[t]           # time
-                    vis_buffer[idx+ilocb] = baselines[bl]     # baseline id
-                    vis_buffer[idx+ilocsu] = source_id        # source id
+                    vis_buffer[idx + ilocu] = u[t, bl]           # U
+                    vis_buffer[idx + ilocv] = v[t, bl]           # V
+                    vis_buffer[idx + ilocw] = w[t, bl]           # W
+                    vis_buffer[idx + iloct] = time[t]           # time
+                    vis_buffer[idx + ilocb] = baselines[bl]     # baseline id
+                    vis_buffer[idx + ilocsu] = source_id        # source id
 
                     # Flatten visibilities for buffer write
-                    flat_vis = vis[t,bl].ravel()
-                    vis_buffer[idx+nrparm:idx+nrparm+flat_vis.size] = flat_vis
+                    flat_vis = vis[t, bl].ravel()
+                    vis_buffer[idx + nrparm:idx +
+                               nrparm + flat_vis.size] = flat_vis
 
                     numVisBuff += 1
 
                     # Hit the limit, write
                     if numVisBuff == nvispio:
-                        firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff)
+                        firstVis, numVisBuff = _write_buffer(
+                            uvf, firstVis, numVisBuff)
 
             # Write out any remaining visibilities
             if numVisBuff > 0:
@@ -131,14 +134,15 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
 
             # Create an index for this scan
             nx_rows.append({
-                'TIME': [(time[-1] + time[0])/2], # Time Centroid
+                'TIME': [(time[-1] + time[0]) / 2],  # Time Centroid
                 'TIME INTERVAL': [time[-1] - time[0]],
                 'SOURCE ID': [source_id],
-                'SUBARRAY': [1],           # Should match 'AIPS AN' table version
-                                           # Each AN table defines a subarray
+                # Should match 'AIPS AN' table version
+                # Each AN table defines a subarray
+                'SUBARRAY': [1],
                 'FREQ ID': [1],            # Should match 'AIPS FQ' row FRQSEL
                 'START VIS': [start_vis],  # FORTRAN indexing
-                'END VIS': [firstVis-1]    # FORTRAN indexing
+                'END VIS': [firstVis - 1]  # FORTRAN indexing
             })
 
         # Create the index and calibration tables

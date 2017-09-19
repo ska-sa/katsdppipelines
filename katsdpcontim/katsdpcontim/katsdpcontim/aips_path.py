@@ -2,6 +2,7 @@ import os
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
+
 def _check_disk_type(dtype, check=True):
     """
     Checks that `dtype` is either "AIPS" or FITS",
@@ -22,11 +23,12 @@ def _check_disk_type(dtype, check=True):
     """
     if not check or not dtype in _VALID_DISK_TYPES:
         raise ValueError("Invalid disk type '%s'. "
-                        "Should be one of '%s'" % (
-                            dtype, _VALID_DISK_TYPES))
+                         "Should be one of '%s'" % (
+                             dtype, _VALID_DISK_TYPES))
+
 
 def katdal_aips_path(katdata, name=None, disk=None, aclass=None,
-                    seq=None, label=None, dtype=None):
+                     seq=None, label=None, dtype=None):
     """
     Constructs an aips path from a :class:`KatdalAdapter`
 
@@ -47,7 +49,7 @@ def katdal_aips_path(katdata, name=None, disk=None, aclass=None,
         dtype = "AIPS"
 
     if name is None:
-        path, file  = os.path.split(katdata.katdal.name)
+        path, file = os.path.split(katdata.katdal.name)
         name, ext = os.path.splitext(file)
 
         if dtype == "FITS":
@@ -73,8 +75,9 @@ class AIPSPath(object):
     Also, while FITS files don't technically have classes
     or sequences, these are defaulted to "fits" and 1, respectively.
     """
+
     def __init__(self, name, disk, aclass=None,
-                seq=None, label=None, dtype=None):
+                 seq=None, label=None, dtype=None):
         """
         Constructs an :class:`AIPSPath`.
 
@@ -119,7 +122,7 @@ class AIPSPath(object):
         self._disk = disk
 
     def copy(self, name=None, disk=None, aclass=None,
-            seq=None, label=None, dtype=None):
+             seq=None, label=None, dtype=None):
         """
         Returns a copy of this object. Supplied parameters can
         override properties transferred to the new object.
@@ -130,7 +133,6 @@ class AIPSPath(object):
                         self._seq if seq is None else seq,
                         self._label if label is None else label,
                         self._dtype if dtype is None else dtype)
-
 
     @property
     def name(self):
@@ -203,6 +205,7 @@ class AIPSPath(object):
         else:
             _check_disk_type(self._dtype, False)
 
+
 def task_input_kwargs(ofile):
     """
     Returns
@@ -212,16 +215,17 @@ def task_input_kwargs(ofile):
         to an ObitTask as an input file.
     """
     if ofile.dtype == "AIPS":
-        return { "DataType" : ofile.dtype,
-                 "inName" : ofile.name,
-                 "inClass" : ofile.aclass,
-                 "inSeq" : ofile.seq,
-                 "inDisk": ofile.disk }
+        return {"DataType": ofile.dtype,
+                "inName": ofile.name,
+                "inClass": ofile.aclass,
+                "inSeq": ofile.seq,
+                "inDisk": ofile.disk}
     elif ofile.dtype == "FITS":
-        return { "DataType" : ofile.dtype,
-                 "inFile" : ofile.name }
+        return {"DataType": ofile.dtype,
+                "inFile": ofile.name}
     else:
         _check_disk_type(ofile.dtype, False)
+
 
 def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
     """
@@ -234,16 +238,17 @@ def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype
     dtype = ofile.dtype if dtype is None else dtype
 
     if dtype == "AIPS":
-        return { "outDType" : dtype,
-                 "outName" : ofile.name if name is None else name,
-                 "outClass" : ofile.aclass if aclass is None else aclass,
-                 "outSeq" : ofile.seq if seq is None else seq,
-                 "outDisk" : ofile.disk if disk is None else disk }
+        return {"outDType": dtype,
+                "outName": ofile.name if name is None else name,
+                "outClass": ofile.aclass if aclass is None else aclass,
+                "outSeq": ofile.seq if seq is None else seq,
+                "outDisk": ofile.disk if disk is None else disk}
     elif dtype == "FITS":
-        return { "outDType" : dtype,
-                 "outFile" : ofile.name }
+        return {"outDType": dtype,
+                "outFile": ofile.name}
     else:
         _check_disk_type(dtype, False)
+
 
 def task_output2_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
     """
@@ -258,11 +263,11 @@ def task_output2_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtyp
     # NB. There doesn't seem to be an out2DType
 
     if dtype == "AIPS":
-        return { "out2Name" : ofile.name if name is None else name,
-                 "out2Class" : ofile.aclass if aclass is None else aclass,
-                 "out2Seq" : ofile.seq if seq is None else seq,
-                 "out2Disk" : ofile.disk if disk is None else disk }
+        return {"out2Name": ofile.name if name is None else name,
+                "out2Class": ofile.aclass if aclass is None else aclass,
+                "out2Seq": ofile.seq if seq is None else seq,
+                "out2Disk": ofile.disk if disk is None else disk}
     elif dtype == "FITS":
-        return { "out2File" : ofile.name }
+        return {"out2File": ofile.name}
     else:
         _check_disk_type(dtype, False)

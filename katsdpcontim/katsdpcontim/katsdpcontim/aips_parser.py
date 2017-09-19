@@ -10,6 +10,7 @@ from katsdpcontim.obit_types import OBIT_TYPE_ENUM, OBIT_TYPE
 
 log = logging.getLogger('katsdpcontim')
 
+
 def parse_aips_config(aips_cfg_file):
     """
     Parses an AIPS config file into a
@@ -45,10 +46,10 @@ def parse_aips_config(aips_cfg_file):
     info_list = InfoList.InfoList()
     ParserUtil.PParse(aips_cfg_file, info_list, err)
     handle_obit_err("Error parsing Obit configuration file '{}'"
-                        .format(aips_cfg_file), err)
-
+                    .format(aips_cfg_file), err)
 
     return InfoList.PGetDict(info_list)
+
 
 def obit_config_from_aips(aips_cfg_file):
     """
@@ -101,5 +102,5 @@ def obit_config_from_aips(aips_cfg_file):
 
         return value
 
-    return { k: _massage(o) for k, o
-            in parse_aips_config(aips_cfg_file).iteritems() }
+    return {k: _massage(o) for k, o
+            in parse_aips_config(aips_cfg_file).iteritems()}

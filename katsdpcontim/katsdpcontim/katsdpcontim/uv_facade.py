@@ -8,9 +8,9 @@ import UV
 import UVDesc
 
 from katsdpcontim import (AIPSTable,
-                        AIPSPath,
-                        obit_err,
-                        handle_obit_err)
+                          AIPSPath,
+                          obit_err,
+                          handle_obit_err)
 
 log = logging.getLogger('katsdpcontim')
 
@@ -30,6 +30,7 @@ def uv_file_mode(mode):
     # Read by default
     else:
         return UV.READONLY
+
 
 def open_uv(aips_path, nvispio=1024, mode=None):
     """
@@ -61,13 +62,13 @@ def open_uv(aips_path, nvispio=1024, mode=None):
 
     if aips_path.dtype == "AIPS":
         uv = UV.newPAUV(aips_path.label, aips_path.name,
-                            aips_path.aclass, aips_path.disk,
-                            aips_path.seq, exists, err, nvis=nvispio)
+                        aips_path.aclass, aips_path.disk,
+                        aips_path.seq, exists, err, nvis=nvispio)
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFUV calls do not currently work")
 
         uv = UV.newPFUV(aips_path.label, aips_path.name, aips_path.disk,
-                                                exists, err, nvis=nvispio)
+                        exists, err, nvis=nvispio)
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
@@ -77,6 +78,7 @@ def open_uv(aips_path, nvispio=1024, mode=None):
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
     return uv
+
 
 def uv_factory(**kwargs):
     """
@@ -135,13 +137,13 @@ def uv_factory(**kwargs):
         uvf.tables["AIPS AN"].keywords.update(KA.uv_antenna_keywords)
         uvf.tables["AIPS FQ"].keywords.update(KA.uv_spw_keywords)
         uvf.tables["AIPS SU"].keywords.update(KA.uv_source_keywords)
-            # AIPS NX table has no keywords
+        # AIPS NX table has no keywords
 
         # Set their rows
         uvf.tables["AIPS AN"].rows = KA.uv_antenna_rows
         uvf.tables["AIPS FQ"].rows = KA.uv_spw_rows
         uvf.tables["AIPS SU"].rows = KA.uv_source_rows
-            # AIPS NX have no rows at this point
+        # AIPS NX have no rows at this point
 
         # Write them
         uvf.tables["AIPS AN"].write()
@@ -164,6 +166,7 @@ def uv_factory(**kwargs):
 
     return uvf
 
+
 class UVFacade(object):
     """
     Provides a simplified interface to an Obit :class:`UV.UV` object.
@@ -177,6 +180,7 @@ class UVFacade(object):
 
     Note well the :meth:`UVFacade._clear_uv()` method.
     """
+
     def __init__(self, uv, **kwargs):
         """
         Constructor
@@ -229,9 +233,9 @@ class UVFacade(object):
         # History tables don't work like the other tables
         ignored_tables = ["AIPS HI"]
 
-        self._tables = { name: AIPSTable(uv, name, version, 'r', err)
-                                      for version, name in tables
-                                      if not name in ignored_tables }
+        self._tables = {name: AIPSTable(uv, name, version, 'r', err)
+                        for version, name in tables
+                        if not name in ignored_tables}
 
     def close(self):
         """ Closes the wrapped UV file """
@@ -273,7 +277,7 @@ class UVFacade(object):
 
     def attach_table(self, name, version, **kwargs):
         self._tables[name] = AIPSTable(self._uv, name, version, 'r',
-                                               self._err, **kwargs)
+                                       self._err, **kwargs)
 
     @property
     def aips_path(self):
@@ -337,7 +341,7 @@ class UVFacade(object):
         self._uv.Desc.Dict = desc
         self._uv.UpdateDesc(self._err)
         handle_obit_err("Error updating UV Descriptor on '{}'"
-                            .format(self.name), self._err)
+                        .format(self.name), self._err)
 
     def attach_CL_from_NX_table(self, max_ant_nr):
         """
@@ -351,4 +355,4 @@ class UVFacade(object):
         """
         UV.PTableCLfromNX(self._uv, max_ant_nr, self._err)
         handle_obit_err("Error creating '%s' CL table from NX table"
-                                             % self.name, self._err)
+                        % self.name, self._err)

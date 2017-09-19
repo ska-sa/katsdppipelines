@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 
+
 def get_logger():
     # Console formatter, mention name
     cfmt = logging.Formatter('%(name)s - %(levelname)s - %(message)s')

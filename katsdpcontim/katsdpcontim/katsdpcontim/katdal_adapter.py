@@ -13,11 +13,14 @@ from katsdpcontim.aips_path import AIPSPath
 
 log = logging.getLogger('katsdpcontim')
 
+
 def _aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
+
 MEERKAT = 'MeerKAT'
+
 
 class KatdalAdapter(object):
     """
@@ -27,6 +30,7 @@ class KatdalAdapter(object):
     This is not a true adapter, but perhaps if
     called that enough, it will become one.
     """
+
     def __init__(self, katds):
         """
         Constructs a KatdalAdapter.
@@ -53,18 +57,18 @@ class KatdalAdapter(object):
         nstokes = self.nstokes
 
         # Lexicographically sort correlation products on (a1, a2, cid)
-        sort_fn = lambda x: (cp[x].ant1_ix,cp[x].ant2_ix,cp[x].cid)
+        def sort_fn(x): return (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
         cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
         corr_products = np.asarray([cp[i] for i in cp_argsort])
 
         # Take baseline products so that we don't recompute
         # UVW coordinates for all correlator products
-        bl_products = corr_products.reshape(-1, nstokes)[:,0]
+        bl_products = corr_products.reshape(-1, nstokes)[:, 0]
         nbl, = bl_products.shape
 
         # AIPS baseline IDs
         aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
-                                                        dtype=np.float32)
+                                    dtype=np.float32)
 
         # Get the AIPS visibility data shape (inaxes)
         # reverse to go from FORTRAN to C ordering
@@ -84,7 +88,7 @@ class KatdalAdapter(object):
                 aips_source = uv_source_map[target.name]
             except KeyError:
                 logging.warn("Target '{}' will not be exported"
-                                        .format(target.name))
+                             .format(target.name))
                 continue
             else:
                 # Retrieve the source ID
@@ -113,22 +117,23 @@ class KatdalAdapter(object):
             # Reorganise correlation product dim so that
             # polarisations are grouped per baseline.
             # Then reshape to separate the two dimensions
-            vis = vis[:,:,cp_argsort,:].reshape(ntime, nchan, nbl, nstokes, 3)
+            vis = vis[:, :, cp_argsort, :].reshape(
+                ntime, nchan, nbl, nstokes, 3)
 
             # (1) transpose so that we have (ntime, nbl, nchan, npol, 3)
             # (2) reshape to include the full inaxes shape,
             #     including singleton nif, ra and dec dimensions
-            vis = (vis.transpose(0,2,1,3,4)
-                      .reshape((ntime,nbl,) + inaxes))
+            vis = (vis.transpose(0, 2, 1, 3, 4)
+                      .reshape((ntime, nbl,) + inaxes))
 
             log.info("Read visibilities of shape {} and size {:.2f}MB"
-                .format(vis.shape, vis.nbytes / (1024.*1024.)))
+                     .format(vis.shape, vis.nbytes / (1024. * 1024.)))
 
             # Compute UVW coordinates from baselines
             # (3, ntimes, nbl)
             u, v, w = np.stack([target.uvw(bp.ant1, antenna=bp.ant2,
-                                                     timestamp=times)
-                                      for bp in bl_products], axis=2)
+                                           timestamp=times)
+                                for bp in bl_products], axis=2)
 
             assert u.shape == v.shape == w.shape == (ntime, nbl)
 
@@ -143,8 +148,8 @@ class KatdalAdapter(object):
 
             # Yield this scan's data
             yield si, (aips_u, aips_v, aips_w,
-                  aips_time, aips_baselines, aips_source_id,
-                  vis)
+                       aips_time, aips_baselines, aips_source_id,
+                       vis)
 
     @boltons.cacheutils.cachedmethod('_cache')
     def _antenna_map(self):
@@ -156,7 +161,7 @@ class KatdalAdapter(object):
         """
         A = attr.make_class("IndexedAntenna", ["index", "antenna"])
         return OrderedDict((a.name, A(i, a)) for i, a
-                            in enumerate(sorted(self._katds.ants)))
+                           in enumerate(sorted(self._katds.ants)))
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """
@@ -220,10 +225,10 @@ class KatdalAdapter(object):
 
     """ Map correlation characters to correlation id """
     CORR_ID_MAP = {
-        ('h','h'): 0,
-        ('v','v'): 1,
-        ('h','v'): 2,
-        ('v','h'): 3,
+        ('h', 'h'): 0,
+        ('v', 'v'): 1,
+        ('h', 'v'): 2,
+        ('v', 'h'): 3,
     }
 
     @boltons.cacheutils.cachedmethod('_cache')
@@ -249,15 +254,15 @@ class KatdalAdapter(object):
         class CorrelatorProduct(CorrelatorProductBase):
             @property
             def aips_ant1_ix(self):
-                return self.ant1_ix+1
+                return self.ant1_ix + 1
 
             @property
             def aips_ant2_ix(self):
-                return self.ant2_ix+1
+                return self.ant2_ix + 1
 
             @property
             def aips_bl_ix(self):
-                return self.aips_ant1_ix*256.0 + self.aips_ant2_ix
+                return self.aips_ant1_ix * 256.0 + self.aips_ant2_ix
 
         antenna_map = self._antenna_map()
 
@@ -277,14 +282,14 @@ class KatdalAdapter(object):
                 cid = self.CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError as e:
                 raise ValueError("Invalid Correlator Product "
-                                "['{}', '{}']".format(a1_corr, a2_corr))
+                                 "['{}', '{}']".format(a1_corr, a2_corr))
 
             # Look up katdal antenna pair
             a1 = antenna_map[a1_name]
             a2 = antenna_map[a2_name]
 
             products.append(CorrelatorProduct(a1.antenna, a2.antenna,
-                                        a1.index, a2.index, cid))
+                                              a1.index, a2.index, cid))
 
         return products
 
@@ -301,7 +306,7 @@ class KatdalAdapter(object):
 
         # Count the number of times we see a correlation product
         counts = Counter((cp.ant1_ix, cp.ant2_ix) for cp
-                            in self.correlator_products())
+                         in self.correlator_products())
         return max(counts.itervalues())
 
     @boltons.cacheutils.cachedproperty
@@ -329,13 +334,13 @@ class KatdalAdapter(object):
 
             # Right Ascension and Declination
             ras, decs = t.radec()
-            ra  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
-            dec = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
+            ra = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
+            dec = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
 
             # Apparent position
             ras, decs = t.apparent_radec()
-            deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
-            raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
+            deca = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
+            raa = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
 
             targets[name] = Target(ra, dec, raa, deca)
 
@@ -421,7 +426,7 @@ class KatdalAdapter(object):
         float
             Reference wavelength
         """
-        return 2.997924562e8/self.reffreq
+        return 2.997924562e8 / self.reffreq
 
     @boltons.cacheutils.cachedproperty
     def uv_antenna_keywords(self):
@@ -442,9 +447,9 @@ class KatdalAdapter(object):
             'RDATE': self.obsdat,           # Reference date
             'NO_IF': self.nif,              # Number of spectral windows
             # GST at 0h on reference data in degrees
-            'GSTIA0': UVDesc.GST0(julian_date)*15.0,
+            'GSTIA0': UVDesc.GST0(julian_date) * 15.0,
             # Earth's rotation rate (degrees/day)
-            'DEGPDY': UVDesc.ERate(julian_date)*360.0,
+            'DEGPDY': UVDesc.ERate(julian_date) * 360.0,
         }
 
     @boltons.cacheutils.cachedproperty
@@ -455,7 +460,6 @@ class KatdalAdapter(object):
         list
             List of dictionaries describing each antenna.
         """
-
 
         return [{
             # MeerKAT antenna information
@@ -488,9 +492,10 @@ class KatdalAdapter(object):
         """
         return {
             'NO_IF': self.nif,     # Number of spectral windows
-            'FREQID': self.frqsel, # Frequency setup ID
+            'FREQID': self.frqsel,  # Frequency setup ID
             'VELDEF': 'RADIO',     # Radio/Optical Velocity?
-            'VELTYP': 'LSR'        # Velocity Frame of Reference (LSR is default)
+            # Velocity Frame of Reference (LSR is default)
+            'VELTYP': 'LSR'
         }
 
     @boltons.cacheutils.cachedproperty
@@ -531,44 +536,45 @@ class KatdalAdapter(object):
 
             # AIPS Right Ascension and Declination
             ras, decs = target.radec()
-            ra  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
-            dec = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
+            ra = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
+            dec = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
 
             # AIPS Apparent Right Ascension and Declination
             ras, decs = target.apparent_radec()
-            raa  = UVDesc.PHMS2RA(str(ras).replace(':',' '))
-            deca = UVDesc.PDMS2Dec(str(decs).replace(':',' '))
+            raa = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
+            deca = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
 
             targets[target.name] = {
-                    # Fill in data derived from katpoint targets
-                    'ID. NO.'  : [aips_src_index],
-                    'SOURCE'   : [name],
-                    'RAEPO'    : [ra],
-                    'DECEPO'   : [dec],
-                    'RAOBS'    : [raa],
-                    'DECOBS'   : [deca],
-                    'RAAPP'    : [raa],
-                    'DECAPP'   : [deca],
-                    'EPOCH'    : [2000.0],
-                    'BANDWIDTH': [bandwidth],
+                # Fill in data derived from katpoint targets
+                'ID. NO.': [aips_src_index],
+                'SOURCE': [name],
+                'RAEPO': [ra],
+                'DECEPO': [dec],
+                'RAOBS': [raa],
+                'DECOBS': [deca],
+                'RAAPP': [raa],
+                'DECAPP': [deca],
+                'EPOCH': [2000.0],
+                'BANDWIDTH': [bandwidth],
 
-                    # No calibrator, fill with spaces
-                    'CALCODE'  : [' '*4], # 4 spaces for calibrator code
+                # No calibrator, fill with spaces
+                'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
 
-                    # Following seven key-values technically vary by spectral window
-                    # Specify zero flux for sources since we don't know them yet
-                    'IFLUX'    : [0.0],
-                    'QFLUX'    : [0.0],
-                    'VFLUX'    : [0.0],
-                    'UFLUX'    : [0.0],
-                    'LSRVEL'   : [0.0], # Velocity
-                    'FREQOFF'  : [0.0], # Frequency Offset
-                    'RESTFREQ' : [0.0], # Rest Frequency
+                # Following seven key-values technically vary by spectral window
+                # Specify zero flux for sources since we don't know them
+                # yet
+                'IFLUX': [0.0],
+                'QFLUX': [0.0],
+                'VFLUX': [0.0],
+                'UFLUX': [0.0],
+                'LSRVEL': [0.0],  # Velocity
+                'FREQOFF': [0.0],  # Frequency Offset
+                'RESTFREQ': [0.0],  # Rest Frequency
 
-                    # Don't have these, zero them
-                    'PMRA'     : [0.0], # Proper Motion in Right Ascension
-                    'PMDEC'    : [0.0], # Proper Motion in Declination
-                    'QUAL'     : [0.0], # Source Qualifier Number
+                # Don't have these, zero them
+                'PMRA': [0.0],  # Proper Motion in Right Ascension
+                'PMDEC': [0.0],  # Proper Motion in Declination
+                'QUAL': [0.0],  # Source Qualifier Number
             }
 
         return targets
@@ -582,7 +588,7 @@ class KatdalAdapter(object):
             Dictionary containing updates to the AIPS FQ
             frequency table keywords.
         """
-        return { 'NO_IF': self.nif }
+        return {'NO_IF': self.nif}
 
     @boltons.cacheutils.cachedproperty
     def max_antenna_number(self):
@@ -611,7 +617,6 @@ class KatdalAdapter(object):
             'MFMOD': 1
         }
 
-
     @boltons.cacheutils.cachedproperty
     def uv_spw_rows(self):
         """
@@ -628,9 +633,8 @@ class KatdalAdapter(object):
             'CH WIDTH': [sw.channel_width],
             'RXCODE': ['L'],
             'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-            'TOTAL BANDWIDTH': [abs(sw.channel_width)*len(sw.channel_freqs)],
+            'TOTAL BANDWIDTH': [abs(sw.channel_width) * len(sw.channel_freqs)],
         } for i, sw in enumerate(self._katds.spectral_windows, 1)]
-
 
     def fits_descriptor(self):
         """ FITS visibility descriptor setup """
@@ -638,7 +642,7 @@ class KatdalAdapter(object):
             'naxis': 6,
             'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
             'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
-            'cdelt': [1.0,-1.0, self.chinc, 1.0, 0.0, 0.0],
+            'cdelt': [1.0, -1.0, self.chinc, 1.0, 0.0, 0.0],
             'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -670,7 +674,7 @@ class KatdalAdapter(object):
             'instrume': MEERKAT,
 
             'isort': 'TB',     # Time, Baseline sort order
-            'object': 'MULTI', # Source, this implies multiple sources
+            'object': 'MULTI',  # Source, this implies multiple sources
 
             'nvis': 0,
             'firstVis': 0,
@@ -693,7 +697,7 @@ class KatdalAdapter(object):
 
         # Random parameter keys, indices and coordinate systems
         # index == -1 indicates its absence in the Visibility Buffer
-        RP = attr.make_class("RandomParameters", ["key", "index", "type"] )
+        RP = attr.make_class("RandomParameters", ["key", "index", "type"])
 
         random_parameters = [
             RP('ilocu', 0, 'UU-L-SIN'),  # U Coordinate
@@ -703,9 +707,9 @@ class KatdalAdapter(object):
             RP('iloct', 4, 'TIME1'),     # Timestamp
             RP('iloscu', 5, 'SOURCE'),   # Source Index
 
-            RP('ilocfq', -1, 'FREQSEL'), # Frequency setup ID
+            RP('ilocfq', -1, 'FREQSEL'),  # Frequency setup ID
             RP('ilocit', -1, 'INTTIM'),  # Integration Time
-            RP('ilocid', -1, 'CORR-ID'), # VLBA-specific
+            RP('ilocid', -1, 'CORR-ID'),  # VLBA-specific
             RP('ilocws', -1, 'WEIGHT'),  # Ignore
 
             # The following used when 'BASELINE' id
@@ -719,7 +723,7 @@ class KatdalAdapter(object):
         ptype = [rp.type for rp in random_parameters if not rp.index == -1]
 
         # Update with random parameters
-        desc.update({ rp.key: rp.index for rp in random_parameters })
-        desc.update({'nrparm' : len(ptype), 'ptype' : ptype })
+        desc.update({rp.key: rp.index for rp in random_parameters})
+        desc.update({'nrparm': len(ptype), 'ptype': ptype})
 
         return desc
