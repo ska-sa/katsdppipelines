@@ -21,7 +21,7 @@ Input Data
 The primary input data will be L1 visibilities, obtained from the data store,
 with the following dimensions:
 
-- 2 second time dumps. This translates to 18,000 timesteps for an 10 hour observation.
+- 2 second time dumps. This translates to 18,000 timesteps for a 10 hour observation.
 - 2016 baselines given 64 antenna (no auto-correlations)
 - 4096 channels.
 - 4 correlations.
@@ -109,7 +109,7 @@ This section describes:
     :align: center
     :width: 90%
 
-    The above image illustrates the Obit Continum Imaging Pipeline.
+    The above image illustrates the Obit Continuum Imaging Pipeline.
     Individual target scans are retrieved in time order from katdal
     and written to a temporary AIPS/FITS file.
     This file is averaged and appended to an averaged AIPS/FITS file
