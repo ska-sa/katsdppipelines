@@ -80,7 +80,6 @@ with obit_context():
 
     # Get selected indices as python ints
     scan_indices = [int(i) for i in KA.scan_indices]
-    scan_paths = []
 
     # FORTRAN indexing
     merge_firstVis = 1
@@ -93,7 +92,6 @@ with obit_context():
 
         # Get path, with sequence based on scan index
         scan_path = katdal_aips_path(KA, aclass='raw', seq=si)
-        scan_paths.append(scan_path)
         uv_export(KA, scan_path, nvispio=args.nvispio,
                                 kat_select=select_args)
 
@@ -111,8 +109,6 @@ with obit_context():
         assert len(scan_uvf.tables["AIPS NX"].rows) == 1
         nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
 
-        # Remove scan once baseline averaging is complete
-        scan_uvf.Zap()
 
         blavg_uvf = uv_factory(aips_path=blavg_path, mode='r',
                                         nvispio=args.nvispio)
@@ -163,7 +159,10 @@ with obit_context():
         # Append row to index table
         merge_uvf.tables["AIPS NX"].rows.append(nx_row)
 
-        # Remove baseline averaged table
+        # Remove scan and baseline averaged files once merged
+        log.info("Zapping '%s'" % scan_uvf.aips_path)
+        scan_uvf.Zap()
+        log.info("Zapping '%s'" % blavg_uvf.aips_path)
         blavg_uvf.Zap()
 
     # Write the index table
@@ -190,4 +189,5 @@ with obit_context():
     log.info("Calibration Solutions")
     log.info(pretty(merge_uvf.tables["AIPS CL"].rows))
     merge_uvf.close()
+
 

@@ -166,14 +166,16 @@ def uv_factory(**kwargs):
 
 class UVFacade(object):
     """
-    Provides a simplified interface to an Obit UV object.
+    Provides a simplified interface to an Obit :class:`UV.UV` object.
 
     ::
 
         But you've got to look past the hair and the
         cute, cuddly thing - it's all a deceptive facade
 
-        https://www.youtube.com/watch?v=DWkMgJ2UknQ
+        https://www.youtube.com/watch?v=73d6h_go7QI
+
+    Note well the :meth:`UVFacade._clear_uv()` method.
     """
     def __init__(self, uv, **kwargs):
         """
@@ -191,9 +193,6 @@ class UVFacade(object):
         self._open_logic(uv, err, **kwargs)
 
     def _open_logic(self, uv, err, **kwargs):
-        if getattr(self, '_uv', None) is not None:
-            self.close()
-
         # Given an AIPSPath. open it.
         if isinstance(uv, AIPSPath):
             self._aips_path = uv
@@ -245,6 +244,22 @@ class UVFacade(object):
 
         self._uv.Close(self._err)
         handle_obit_err("Error closing uv file", self._err)
+        self._clear_uv()
+
+    def _clear_uv(self):
+        """
+        Calls :code:`del` on the wrapped UV object and sets it to None.
+        Without this, internal resources on the UV object
+        are not released and subsequent calls to *unrelated*
+        objects will fail, claiming that the UV object
+        is *not* a UV object.
+        """
+        try:
+            del self._uv
+        except AttributeError:
+            pass
+
+        self._uv = None
 
     def __enter__(self):
         return self
@@ -285,6 +300,9 @@ class UVFacade(object):
         return np.frombuffer(self._uv.VisBuf, count=-1, dtype=np.float32)
 
     def Open(self, mode):
+        if self._uv is None:
+            self.open_logic(self._aips_path, self._err)
+
         self._uv.Open(mode, self._err)
         handle_obit_err("Error opening UV file '%s'" % self.name, self._err)
 
@@ -302,6 +320,7 @@ class UVFacade(object):
     def Zap(self):
         self._uv.Zap(self._err)
         handle_obit_err("Error deleting UV file '%s'" % self.name, self._err)
+        self._clear_uv()
 
     def update_descriptor(self, descriptor):
         """
