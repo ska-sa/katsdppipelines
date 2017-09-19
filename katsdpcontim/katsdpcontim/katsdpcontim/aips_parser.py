@@ -1,12 +1,10 @@
-from collections import OrderedDict
 import logging
 
 import InfoList
 import ParserUtil
 
-import katsdpcontim
 from katsdpcontim import obit_err, handle_obit_err
-from katsdpcontim.obit_types import OBIT_TYPE_ENUM, OBIT_TYPE
+from katsdpcontim.obit_types import OBIT_TYPE_ENUM
 
 log = logging.getLogger('katsdpcontim')
 

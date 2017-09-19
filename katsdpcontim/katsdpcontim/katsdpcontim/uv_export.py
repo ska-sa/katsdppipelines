@@ -2,8 +2,7 @@ import logging
 
 import numpy as np
 
-from katsdpcontim import (KatdalAdapter, UVFacade,
-                          uv_factory)
+from katsdpcontim import uv_factory
 
 log = logging.getLogger('katsdpcontim')
 
@@ -52,7 +51,8 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
 
                 .. code-block:: python
 
-                    firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff)
+                    firstVis, numVisBuff = _write_buffer(uv, firstVis,
+                                                            numVisBuff)
 
                 Parameters
                 ----------
@@ -74,8 +74,9 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
                 uvf.Desc.Dict = desc
 
                 nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
-                log.info("Writing {:.2f}MB visibilities. firstVis={} numVisBuff={}."
-                         .format(nbytes / (1024. * 1024.), firstVis, numVisBuff))
+                log.info("Writing {:.2f}MB visibilities. "
+                         "firstVis={} numVisBuff={}.".format(
+                            nbytes / (1024. * 1024.), firstVis, numVisBuff))
 
                 # If firstVis is passed through to this method, it uses FORTRAN
                 # indexing (1)

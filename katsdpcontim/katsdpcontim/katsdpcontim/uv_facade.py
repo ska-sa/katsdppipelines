@@ -1,11 +1,9 @@
 import logging
-from functools import partial
 
 import numpy as np
 
 import TableList
 import UV
-import UVDesc
 
 from katsdpcontim import (AIPSTable,
                           AIPSPath,
@@ -110,7 +108,7 @@ def uv_factory(**kwargs):
     """
     try:
         ofile = kwargs.pop('aips_path')
-    except KeyError as e:
+    except KeyError:
         raise ValueError("No 'aips_path' argument supplied.")
 
     mode = kwargs.pop('mode', 'r')
@@ -235,7 +233,7 @@ class UVFacade(object):
 
         self._tables = {name: AIPSTable(uv, name, version, 'r', err)
                         for version, name in tables
-                        if not name in ignored_tables}
+                        if name not in ignored_tables}
 
     def close(self):
         """ Closes the wrapped UV file """

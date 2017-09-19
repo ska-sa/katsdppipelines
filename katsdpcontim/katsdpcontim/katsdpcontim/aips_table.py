@@ -4,14 +4,12 @@ import logging
 
 import InfoList
 import Table
-import TableList
 
-from katsdpcontim import obit_err, handle_obit_err
+from katsdpcontim import handle_obit_err
 from katsdpcontim.obit_types import (OBIT_TYPE_ENUM,
                                      OBIT_TYPE,
                                      OBIT_INTS,
                                      OBIT_FLOATS,
-                                     OBIT_COMPLEXES,
                                      OBIT_STRINGS,
                                      OBIT_BOOLS,
                                      OBIT_BITS)
@@ -92,7 +90,7 @@ class AIPSTableKeywords(object):
             # Look up the type and dimensionality associated
             # with this key value pair
             type_, dims = self._schema[key]
-        except KeyError as e:
+        except KeyError:
             raise ValueError("'%s' is not a valid keyword "
                              "for table '%s' ."
                              "Valid keywords '%s'." % (
@@ -272,7 +270,7 @@ class AIPSTableRow(object):
 
         try:
             type_, dims, defaults = self._row_def[key]
-        except KeyError as e:
+        except KeyError:
             raise ValueError("'%s' does not appear to be a "
                              "valid row key. Valid keys "
                              "include '%s'" % (key, self._row_def.keys()))

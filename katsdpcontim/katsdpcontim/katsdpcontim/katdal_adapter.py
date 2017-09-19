@@ -9,8 +9,6 @@ import numpy as np
 
 import UVDesc
 
-from katsdpcontim.aips_path import AIPSPath
-
 log = logging.getLogger('katsdpcontim')
 
 
@@ -280,7 +278,7 @@ class KatdalAdapter(object):
             # Derive the correlation id
             try:
                 cid = self.CORR_ID_MAP[(a1_type, a2_type)]
-            except KeyError as e:
+            except KeyError:
                 raise ValueError("Invalid Correlator Product "
                                  "['{}', '{}']".format(a1_corr, a2_corr))
 
@@ -560,9 +558,9 @@ class KatdalAdapter(object):
                 # No calibrator, fill with spaces
                 'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
 
-                # Following seven key-values technically vary by spectral window
-                # Specify zero flux for sources since we don't know them
-                # yet
+                # Following seven key-values technically vary by
+                # spectral window. Specify zero flux for sources
+                # since we don't know them yet
                 'IFLUX': [0.0],
                 'QFLUX': [0.0],
                 'VFLUX': [0.0],
@@ -684,7 +682,8 @@ class KatdalAdapter(object):
             # are left here for illustration
             # 'incs' : 3,          # Stokes 1D increment. 3 floats in COMPLEX
             # 'incf' : 12,         # Frequency 1D increment, 12 = 3*4 STOKES
-            # 'incif' : 49152,     # Spectral window 1D increment = 49152 = 3*4*4096 CHANNELS
+            # 'incif' : 49152,     # Spectral window 1D increment
+            #                      # 49152 = 3*4*4096 CHANNELS
 
             # Regular parameter indices into ctypes/inaxes/cdelt etc.
             'jlocc': 0,   # COMPLEX

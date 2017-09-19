@@ -21,7 +21,7 @@ def _check_disk_type(dtype, check=True):
         Raised if `dtype` is not "AIPS" or "FITS"
         or if check is `False`
     """
-    if not check or not dtype in _VALID_DISK_TYPES:
+    if not check or dtype not in _VALID_DISK_TYPES:
         raise ValueError("Invalid disk type '%s'. "
                          "Should be one of '%s'" % (
                              dtype, _VALID_DISK_TYPES))
@@ -227,7 +227,8 @@ def task_input_kwargs(ofile):
         _check_disk_type(ofile.dtype, False)
 
 
-def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
+def task_output_kwargs(ofile, name=None, disk=None, aclass=None,
+                       seq=None, dtype=None):
     """
     Returns
     -------
@@ -250,7 +251,8 @@ def task_output_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype
         _check_disk_type(dtype, False)
 
 
-def task_output2_kwargs(ofile, name=None, disk=None, aclass=None, seq=None, dtype=None):
+def task_output2_kwargs(ofile, name=None, disk=None, aclass=None,
+                        seq=None, dtype=None):
     """
     Returns
     -------
