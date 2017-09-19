@@ -1,7 +1,7 @@
 Obit Docker build
 =================
 
-Docker files for building ``AIPS`` and ``Obit`` on Ubuntu ``trusty`` and ``xenial``. The ``xenial`` container should be preferred.
+Docker files for building ``AIPS`` and ``Obit`` on Ubuntu ``xenial``.
 
 ~~~~~~~~~~~~
 Requirements
@@ -40,7 +40,6 @@ for further insight.
 .. code-block::
 
     # docker-compose build xenial-obit-dev
-    # docker-compose build trusty-obit-dev
 
 
 ~~~~~~~~~~~~~

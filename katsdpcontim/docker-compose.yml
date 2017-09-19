@@ -1,23 +1,5 @@
 version: "2.0"
 services:
-  trusty-obit-dev:
-    build:
-      context: ..
-      dockerfile: katsdpcontim/Dockerfile.trusty.dev
-      args:
-        HTTP_PROXY: "http://localhost:3128"
-
-    container_name: trusty-obit-dev
-    image: trusty/obit:dev
-    network_mode: host
-    restart: "no"
-    hostname: trusty-obit
-    environment:
-      - DISPLAY
-    volumes:
-      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
-      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
-
   xenial-obit-dev:
     build:
       context: ..
