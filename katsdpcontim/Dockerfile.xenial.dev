@@ -89,7 +89,7 @@ ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
-RUN patch -p1 -N  < obit.patch 2>/dev/null
+RUN patch -p1 -N -s < obit.patch
 
 # Compile OBIT
 RUN cd ObitSystem/Obit && \
