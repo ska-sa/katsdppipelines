@@ -4,7 +4,7 @@ import shutil
 import numpy as np
 import katdal
 import OErr, OTObit, ObitTalkUtil, OSystem
-import AIPS
+import AIPS, UV
 from katim import AIPSSetup
 from katim import KATH5toAIPS
 from katim import KATCal
@@ -22,6 +22,9 @@ parser.add_option("--write-flags", action="store_true", default=False, help="Wri
 parser.add_option("--channel-range", default=None, help="Range of frequency channels to keep (zero-based inclusive 'first_chan,last_chan', default is all channels)")
 parser.add_option("--obit", action="store_true", default=False, help="Write data as a FITAB format file suitable for input to Obit.")
 parser.add_option("--apply-cal", action="store_true", default=False, help="Look for calibration tables in the input h5 file amd apply them before writing uvfits.")
+parser.add_option("--timeav", default=2, help="Averaged dump time in seconds")
+parser.add_option("--chanav", default=1, help="Number of channels to average")
+parser.add_option("--targets", default=None, help="Targets to use")
 (options, args) = parser.parse_args()
 
 h5file=args[0]
@@ -44,7 +47,6 @@ cls = "Raw"
 seq = 1
 
 katdata = katdal.open(h5file)
-
 if not options.write_flags:
     #Reset flags in data file
     katdata._flags=np.zeros(katdata.shape,dtype=np.uint8)
@@ -60,8 +62,13 @@ if options.channel_range:
     print "\nChannel range %s through %s." % (first_chan, last_chan)
     katdata.select(channels=chan_range)
 
-katdata.select(scans='track')
 numchans = len(katdata.channel_freqs)
+
+if options.targets is not None:
+    katdata.select(targets=options.targets, scans='track')
+else:
+    katdata.select(scans='track')
+
 
 #Condition the uvfits template
 templatefile=ObitTalkUtil.FITSDir.FITSdisks[fitsdisk]+'MKATTemplate.uvtab.gz'
@@ -84,6 +91,16 @@ newuvfits.writeto(filebase+'.uvfits',clobber=True)
 uv=OTObit.uvlod(filebase+'.uvfits',0,nam,cls,disk,seq,err)
 
 obsdata = KATH5toAIPS.KAT2AIPS(katdata, uv, disk, fitsdisk, err, calInt=1.0, stop_w=False, apply_cal=options.apply_cal)
+
+KATCal.KATCalAvg(uv, "UVAV", 1, options.timeav/60., err, \
+                          flagVer=0, doCalib=0, gainUse=0, doBand=0, BPVer=0, doPol=False, \
+                          avgFreq=1, chAvg=options.chanav, \
+                          BChan=1, EChan=0, doAuto=False, \
+                          BIF=1, EIF=0, Compress=False, \
+                          nThreads=8)
+
+
+uv = UV.newPAUV("AIPS UV DATA", nam, "UVAV", disk, seq, True, err)
 
 uv.Header(err)
 
