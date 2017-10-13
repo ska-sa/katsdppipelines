@@ -23,11 +23,11 @@ Clone the following repositories:
     # git clone git@github.com:ska-sa/katpoint.git
     # git clone git@github.com:ska-sa/katdal.git
 
-Also, checkout the Obit source code @ revision ``570``.
+Also, checkout the Obit source code @ revision ``574``.
 
 .. code-block::
 
-    # svn checkout -r 570 https://github.com/bill-cotton/Obit
+    # svn checkout -r 574 https://github.com/bill-cotton/Obit
 
 ~~~~~
 Build
