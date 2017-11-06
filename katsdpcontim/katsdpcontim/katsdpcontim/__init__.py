@@ -20,4 +20,4 @@ from aips_table import AIPSTable
 from uv_facade import (UVFacade, open_uv,
                        uv_factory)
 from uv_export import uv_export
-from uv_merge import uv_merge
+
