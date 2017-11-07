@@ -12,6 +12,7 @@ services:
     hostname: xenial-obit
     environment:
       - DISPLAY
+      - QT_X11_NO_MITSHM=1
     volumes:
       - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
       - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
