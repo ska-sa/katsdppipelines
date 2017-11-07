@@ -1,6 +1,6 @@
 Index: trunk/ObitSystem/Obit/Makefile.in
 ===================================================================
---- trunk/ObitSystem/Obit/Makefile.in	(revision 567)
+--- trunk/ObitSystem/Obit/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/Makefile.in	(working copy)
 @@ -56,7 +56,7 @@
  DIRN = @PACKAGE_NAME@
@@ -98,7 +98,7 @@ Index: trunk/ObitSystem/Obit/Makefile.in
  	cd src;  $(MAKE) clean
 Index: trunk/ObitSystem/Obit/lib/Makefile
 ===================================================================
---- trunk/ObitSystem/Obit/lib/Makefile	(revision 567)
+--- trunk/ObitSystem/Obit/lib/Makefile	(revision 570)
 +++ trunk/ObitSystem/Obit/lib/Makefile	(working copy)
 @@ -34,7 +34,7 @@
  #
@@ -109,18 +109,20 @@ Index: trunk/ObitSystem/Obit/lib/Makefile
  SHTARGETS = libObit.so
  
  # list of object modules
-@@ -51,7 +51,7 @@
+@@ -50,8 +50,8 @@
+ 
  #  build shared Obit library, put in dependencies library
  libObit.so: ${OBJECTS}
- 	gcc -shared -o libObit.so  ${OBJECTS}
+-	gcc -shared -o libObit.so  ${OBJECTS}
 -	cp libObit.so ../../../deps/lib
++	gcc -shared -o libObit.so  ${OBJECTS} -lglib-2.0 -lpthread -lgthread-2.0
 +	#cp libObit.so ../../../deps/lib
  
  clean:
  	rm -f $(TARGETS) $(SHTARGETS)
 Index: trunk/ObitSystem/Obit/python/Makefile.in
 ===================================================================
---- trunk/ObitSystem/Obit/python/Makefile.in	(revision 567)
+--- trunk/ObitSystem/Obit/python/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/python/Makefile.in	(working copy)
 @@ -29,7 +29,7 @@
  #    Makefile to build library routines
@@ -210,7 +212,7 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  	rm -rf build
 Index: trunk/ObitSystem/Obit/python/makesetup.py
 ===================================================================
---- trunk/ObitSystem/Obit/python/makesetup.py	(revision 567)
+--- trunk/ObitSystem/Obit/python/makesetup.py	(revision 570)
 +++ trunk/ObitSystem/Obit/python/makesetup.py	(working copy)
 @@ -59,7 +59,7 @@
  for x in t:
@@ -232,7 +234,7 @@ Index: trunk/ObitSystem/Obit/python/makesetup.py
  outfile.write(')')
 Index: trunk/ObitSystem/Obit/tasks/Makefile.in
 ===================================================================
---- trunk/ObitSystem/Obit/tasks/Makefile.in	(revision 567)
+--- trunk/ObitSystem/Obit/tasks/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/tasks/Makefile.in	(working copy)
 @@ -43,15 +43,15 @@
  LDFLAGS = @LDFLAGS@

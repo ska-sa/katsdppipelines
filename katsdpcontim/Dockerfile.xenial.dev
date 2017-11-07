@@ -91,11 +91,18 @@ WORKDIR $OBIT_BASE_PATH
 # Apply OBIT patch
 RUN patch -p1 -N -s < obit.patch
 
-# Compile OBIT
+# Compile Obit
 RUN cd ObitSystem/Obit && \
     ./configure --prefix=/usr --without-plplot --without-wvr && \
     make clean && \
     make -j 8
+
+# Compile ObitView
+RUN cd ObitSystem/ObitView && \
+    ./configure --prefix=/usr --with-obit=/usr/local/Obit/ObitSystem/Obit --without-plplot --without-wvr && \
+    make clean && \
+    make && \
+    make install
 
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
@@ -137,6 +144,8 @@ RUN echo "#!/bin/bash\
 \necho 'Run aips headless with \"aips da=all notv tvok tpok\"'" >> /run.sh
 
 RUN chmod a+x /run.sh
+
+ADD katsdpcontim/Xdefaults /root/.Xdefaults
 
 # Run run.sh and then go to interactive shell
 CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]
