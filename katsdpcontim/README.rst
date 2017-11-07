@@ -81,6 +81,34 @@ Run
 
     # docker-compose run --rm xenial-obit-dev
 
+Authorise X11 connections
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You may find it useful to run ``ObitView`` and AIPS TV utilities from inside the container.
+You'll need to authorise connections from the docker container to your X11 server.
+
+On your machine, run the following to get the magic cookie:
+
+.. code-block::
+
+    $ xauth list $DISPLAY
+    yourhostname/unix:0  MIT-MAGIC-COOKIE-1  abcdef1234567890abcdef1234567890
+
+Then, inside the container, authorise the magic cooke as follows:
+
+.. code-block::
+
+    $ xauth add $DISPLAY . abcdef1234567890abcdef1234567890
+
+You should then be able to run:
+
+.. code-block::
+
+    $ ObitView
+
+and ObitView should open on your display.
+
+
 Export katdal observation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
