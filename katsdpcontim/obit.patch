@@ -232,6 +232,46 @@ Index: trunk/ObitSystem/Obit/python/makesetup.py
 +outfile.write('                              runtime_library_dirs='+str(runtimeLibDirs)+','+os.linesep)
 +outfile.write('       include_dirs='+str(incDirs)+')]'+os.linesep)
  outfile.write(')')
+Index: trunk/ObitSystem/Obit/src/Makefile.in
+===================================================================
+--- trunk/ObitSystem/Obit/src/Makefile.in	(revision 570)
++++ trunk/ObitSystem/Obit/src/Makefile.in	(working copy)
+@@ -35,20 +35,21 @@
+ LIBDIR = $(top_srcdir)/lib/
+ 
+ CC = @CC@
+-CPPFLAGS = @CPPFLAGS@ 
++CPPFLAGS = @CPPFLAGS@
+ # Turn off memory usage checking
+-CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM 
++# Add AVX instructions
++CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -mavx
+ LDFLAGS = @LDFLAGS@
+ LIBS = @LIBS@
+-DEFS = @DEFS@
++DEFS = @DEFS@ -DHAVE_AVX=1
+ 
+ ALL_CPPFLAGS = $(CPPFLAGS) -I$(top_srcdir)/include $(DEFS) \
+-	@CFITSIO_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @XMLRPC_SERVER_CPPFLAGS@ 
++	@CFITSIO_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @XMLRPC_SERVER_CPPFLAGS@
+ ALL_CFLAGS = $(CFLAGS) @GSL_CFLAGS@ @GLIB_CFLAGS@ @PLPLOT_CFLAGS@ \
+ 	@PGPLOT_CFLAGS@ @ZLIB_CFLAGS@ @WVR_CFLAGS@
+ 
+ # teach how to compile
+-.c.o:	
++.c.o:
+ 	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $<
+ 	mv $@.o $(LIBDIR)
+ 
+@@ -59,7 +60,7 @@
+ CTARGETS := $(addprefix $(LIBDIR),$(OBJECTS))
+ 
+ 
+-all:  $(CTARGETS) 
++all:  $(CTARGETS)
+ 
+ # generic C compile
+ $(CTARGETS): $(LIBDIR)%.o: %.c $(wildcard ../include/%*.h)
 Index: trunk/ObitSystem/Obit/tasks/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/tasks/Makefile.in	(revision 570)
