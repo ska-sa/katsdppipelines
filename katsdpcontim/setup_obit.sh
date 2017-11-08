@@ -30,5 +30,5 @@ export LD_LIBRARY_PATH=$OBIT_BASE_PATH/ObitSystem/Obit/lib:$LD_LIBRARY_PATH
 export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/Obit/python:$PYTHONPATH
 export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/ObitSD/python:$PYTHONPATH
 # So OTObit.py can import AIPS.py
-export PYTHONPATH=$OBIT_BASE_PATH/ObitSystem/ObitTalk/python:$PYTHONPATH
+export PYTHONPATH=/usr/local/share/obittalk/python:$PYTHONPATH
 
