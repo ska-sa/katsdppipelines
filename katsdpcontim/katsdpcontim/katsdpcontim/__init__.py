@@ -7,11 +7,7 @@ from obit_context import (obit_context,
                           obit_sys,
                           handle_obit_err)
 
-from aips_path import (AIPSPath,
-                       katdal_aips_path,
-                       task_input_kwargs,
-                       task_output_kwargs,
-                       task_output2_kwargs)
+from aips_path import AIPSPath
 
 from util import task_factory
 from configuration import get_config

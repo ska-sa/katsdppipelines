@@ -27,9 +27,7 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
-                        UVFacade, task_factory, task_input_kwargs,
-                        task_output_kwargs, katdal_aips_path,
-                        uv_export, uv_factory)
+                        UVFacade, task_factory, uv_export, uv_factory)
 from katsdpcontim.util import parse_python_assigns
 
 def create_parser():
@@ -64,7 +62,7 @@ def get_merge_uvf(KA, descriptor, global_select):
 
     if _MERGE_PATH is None:
         # Create the path
-        _MERGE_PATH = katdal_aips_path(KA, aclass='merge', seq=1)
+        _MERGE_PATH = KA.aips_path(aclass='merge', seq=1)
         log.info("Creating '%s'" % _MERGE_PATH)
 
         # Clear the selection and reselect globally
@@ -100,13 +98,13 @@ with obit_context():
         KA.select(**global_select)
 
         # Get path, with sequence based on scan index
-        scan_path = katdal_aips_path(KA, aclass='raw', seq=si)
+        scan_path = KA.katdal_aips_path(aclass='raw', seq=si)
         scan_select['scans'] = si
         uv_export(KA, scan_path, nvispio=args.nvispio, kat_select=scan_select)
 
-        task_kwargs = task_input_kwargs(scan_path)
+        task_kwargs = scan_path.task_input_kwargs()
         blavg_path = scan_path.copy(aclass='uvav')
-        task_kwargs.update(task_output_kwargs(blavg_path))
+        task_kwargs.update(blavg_path.task_output_kwargs())
 
         blavg = task_factory("UVBlAvg", **task_kwargs)
         blavg.go()
@@ -185,8 +183,8 @@ with obit_context():
 
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
-    task_kwargs = task_input_kwargs(merge_path)
-    task_kwargs.update(task_output_kwargs(merge_path, name=None, aclass=None, seq=None))
+    task_kwargs = merge_path.task_input_kwargs()
+    task_kwargs.update(merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**task_kwargs)
     mfimage.go()

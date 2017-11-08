@@ -6,10 +6,7 @@ import numpy as np
 import katdal
 
 import katsdpcontim
-from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
-                        katdal_aips_path,
-                        task_factory, task_input_kwargs,
-                        task_output_kwargs, uv_export)
+from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath, uv_export)
 from katsdpcontim.util import parse_python_assigns
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
@@ -45,8 +42,8 @@ KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
     # Construct file object
-    aips_path = katdal_aips_path(KA, args.name, args.disk,
-                                    args.aclass, args.seq, dtype="AIPS")
+    aips_path = KA.aips_path(args.name, args.disk,
+                            args.aclass, args.seq, dtype="AIPS")
 
     # Apply the katdal selection
     KA.select(**args.select)
@@ -56,8 +53,8 @@ with obit_context():
 
     # Possibly perform baseline dependent averaging
     if args.blavg == True:
-        task_kwargs = task_input_kwargs(aips_path)
-        task_kwargs.update(task_output_kwargs(aips_path, aclass='uvav'))
+        task_kwargs = aips_path.task_input_kwargs()
+        task_kwargs.update(aips_path.task_output_kwargs(aclass='uvav'))
         blavg = task_factory("UVBlAvg", **task_kwargs)
 
         blavg.go()
