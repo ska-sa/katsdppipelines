@@ -16,6 +16,7 @@ from aips_table import (AIPSTable,
                         AIPSHistory)
 from uv_facade import (UVFacade, open_uv,
                        uv_factory)
+from img_facade import (ImageFacade, open_img)
 from uv_export import (uv_export,
                         uv_history_obs_description,
                         uv_history_selection)

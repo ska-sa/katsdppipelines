@@ -88,8 +88,6 @@ def open_uv(aips_path, nvispio=1024, mode=None):
 def uv_factory(**kwargs):
     """
     Factory for creating a UV observation file.
-    If a `katdata` parameter is passed, this will be used
-    to condition the UV file.
 
     Parameters
     ----------
