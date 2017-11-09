@@ -636,12 +636,21 @@ class KatdalAdapter(object):
 
     def fits_descriptor(self):
         """ FITS visibility descriptor setup """
+
+        nstokes = self.nstokes
+        # Set STOKES CRVAL according to AIPS Memo 117
+        # { RR: -1.0, LL: -2.0, RL: -3.0, LR: -4.0,
+        #   XX: -5.0, YY: -6.0, XY: -7.0, YX: -8.0,
+        #   I: 1, Q: 2, U: 3, V: 4 }
+        stokes_crval = 1.0 if nstokes == 1 else -5.0
+        stokes_cdelt = -1.0 # cdelt is always -1.0
+
         return {
             'naxis': 6,
             'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
             'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
-            'cdelt': [1.0, -1.0, self.chinc, 1.0, 0.0, 0.0],
-            'crval': [1.0, -5.0, self.reffreq, 1.0, 0.0, 0.0],
+            'cdelt': [1.0, stokes_cdelt, self.chinc, 1.0, 0.0, 0.0],
+            'crval': [1.0, stokes_crval, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         }
