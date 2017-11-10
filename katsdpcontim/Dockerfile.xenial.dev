@@ -80,10 +80,6 @@ RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/
 # Replace /etc/services with those required by aips
 ADD katsdpcontim/services /etc/services
 
-RUN apt update && \
-    apt install -y
-
-
 ENV OBIT_BASE_PATH /usr/local/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
 
@@ -126,7 +122,7 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make install
 
-
+RUN pip install -U pkginfo
 
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
