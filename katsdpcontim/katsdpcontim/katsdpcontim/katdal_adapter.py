@@ -4,7 +4,6 @@ import logging
 import time
 
 import attr
-import boltons.cacheutils
 import numpy as np
 
 import UVDesc
@@ -149,7 +148,6 @@ class KatdalAdapter(object):
                        aips_time, aips_baselines, aips_source_id,
                        vis)
 
-    @boltons.cacheutils.cachedmethod('_cache')
     def _antenna_map(self):
         """
         Returns
@@ -229,7 +227,6 @@ class KatdalAdapter(object):
         ('v', 'h'): 3,
     }
 
-    @boltons.cacheutils.cachedmethod('_cache')
     def correlator_products(self):
         """
         Returns
@@ -291,7 +288,7 @@ class KatdalAdapter(object):
 
         return products
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def nstokes(self):
         """
         Returns
@@ -307,7 +304,7 @@ class KatdalAdapter(object):
                          in self.correlator_products())
         return max(counts.itervalues())
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def _targets(self):
         """
         Returns
@@ -426,7 +423,7 @@ class KatdalAdapter(object):
         """
         return 2.997924562e8 / self.reffreq
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_antenna_keywords(self):
         """
         Returns
@@ -450,7 +447,7 @@ class KatdalAdapter(object):
             'DEGPDY': UVDesc.ERate(julian_date) * 360.0,
         }
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_antenna_rows(self):
         """
         Returns
@@ -479,7 +476,7 @@ class KatdalAdapter(object):
             'MNTSTA': [0]
         } for i, a in enumerate(sorted(self._katds.ants), 1)]
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_source_keywords(self):
         """
         Returns
@@ -496,7 +493,7 @@ class KatdalAdapter(object):
             'VELTYP': 'LSR'
         }
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_source_rows(self):
         """
         Returns
@@ -506,7 +503,7 @@ class KatdalAdapter(object):
         """
         return self.uv_source_map.values()
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_source_map(self):
         """
         Returns
@@ -577,7 +574,7 @@ class KatdalAdapter(object):
 
         return targets
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_spw_keywords(self):
         """
         Returns
@@ -588,7 +585,7 @@ class KatdalAdapter(object):
         """
         return {'NO_IF': self.nif}
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def max_antenna_number(self):
         """
         Returns
@@ -598,7 +595,7 @@ class KatdalAdapter(object):
         """
         return max(r['NOSTA'][0] for r in self.uv_antenna_rows)
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_calibration_keywords(self):
         """
         Returns
@@ -615,7 +612,7 @@ class KatdalAdapter(object):
             'MFMOD': 1
         }
 
-    @boltons.cacheutils.cachedproperty
+    @property
     def uv_spw_rows(self):
         """
         Returns
