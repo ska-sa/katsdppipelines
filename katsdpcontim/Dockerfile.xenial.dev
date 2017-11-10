@@ -45,7 +45,9 @@ ENV PACKAGES \
     zlib1g-dev \
     libpython3.5-dev \
     libpython2.7-dev \
-    python-tk
+    python-tk \
+    xfce4 \
+    tightvncserver
 
 # enable universe, multiverse, restricted with world wide mirrors
 RUN apt-get update && \
@@ -77,6 +79,10 @@ RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/
 
 # Replace /etc/services with those required by aips
 ADD katsdpcontim/services /etc/services
+
+RUN apt update && \
+    apt install -y
+
 
 ENV OBIT_BASE_PATH /usr/local/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
@@ -120,6 +126,8 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make install
 
+
+
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
 RUN pip install -e /src/katpoint
@@ -139,29 +147,28 @@ RUN pip install -e /src/katsdpcontim
 # Add katsdpcontim task configuration files
 ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitconf
 
-# Set the work directory to /obitconf
-WORKDIR /obitconf
-
 # Add OBIT setup script
 ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
 
-# Create a script that runs whenever the container is entered
-# (1) Load the bashrc since we're running run.sh with --rcfile
-# (2) Setup OBIT environment variables
-# (3) Configure AIPS disks with the Obit setup
-# (4) Execute AIPS login
-
-RUN echo "#!/bin/bash\
-\nsource $HOME/.bashrc\
-\nsource /bin/setup_obit.sh\
-\ncfg_aips_disks.py /usr/local/AIPS\
-\n. /usr/local/AIPS/LOGIN.SH\
-\necho 'Standard OBIT task configuration files are available in /obitconf'\
-\necho 'Run aips headless with \"aips da=all notv tvok tpok\"'" >> /run.sh
+# Add run script and make it executable
+ADD katsdpcontim/run.sh /run.sh
 
 RUN chmod a+x /run.sh
 
+# Add Xdefaults
 ADD katsdpcontim/Xdefaults /root/.Xdefaults
+
+# Add tightvncserver startup script and set permissions
+ADD katsdpcontim/xstartup /root/.vnc/xstartup
+
+RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
+
+# Set tightvncserver password
+RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
+    chmod og-rwx /root/.vnc/passwd
+
+# Set the work directory to /obitconf
+WORKDIR /obitconf
 
 # Run run.sh and then go to interactive shell
 CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]
