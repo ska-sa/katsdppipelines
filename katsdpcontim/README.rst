@@ -81,32 +81,24 @@ Run
 
     # docker-compose run --rm xenial-obit-dev
 
-Authorise X11 connections
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Access the VNC Server
+~~~~~~~~~~~~~~~~~~~~~
 
 You may find it useful to run ``ObitView`` and AIPS TV utilities from inside the container.
-You'll need to authorise connections from the docker container to your X11 server.
-
-On your machine, run the following to get the magic cookie:
-
-.. code-block::
-
-    $ xauth list $DISPLAY
-    yourhostname/unix:0  MIT-MAGIC-COOKIE-1  abcdef1234567890abcdef1234567890
-
-Then, inside the container, authorise the magic cooke as follows:
+A VNC server is started inside the container and exposed on port 5901 on the ``loopback``
+localhost interface of the docker host. This means that you'll need to forward the above port
+when SSHing into the docker host in order to access the VNC server. This can be done as follows
+in your ``.ssh/config`` file.
 
 .. code-block::
 
-    $ xauth add $DISPLAY . abcdef1234567890abcdef1234567890
+    Host com4
+        Hostname dockerhost
+        ForwardX11 yes
+        LocalForward 5901 localhost:5901
 
-You should then be able to run:
-
-.. code-block::
-
-    $ ObitView
-
-and ObitView should open on your display.
+Then, on your local machine, you should direct your VNC client to ``localhost:5901`` to direct
+your VNC traffic through the tunnel to the server inside the container.
 
 
 Export katdal observation
