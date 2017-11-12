@@ -47,7 +47,9 @@ ENV PACKAGES \
     libpython2.7-dev \
     python-tk \
     xfce4 \
-    tightvncserver
+    tightvncserver \
+    libnss3-dev \
+    libssh2-1-dev
 
 # enable universe, multiverse, restricted with world wide mirrors
 RUN apt-get update && \
