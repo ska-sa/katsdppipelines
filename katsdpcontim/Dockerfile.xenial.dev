@@ -1,0 +1,172 @@
+FROM ubuntu:xenial-20170802
+MAINTAINER sperkins@ska.ac.za
+
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV PACKAGES \
+    software-properties-common \
+    python-software-properties \
+    python-pip \
+    curl \
+    vim \
+    wget \
+    git \
+    cvs \
+    subversion \
+    autotools-dev \
+    automake \
+    build-essential \
+    cmake \
+    gfortran \
+    g++ \
+    libglib2.0-dev \
+    libncurses5-dev \
+    libreadline-dev \
+    flex \
+    bison \
+    libblas-dev \
+    liblapacke-dev \
+    libcfitsio3-dev \
+    # Needs GSL 1.x but xenial has 2.x
+    # Manually download and install below
+    # libgsl0-dev \
+    wcslib-dev \
+    libhdf5-serial-dev \
+    libfftw3-dev \
+    python-numpy \
+    libmotif-dev \
+    # Without libcurl Obit pretends it can't find an external xmlrpc
+    libcurl4-openssl-dev \
+    libxmlrpc-core-c3-dev \
+    libxmlrpc-c++8-dev \
+    libboost-all-dev \
+    # Required by bnmin1
+    swig \
+    zlib1g-dev \
+    libpython3.5-dev \
+    libpython2.7-dev \
+    python-tk \
+    xfce4 \
+    tightvncserver \
+    libnss3-dev \
+    libssh2-1-dev
+
+# enable universe, multiverse, restricted with world wide mirrors
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y $PACKAGES && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN mkdir -p /src && \
+    cd /src && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
+    cd gsl-1.16 && \
+    ./configure --prefix=/usr && \
+    make -j 8 all && \
+    make -j 8 install
+
+RUN pip install -U pip setuptools wheel
+RUN pip install -U scipy pyfits matplotlib
+
+WORKDIR /usr/local/AIPS
+
+RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC16/install.pl
+
+# Remove root user check:
+RUN sed -i -e '455,461d' install.pl
+
+## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
+RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
+
+# Replace /etc/services with those required by aips
+ADD katsdpcontim/services /etc/services
+
+ENV OBIT_BASE_PATH /usr/local/Obit
+ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
+
+# Add the Obit source code
+ADD katsdpcontim/Obit/trunk $OBIT_BASE_PATH
+
+# Add OBIT patch
+ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
+
+WORKDIR $OBIT_BASE_PATH
+
+# Apply OBIT patch
+RUN patch -p1 -N -s < obit.patch
+
+# Compile and install Obit
+RUN cd ObitSystem/Obit && \
+    ./configure --prefix=/usr --without-plplot --without-wvr && \
+    make clean && \
+    make -j 8
+
+# Compile and install ObitView
+RUN cd ObitSystem/ObitView && \
+    ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
+    make clean && \
+    make && \
+    make install
+
+# Compile and install ObitTalk
+RUN cd ObitSystem/ObitTalk && \
+    # --with-obit doesn'tt pick up the PYTHONPATH and libObit.so correctly
+    export PYTHONPATH=$OBIT/python && \
+    export LD_LIBRARY_PATH=$OBIT/lib && \
+    ./configure --bindir=/bin --with-obit=$OBIT && \
+    # Run the main makefile. This gets some of the way but falls over
+    # due to lack of latex
+    make ||true && make install || true && \
+    # Just install ObitTalk and ObitTalkServer
+    cd bin && \
+    make clean && \
+    make && \
+    make install
+
+RUN pip install -U pkginfo
+
+# Install master katpoint
+ADD katsdpcontim/katpoint /src/katpoint
+RUN pip install -e /src/katpoint
+
+# Install master katdal
+ADD katsdpcontim/katdal /src/katdal
+RUN pip install -e /src/katdal
+
+# Install katim
+ADD . /src/katsdppipelines
+RUN pip install -e /src/katsdppipelines/Obit-pipeline
+
+# Install katsdpcontim package
+ADD katsdpcontim/katsdpcontim /src/katsdpcontim
+RUN pip install -e /src/katsdpcontim
+
+# Add katsdpcontim task configuration files
+ADD katsdpcontim/katsdpcontim/katsdpcontim/conf /obitconf
+
+# Add OBIT setup script
+ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
+
+# Add run script and make it executable
+ADD katsdpcontim/run.sh /run.sh
+
+RUN chmod a+x /run.sh
+
+# Add Xdefaults
+ADD katsdpcontim/Xdefaults /root/.Xdefaults
+
+# Add tightvncserver startup script and set permissions
+ADD katsdpcontim/xstartup /root/.vnc/xstartup
+
+RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
+
+# Set tightvncserver password
+RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
+    chmod og-rwx /root/.vnc/passwd
+
+# Set the work directory to /obitconf
+WORKDIR /obitconf
+
+# Run run.sh and then go to interactive shell
+CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]

@@ -1,0 +1,290 @@
+# Inputs for Obit program Imager
+$Key = DataType  Str (4) # Type, AIPS or FITS
+AIPS
+$Key = nFITS Int (1) # Number of FITS directories
+1
+$Key = FITSdirs Str (48)   # Directories of FITS "disks"
+
+$Key = nAIPS Int (1) # Number of FITS directories
+1
+$Key = AIPSdirs Str (48)   # Directories of FITS "disks"
+
+$Key = AIPSuser Int (1)    # AIPS user number
+105
+$Key = inDisk     Int (1)  # input file disk number
+1
+$Key = inName  Str (12)    # Input name
+
+$Key = inClass  Str (6)    # Input class
+
+$Key = inSeq      Int (1)  # input Sequence number
+0
+0$Key = doPS Boo (1)
+ F
+$Key = Sources Str (16,30)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$Key = Qual Int (1)
+-1
+$Key = souCode Str (4)
+
+$Key = timeRange Flt (2)
+0.0 0.0
+$Key = Stokes Str (4)
+I
+$Key = FreqID Int (1)
+0
+$Key = BChan Int (1)
+200
+$Key = EChan Int (1)
+3896
+$Key = BIF Int (1)
+0
+$Key = EIF Int (1)
+0
+$Key = subA Int (1)
+0
+$Key = doCalib Int (1)
+-1
+$Key = gainUse Int (1)
+0
+$Key = doBand Int (1)
+-1
+$Key = BPVer Int (1)
+0
+$Key = flagVer Int (1)
+-1
+$Key = doPol Boo (1)
+ F
+$Key = PDVer Int (1)
+1
+$Key = norder Int (1)
+1
+$Key = Alpha Flt (1)
+0.0
+$Key = BLFact Flt (1)
+1.01
+$Key = BLFOV Flt (1)
+0.0
+$Key = BLchAvg Boo (1)
+ F
+$Key = outDType Str (4)
+
+$Key = outFile Str (128)
+.fits
+$Key = outName Str (12)
+
+$Key = outClass Str (6)
+IClean
+$Key = outSeq Int (1)
+1
+$Key = outDisk Int (1)
+1
+$Key = saveBeam Boo (1)
+ F
+$Key = CCVer Int (1)
+-1
+$Key = out2File Str (128)
+.uvtab
+$Key = out2Name Str (12)
+
+$Key = out2Class Str (6)
+
+$Key = out2Seq Int (1)
+1
+$Key = out2Disk Int (1)
+1
+$Key = maxFBW Flt (1)
+0.05
+$Key = FOV Flt (1)
+1.1
+$Key = NField Int (1)
+0
+$Key = xCells Flt (1)
+0.0
+$Key = yCells Flt (1)
+0.0
+$Key = nx Int (64)
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+$Key = ny Int (64)
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+$Key = RAShift Flt (64)
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+$Key = DecShift Flt (64)
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+$Key = UVTaper Flt (3)
+0.0 0.0 0.0
+$Key = MFTaper Flt (1)
+0.8
+$Key = UVRange Flt (2)
+0.17 100000.0
+$Key = Robust Flt (1)
+-1.0
+$Key = WtBox Int (1)
+0
+$Key = WtFunc Int (1)
+1
+$Key = doComRes Boo (1)
+ T
+$Key = doFull Boo (1)
+ T
+$Key = doRestore Boo (1)
+ T
+$Key = doFit Boo (1)
+ T
+$Key = do3D Boo (1)
+ F
+$Key = Catalog Str (128)
+SUMMSVZ.FIT
+$Key = CatDisk Int (1)
+1
+$Key = OutlierDist Flt (1)
+4.0
+$Key = OutlierFlux Flt (1)
+0.02
+$Key = OutlierSI Flt (1)
+-0.75
+$Key = OutlierSize Int (1)
+0
+$Key = CLEANFile Str (200)
+
+#$Key = CLEANBox Int (4,50)
+#0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+$Key = autoWindow Boo (1)
+ T
+$Key = Gain Flt (1)
+0.1
+$Key = minFlux Flt (1)
+8e-05
+$Key = minPatch Int (1)
+0
+$Key = Niter Int (1)
+5000
+$Key = ccfLim Flt (1)
+0.35
+$Key = SDIGain Flt (1)
+0.0
+$Key = Beam Flt (3)
+0.0 0.0 0.0
+$Key = targBeam Flt (3)
+0.0 0.0 0.0
+$Key = Reuse Flt (1)
+0.0
+$Key = autoCen Flt (1)
+1e20
+$Key = Cmethod Str (4)
+DFT
+$Key = PBCor Boo (1)
+ F
+$Key = antSize Flt (1)
+13.5
+$Key = CCFilter Flt (2)
+0.0 0.0
+$Key = maxPixel Int (1)
+50000
+$Key = maxPSCLoop Int (1)
+0
+$Key = minFluxPSC Flt (1)
+0.00008
+$Key = solPInt Flt (1)
+0.5
+$Key = solPType Str (4)
+
+$Key = solPMode Str (4)
+P
+$Key = maxASCLoop Int (1)
+0
+$Key = minFluxASC Flt (1)
+0.0005
+$Key = solAInt Flt (1)
+2.0
+$Key = solAType Str (4)
+
+$Key = solAMode Str (4)
+A&P
+$Key = refAnt Int (1)
+0
+$Key = WtUV Flt (1)
+0.01
+$Key = avgPol Boo (1)
+ F
+$Key = avgIF Boo (1)
+ F
+$Key = noNeg Boo (1)
+ F
+$Key = doMGM Boo (1)
+ F
+$Key = minSNR Flt (1)
+4.0
+$Key = minNo Int (1)
+3
+$Key = PeelFlux Flt (1)
+1e+20
+$Key = PeelRefAnt Int (1)
+0
+$Key = PeelLoop Int (1)
+0
+$Key = PeelSNRMin Flt (1)
+5.0
+$Key = PeelSolInt Flt (1)
+1.0
+$Key = PeelType Str (4)
+
+$Key = PeelMode Str (4)
+A&P
+$Key = PeelNiter Int (1)
+200
+$Key = PeelMinFlux Flt (1)
+0.0
+$Key = PeelAvgPol Boo (1)
+ F
+$Key = PeelAvgIF Boo (1)
+ F
+$Key = nTaper Int (1)
+0
+$Key = Tapers Flt (10)
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+$Key = MResKnob Flt (10)
+0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+$Key = prtLv Int (1)
+5
+$Key = dispURL Str (128)
+None
+$Key = nThreads Int (1)
+8
+$Key = doGPU Boo (1)
+ F
+$Key = taskLog Str (128)
+IMAGE.log
+$Key = noScrat Int (10)
+0 0 0 0 0 0 0 0 0 0
+$Key = nImaged Int (1)
+0

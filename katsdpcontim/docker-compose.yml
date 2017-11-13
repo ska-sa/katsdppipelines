@@ -1,0 +1,18 @@
+version: "2.0"
+services:
+  xenial-obit-dev:
+    build:
+      context: ..
+      dockerfile: katsdpcontim/Dockerfile.xenial.dev
+
+    container_name: xenial-obit-dev
+    image: obit/xenial:dev
+    network_mode: host
+    restart: "no"
+    hostname: xenial-obit
+    environment:
+      - DISPLAY
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
