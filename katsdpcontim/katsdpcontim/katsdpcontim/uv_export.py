@@ -28,6 +28,8 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
         kat_select = {"scans": "track", "spw": 0}
 
     KA = kat_adapter
+    # Perform selection on the katdal object
+    KA.select(**kat_select)
 
     # UV file location variables
     with uv_factory(aips_path=aips_path, mode="w",
@@ -39,9 +41,6 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
 
         # NX table rows
         nx_rows = []
-
-        # Perform selection on the katdal object
-        KA.select(**kat_select)
 
         for si, (u, v, w, time, baselines, source_id, vis) in KA.uv_scans():
 
