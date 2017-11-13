@@ -167,6 +167,11 @@ RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
 
 ADD katsdpcontim/xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
 
+# Add obit setup and aips login to bashrc
+RUN touch /root/.bashrc && \
+    cat /bin/setup_obit.sh >> /root/.bashrc && \
+    echo ". /usr/local/AIPS/LOGIN.SH" >> /root/.bashrc
+
 # Set the work directory to /obitconf
 WORKDIR /obitconf
 
