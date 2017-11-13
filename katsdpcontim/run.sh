@@ -8,9 +8,7 @@
 # (5) Execute AIPS login
 
 source $HOME/.bashrc
-source /bin/setup_obit.sh
 USER=root vncserver -nolisten tcp -localhost -geometry 1440x900
 cfg_aips_disks.py /usr/local/AIPS
-. /usr/local/AIPS/LOGIN.SH
 echo 'Standard OBIT task configuration files are available in /obitconf'
 echo 'Run aips headless with \"aips da=all notv tvok tpok\"'
