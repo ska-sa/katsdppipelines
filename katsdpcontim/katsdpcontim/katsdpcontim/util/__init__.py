@@ -119,3 +119,12 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
                 raise
 
     return task
+
+def fmt_bytes(nbytes):
+    """ Returns a human readable string, given the number of bytes """
+    for x in ['B','KB','MB','GB']:
+        if nbytes < 1024.0:
+            return "%3.1f%s" % (nbytes, x)
+        nbytes /= 1024.0
+
+    return "%.1f%s" % (nbytes, 'TB')

@@ -52,7 +52,7 @@ log = logging.getLogger('katsdpcontim')
 _MERGE_PATH = None
 _MERGE_UVF = None
 
-def get_merge_uvf(KA, descriptor):
+def get_merge_uvf(KA, descriptor, global_select):
     """
     Defer creation of the merged UVFacade until
     a descriptor is available from averaged scan data
@@ -66,6 +66,10 @@ def get_merge_uvf(KA, descriptor):
         # Create the path
         _MERGE_PATH = katdal_aips_path(KA, aclass='merge', seq=1)
         log.info("Creating '%s'" % _MERGE_PATH)
+
+        # Clear the selection and reselect globally
+        KA.select()
+        KA.select(**global_select)
         # Create the UV object
         _MERGE_UVF = uv_factory(aips_path=_MERGE_PATH, mode="w",
                                 nvispio=args.nvispio, katdata=KA,
@@ -75,12 +79,14 @@ def get_merge_uvf(KA, descriptor):
 
 
 with obit_context():
-    select_args = args.select.copy()
+    # Save katdal selection
+    global_select = args.select.copy()
+    scan_select = args.select.copy()
 
     # Perform katdal selection
-    KA.select(**args.select)
-
-    # Get selected indices as python ints
+    # retrieving selected scan indices as python ints
+    # so that we can do per scan selection
+    KA.select(**global_select)
     scan_indices = [int(i) for i in KA.scan_indices]
 
     # FORTRAN indexing
@@ -89,13 +95,14 @@ with obit_context():
     # Export each scan individually, baseline average
     # and merge it
     for si in scan_indices:
-        # Update the select arguments with just this scan
-        select_args['scans'] = si
+        # Clear katdal selection and set to global selection
+        KA.select() 
+        KA.select(**global_select)
 
         # Get path, with sequence based on scan index
         scan_path = katdal_aips_path(KA, aclass='raw', seq=si)
-        uv_export(KA, scan_path, nvispio=args.nvispio,
-                                kat_select=select_args)
+        scan_select['scans'] = si
+        uv_export(KA, scan_path, nvispio=args.nvispio, kat_select=scan_select)
 
         task_kwargs = task_input_kwargs(scan_path)
         blavg_path = scan_path.copy(aclass='uvav')
@@ -123,7 +130,7 @@ with obit_context():
         # descriptor. This is because baseline averaged files
         # have integration time as an additional random parameter
         # so the merged file will need to take this into account.
-        merge_path, merge_uvf = get_merge_uvf(KA, blavg_desc)
+        merge_path, merge_uvf = get_merge_uvf(KA, blavg_desc, global_select)
 
         # Record the starting visibility
         # for this scan in the merge file
