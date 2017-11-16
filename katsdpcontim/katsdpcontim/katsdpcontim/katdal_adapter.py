@@ -72,25 +72,11 @@ class KatdalAdapter(object):
         fits_desc = self.fits_descriptor()
         inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
 
-        # Mapping from katdal source name to UV source information
-        uv_source_map = self.uv_source_map
-
         # Useful constants
         refwave = self.refwave
         midnight = self.midnight
 
         for si, state, target in self._katds.scans():
-            # Retrieve UV source information for this scan
-            try:
-                aips_source = uv_source_map[target.name]
-            except KeyError:
-                logging.warn("Target '{}' will not be exported"
-                             .format(target.name))
-                continue
-            else:
-                # Retrieve the source ID
-                aips_source_id = aips_source['ID. NO.'][0]
-
             # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
             # nbl*npol is all mixed up at this point
             times = self._katds.timestamps[:]
@@ -100,8 +86,6 @@ class KatdalAdapter(object):
 
             # Get dimension shapes
             ntime, nchan, ncorrprods = vis.shape
-
-            log.info("Scan data shape '{}'".format(vis.shape))
 
             # Apply flags by negating weights
             weights[np.where(flags)] = -32767.0
@@ -123,9 +107,6 @@ class KatdalAdapter(object):
             vis = (vis.transpose(0, 2, 1, 3, 4)
                       .reshape((ntime, nbl,) + inaxes))
 
-            log.info("Read visibilities of shape {} and size {:.2f}MB"
-                     .format(vis.shape, vis.nbytes / (1024. * 1024.)))
-
             # Compute UVW coordinates from baselines
             # (3, ntimes, nbl)
             u, v, w = np.stack([target.uvw(bp.ant1, antenna=bp.ant2,
@@ -145,7 +126,7 @@ class KatdalAdapter(object):
 
             # Yield this scan's data
             yield si, (aips_u, aips_v, aips_w,
-                       aips_time, aips_baselines, aips_source_id,
+                       aips_time, aips_baselines, target.name,
                        vis)
 
     def _antenna_map(self):

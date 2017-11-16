@@ -48,8 +48,11 @@ with obit_context():
     aips_path = katdal_aips_path(KA, args.name, args.disk,
                                     args.aclass, args.seq, dtype="AIPS")
 
+    # Apply the katdal selection
+    KA.select(**args.select)
+
     # Perform export to the file
-    uv_export(KA, aips_path, nvispio=args.nvispio, kat_select=args.select)
+    uv_export(KA, aips_path, nvispio=args.nvispio)
 
     # Possibly perform baseline dependent averaging
     if args.blavg == True:

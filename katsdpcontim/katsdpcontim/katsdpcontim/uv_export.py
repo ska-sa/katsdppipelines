@@ -2,14 +2,36 @@ import logging
 
 import numpy as np
 
+import UVDesc
+import OTObit
+
 from katsdpcontim import uv_factory
+from katsdpcontim.util import fmt_bytes
 
 log = logging.getLogger('katsdpcontim')
 
-
 def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
     """
-    Exports a katdal selection to an AIPS/FITS file.
+    Exports data in a katdal selection to an AIPS/FITS file.
+
+    There are subtleties in this process that are
+    worth taking note of.
+
+    ``uv_export`` contains a call to ``uv_factory`` which
+    creates a UV file *conditioned* by the observation dimensions
+    in the ``katd_adapter`` object.  Subsequent to UV file creation,
+    ``kat_select`` is applied to ``kat_adapter`` and the actual
+    observation data is exported.
+
+    So there are two katdal selections that must be kept track of:
+
+    1. The selection used to condition the UV file.
+    2. The selection used to place data in the file.
+
+    For example, we may wish to include all targets in the UV file,
+    but only export a selection including one scan (and thus one target).
+
+    .. code-block::
 
     Parameters
     ----------
@@ -21,19 +43,20 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
         Number of visibilities to read/write per I/O operation
     kat_select (optional): dict
         Dictionary of keyword arguments to apply
-        to katdal selection. Defaults to
-        :code:`{ "scans" : "track", "spw": 0 }`
+        to katdal selection *after* the UV file
+        has been created.
     """
-    if kat_select is None:
-        kat_select = {"scans": "track", "spw": 0}
-
     KA = kat_adapter
-    # Perform selection on the katdal object
-    KA.select(**kat_select)
 
     # UV file location variables
     with uv_factory(aips_path=aips_path, mode="w",
-                    katdata=KA, nvispio=nvispio) as uvf:
+                    katdata=kat_adapter, nvispio=nvispio) as uvf:
+
+        uv_source_map = kat_adapter.uv_source_map
+
+        # Perform selection on the katdal object
+        if kat_select is not None:
+            KA.select(**kat_select)
 
         log.info("Created '%s'" % aips_path)
         firstVis = 1    # FORTRAN indexing
@@ -42,7 +65,19 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
         # NX table rows
         nx_rows = []
 
-        for si, (u, v, w, time, baselines, source_id, vis) in KA.uv_scans():
+        for si, (u, v, w, time, baselines, source_name, vis) in kat_adapter.uv_scans():
+            start = OTObit.day2dhms(time[0])
+            end = OTObit.day2dhms(time[1])
+            nbytes = fmt_bytes(vis.nbytes)
+            log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'" % (start, end, si, nbytes, source_name))
+
+            try:
+                source = uv_source_map[source_name]
+            except KeyError:
+                log.warn("Source '%s' not recognised, skipping")
+                continue
+            else:
+                source_id = source["ID. NO."][0]
 
             def _write_buffer(uvf, firstVis, numVisBuff):
                 """
@@ -73,7 +108,7 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
                 uvf.Desc.Dict = desc
 
                 nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
-                log.info("Writing {:.2f}MB visibilities. "
+                log.debug("Writing {:.2f}MB visibilities. "
                          "firstVis={} numVisBuff={}.".format(
                             nbytes / (1024. * 1024.), firstVis, numVisBuff))
 
@@ -149,4 +184,4 @@ def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
         uvf.attach_table("AIPS NX", 1)
         uvf.tables["AIPS NX"].rows = nx_rows
         uvf.tables["AIPS NX"].write()
-        uvf.attach_CL_from_NX_table(KA.max_antenna_number)
+        uvf.attach_CL_from_NX_table(kat_adapter.max_antenna_number)
