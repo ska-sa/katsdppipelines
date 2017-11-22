@@ -14,7 +14,7 @@ from katsdpcontim import AIPSPath
 log = logging.getLogger('katsdpcontim')
 
 
-def _aips_source_name(name):
+def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
@@ -342,7 +342,7 @@ class KatdalAdapter(object):
                 continue
 
             # Get a valid AIPS Source Name
-            name = _aips_source_name(t.name)
+            name = aips_source_name(t.name)
 
             # Right Ascension and Declination
             ras, decs = t.radec()
@@ -544,7 +544,7 @@ class KatdalAdapter(object):
             aips_src_index += 1
 
             # Get a valid AIPS Source Name
-            name = _aips_source_name(target.name)
+            name = aips_source_name(target.name)
 
             # AIPS Right Ascension and Declination
             ras, decs = target.radec()
