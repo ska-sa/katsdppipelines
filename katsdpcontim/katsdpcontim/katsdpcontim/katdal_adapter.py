@@ -724,7 +724,7 @@ class KatdalAdapter(object):
         random_parameters = [
             RP('ilocu', 0, 'UU-L-SIN'),  # U Coordinate
             RP('ilocv', 1, 'VV-L-SIN'),  # V Coordinate
-            RP('ilovw', 2, 'WW-L-SIN'),  # W Coordinate
+            RP('ilocw', 2, 'WW-L-SIN'),  # W Coordinate
             RP('ilocb', 3, 'BASELINE'),  # Baseline ID
             RP('iloct', 4, 'TIME1'),     # Timestamp
             RP('iloscu', 5, 'SOURCE'),   # Source Index
