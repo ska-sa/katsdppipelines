@@ -1,5 +1,6 @@
 import logging
 
+import six
 import numpy as np
 
 import TableList
@@ -77,7 +78,6 @@ def open_uv(aips_path, nvispio=1024, mode=None):
 
     return uv
 
-
 def uv_factory(**kwargs):
     """
     Factory for creating a UV observation file.
@@ -86,20 +86,42 @@ def uv_factory(**kwargs):
 
     Parameters
     ----------
-    aips_path: :class:`AIPSPath`
+    aips_path : :class:`AIPSPath`
         Obit file class
-    mode (optional): string
+    mode (optional) : string
         File opening mode passed to :func:`uv_open`.
-    nvispio: integer
+    nvispio : integer
         Number of visibilities to read/write per I/O operation
-    katdata (optional): :class:`katdal.DataSet`
-        A katdal data set. If present, this data will
-        be used to condition the UV file and create
-        tables.
-    desc (optional): dict
-        A dictionary descriptor suitable for conditioning the
-        UV file. If not present, this will be derived from the
-        `katdata` object.
+    table_cmds (optional) : dict
+        A dictionary containing directives for AIPS table creation on the UV file.
+        Of the form:
+
+        .. code-block:: python
+
+            {
+                "AIPS FQ" : {
+                    "attach" : {'version': 1, 'numIF': 1},
+                    "keywords" : { ... },
+                    "rows" : [{...}, {...}, ..., {...}],
+                    "write" : True,
+                },
+                "AIPS SU" : {...}
+            }
+
+        where:
+
+        * ``attach`` instructs ``uv_factory`` to attach this
+          table to the UV file with the supplied ``kwargs``.
+        * ``keywords`` instructs ``uv_factory`` to set the
+          keywords on the table with the supplied dictionary.
+        * ``rows`` instructs ``uv_factory`` to set the rows
+          of the table with the supplied list of dictionaries.
+        * ``write`` instructs ``uv_factory`` to write the
+          rows to the table after all of the above.
+
+    desc (optional) : dict
+        A dictionary UV descriptor suitable for conditioning the
+        UV file.
 
     Returns
     -------
@@ -113,53 +135,55 @@ def uv_factory(**kwargs):
 
     mode = kwargs.pop('mode', 'r')
     nvispio = kwargs.pop('nvispio', 1024)
-    desc = kwargs.pop('desc', None)
 
     uv = open_uv(ofile, nvispio=nvispio, mode=mode)
     uvf = UVFacade(uv)
 
-    modified = False
+    table_cmds = kwargs.pop('table_cmds', {})
 
-    # If we have a katdal adapter,
-    # create subtables and update the descriptor
-    KA = kwargs.pop('katdata', None)
+    reopen = False
 
-    if KA is not None:
-        # Attach tables
-        uvf.attach_table("AIPS AN", 1)
-        uvf.attach_table("AIPS FQ", 1, numIF=KA.nif)
-        uvf.attach_table("AIPS SU", 1)
-        uvf.attach_table("AIPS NX", 1)
+    # Handle table creation commands
+    for table, cmds in six.iteritems(table_cmds):
+        # Perform any attach commands first
+        try:
+            attach_kwargs = cmds["attach"]
+        except KeyError:
+            pass
+        else:
+            uvf.attach_table(table, **attach_kwargs)
 
-        # Update their keywords
-        uvf.tables["AIPS AN"].keywords.update(KA.uv_antenna_keywords)
-        uvf.tables["AIPS FQ"].keywords.update(KA.uv_spw_keywords)
-        uvf.tables["AIPS SU"].keywords.update(KA.uv_source_keywords)
-        # AIPS NX table has no keywords
+        # Update any table keywords
+        try:
+            keywords = cmds["keywords"]
+        except KeyError:
+            pass
+        else:
+            uvf.tables[table].keywords.update(keywords)
 
-        # Set their rows
-        uvf.tables["AIPS AN"].rows = KA.uv_antenna_rows
-        uvf.tables["AIPS FQ"].rows = KA.uv_spw_rows
-        uvf.tables["AIPS SU"].rows = KA.uv_source_rows
-        # AIPS NX have no rows at this point
+        # Update with any rows
+        try:
+            rows = cmds["rows"]
+        except KeyError:
+            pass
+        else:
+            uvf.tables[table].rows = rows
 
-        # Write them
-        uvf.tables["AIPS AN"].write()
-        uvf.tables["AIPS FQ"].write()
-        uvf.tables["AIPS SU"].write()
+        # Write rows now if requested
+        if cmds.get("write", False):
+            uvf.tables[table].write()
 
-        # Use base descriptor if no descriptor supplied
-        desc = KA.uv_descriptor() if desc is None else desc
-
-    # Needs to happen after subtables
+    # Needs to happen after table creation
     # so that uv.TableList is updated
-    if desc is not None:
-        uvf.update_descriptor(desc)
-        modified = True
+    desc = kwargs.pop('desc', None)
 
-    # If modified, reopen the file to trigger descriptor
+    if desc:
+        uvf.update_descriptor(desc)
+        reopen = True
+
+    # Reopen the file to trigger descriptor
     # and header updates
-    if modified:
+    if reopen:
         uvf.Open(uv_file_mode(mode))
 
     return uvf

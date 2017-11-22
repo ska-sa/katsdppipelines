@@ -669,6 +669,36 @@ class KatdalAdapter(object):
             'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         }
 
+    def default_table_cmds(self):
+        """
+        Returns
+        -------
+        dict
+        """
+        return {
+            "AIPS AN" : {
+                "attach" : {'version': 1},
+                "keywords" : self.uv_antenna_keywords,
+                "rows": self.uv_antenna_rows,
+                "write": True,
+            },
+            "AIPS FQ" : {
+                "attach" : {'version': 1, 'numIF': 1 },
+                "keywords" : self.uv_spw_keywords,
+                "rows": self.uv_spw_rows,
+                "write": True,
+            },
+            "AIPS SU" : {
+                "attach" : {'version': 1},
+                "keywords" : self.uv_source_keywords,
+                "rows": self.uv_source_rows,
+                "write": True,
+            },
+            "AIPS NX" : {
+                "attach" : {'version': 1},
+            },
+        }
+
     def uv_descriptor(self):
         """
         Returns
