@@ -57,7 +57,7 @@ class KatdalAdapter(object):
         nstokes = self.nstokes
 
         # Lexicographically sort correlation products on (a1, a2, cid)
-        def sort_fn(x): return (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+        sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
         cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
         corr_products = np.asarray([cp[i] for i in cp_argsort])
 
