@@ -6,7 +6,7 @@ import numpy as np
 import katdal
 
 import katsdpcontim
-from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath, uv_export)
+from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath, uv_factory, uv_export)
 from katsdpcontim.util import parse_python_assigns
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
@@ -48,8 +48,15 @@ with obit_context():
     # Apply the katdal selection
     KA.select(**args.select)
 
-    # Perform export to the file
-    uv_export(KA, aips_path, nvispio=args.nvispio)
+    # UV file location variables
+    with uv_factory(aips_path=aips_path, mode="w",
+                        nvispio=args.nvispio,
+                        table_cmds=KA.default_table_cmds(),
+                        desc=KA.uv_descriptor()) as uvf:
+
+
+        # Perform export to the file
+        uv_export(KA, uvf)
 
     # Possibly perform baseline dependent averaging
     if args.blavg == True:
