@@ -638,15 +638,19 @@ class KatdalAdapter(object):
             List of dictionaries describing each
             spectral window.
         """
+
+        spw = self._katds.spectral_windows[self._katds.spw]
+        bandwidth = abs(self.chinc) * self.nchan
+
         return [{
             # Fill in data from MeerKAT spectral window
-            'FRQSEL': [i],
+            'FRQSEL': [1],
             'IF FREQ': [0.0],
-            'CH WIDTH': [sw.channel_width],
-            'RXCODE': ['L'],
-            'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-            'TOTAL BANDWIDTH': [abs(sw.channel_width) * len(sw.channel_freqs)],
-        } for i, sw in enumerate(self._katds.spectral_windows, 1)]
+            'CH WIDTH': [self.chinc],
+            'RXCODE': [spw.band],
+            'SIDEBAND': [spw.sideband],
+            'TOTAL BANDWIDTH': [bandwidth],
+        }]
 
     def fits_descriptor(self):
         """ FITS visibility descriptor setup """
