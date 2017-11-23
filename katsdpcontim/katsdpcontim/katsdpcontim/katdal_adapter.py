@@ -647,6 +647,7 @@ class KatdalAdapter(object):
             'FRQSEL': [1],
             'IF FREQ': [0.0],
             'CH WIDTH': [self.chinc],
+            # Should be 'BANDCODE' according to AIPS MEMO 117!
             'RXCODE': [spw.band],
             'SIDEBAND': [spw.sideband],
             'TOTAL BANDWIDTH': [bandwidth],
