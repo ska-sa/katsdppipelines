@@ -26,42 +26,6 @@ def _check_disk_type(dtype, check=True):
                          "Should be one of '%s'" % (
                              dtype, _VALID_DISK_TYPES))
 
-
-def katdal_aips_path(katdata, name=None, disk=None, aclass=None,
-                     seq=None, label=None, dtype=None):
-    """
-    Constructs an aips path from a :class:`KatdalAdapter`
-
-    Parameters
-    ----------
-    katdata: :class:`KatdalAdapter`
-        Object from which to extract path information
-    **kwargs (optional): :obj:
-        See :class:`AIPSPath` for information on
-        keyword arguments.
-
-    Returns
-    -------
-    :class:`AIPSPath`
-        AIPS path describing this observation
-    """
-    if dtype is None:
-        dtype = "AIPS"
-
-    if name is None:
-        path, file = os.path.split(katdata.katdal.name)
-        name, ext = os.path.splitext(file)
-
-        if dtype == "FITS":
-            name += '.uvfits'
-
-    if disk is None:
-        disk = 1
-
-    return AIPSPath(name=name, disk=disk, aclass=aclass,
-                    seq=seq, label=label, dtype=dtype)
-
-
 class AIPSPath(object):
     """
     A class representing the path properties of
@@ -206,70 +170,70 @@ class AIPSPath(object):
             _check_disk_type(self._dtype, False)
 
 
-def task_input_kwargs(ofile):
-    """
-    Returns
-    -------
-    dict
-        Keyword arguments suitable for applying
-        to an ObitTask as an input file.
-    """
-    if ofile.dtype == "AIPS":
-        return {"DataType": ofile.dtype,
-                "inName": ofile.name,
-                "inClass": ofile.aclass,
-                "inSeq": ofile.seq,
-                "inDisk": ofile.disk}
-    elif ofile.dtype == "FITS":
-        return {"DataType": ofile.dtype,
-                "inFile": ofile.name}
-    else:
-        _check_disk_type(ofile.dtype, False)
+    def task_input_kwargs(self):
+        """
+        Returns
+        -------
+        dict
+            Keyword arguments suitable for applying
+            to an ObitTask as an input file.
+        """
+        if self.dtype == "AIPS":
+            return {"DataType": self.dtype,
+                    "inName": self.name,
+                    "inClass": self.aclass,
+                    "inSeq": self.seq,
+                    "inDisk": self.disk}
+        elif self.dtype == "FITS":
+            return {"DataType": self.dtype,
+                    "inFile": self.name}
+        else:
+            _check_disk_type(self.dtype, False)
 
 
-def task_output_kwargs(ofile, name=None, disk=None, aclass=None,
-                       seq=None, dtype=None):
-    """
-    Returns
-    -------
-    dict
-        Keyword arguments suitable for applying
-        to an ObitTask as an output file.
-    """
-    dtype = ofile.dtype if dtype is None else dtype
+    def task_output_kwargs(self, name=None, disk=None, aclass=None,
+                           seq=None, dtype=None):
+        """
+        Returns
+        -------
+        dict
+            Keyword arguments suitable for applying
+            to an ObitTask as an output file.
+        """
+        dtype = self.dtype if dtype is None else dtype
 
-    if dtype == "AIPS":
-        return {"outDType": dtype,
-                "outName": ofile.name if name is None else name,
-                "outClass": ofile.aclass if aclass is None else aclass,
-                "outSeq": ofile.seq if seq is None else seq,
-                "outDisk": ofile.disk if disk is None else disk}
-    elif dtype == "FITS":
-        return {"outDType": dtype,
-                "outFile": ofile.name}
-    else:
-        _check_disk_type(dtype, False)
+        if dtype == "AIPS":
+            return {"outDType": dtype,
+                    "outName": self.name if name is None else name,
+                    "outClass": self.aclass if aclass is None else aclass,
+                    "outSeq": self.seq if seq is None else seq,
+                    "outDisk": self.disk if disk is None else disk}
+        elif dtype == "FITS":
+            return {"outDType": dtype,
+                    "outFile": self.name}
+        else:
+            _check_disk_type(dtype, False)
 
 
-def task_output2_kwargs(ofile, name=None, disk=None, aclass=None,
-                        seq=None, dtype=None):
-    """
-    Returns
-    -------
-    dict
-        Keyword arguments suitable for applying
-        to an ObitTask as an output file.
-    """
-    dtype = ofile.dtype if dtype is None else dtype
+    def task_output2_kwargs(self, name=None, disk=None, aclass=None,
+                            seq=None, dtype=None):
+        """
+        Returns
+        -------
+        dict
+            Keyword arguments suitable for applying
+            to an ObitTask as an output file.
+        """
+        dtype = self.dtype if dtype is None else dtype
 
-    # NB. There doesn't seem to be an out2DType
+        # NB. There doesn't seem to be an out2DType
 
-    if dtype == "AIPS":
-        return {"out2Name": ofile.name if name is None else name,
-                "out2Class": ofile.aclass if aclass is None else aclass,
-                "out2Seq": ofile.seq if seq is None else seq,
-                "out2Disk": ofile.disk if disk is None else disk}
-    elif dtype == "FITS":
-        return {"out2File": ofile.name}
-    else:
-        _check_disk_type(dtype, False)
+        if dtype == "AIPS":
+            return {"out2Name": self.name if name is None else name,
+                    "out2Class": self.aclass if aclass is None else aclass,
+                    "out2Seq": self.seq if seq is None else seq,
+                    "out2Disk": self.disk if disk is None else disk}
+        elif dtype == "FITS":
+            return {"out2File": self.name}
+        else:
+            _check_disk_type(dtype, False)

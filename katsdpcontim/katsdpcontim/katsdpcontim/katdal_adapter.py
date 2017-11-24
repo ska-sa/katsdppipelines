@@ -1,6 +1,7 @@
 from collections import OrderedDict, Counter
 import datetime
 import logging
+import os
 import time
 
 import attr
@@ -8,10 +9,12 @@ import numpy as np
 
 import UVDesc
 
+from katsdpcontim import AIPSPath
+
 log = logging.getLogger('katsdpcontim')
 
 
-def _aips_source_name(name):
+def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
@@ -54,7 +57,7 @@ class KatdalAdapter(object):
         nstokes = self.nstokes
 
         # Lexicographically sort correlation products on (a1, a2, cid)
-        def sort_fn(x): return (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+        sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
         cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
         corr_products = np.asarray([cp[i] for i in cp_argsort])
 
@@ -139,6 +142,39 @@ class KatdalAdapter(object):
         A = attr.make_class("IndexedAntenna", ["index", "antenna"])
         return OrderedDict((a.name, A(i, a)) for i, a
                            in enumerate(sorted(self._katds.ants)))
+
+
+    def aips_path(self, name=None, disk=None, aclass=None,
+                         seq=None, label=None, dtype=None):
+        """
+        Constructs an aips path from a :class:`KatdalAdapter`
+
+        Parameters
+        ----------
+        **kwargs (optional): :obj:
+            See :class:`AIPSPath` for information on
+            keyword arguments.
+
+        Returns
+        -------
+        :class:`AIPSPath`
+            AIPS path describing this observation
+        """
+        if dtype is None:
+            dtype = "AIPS"
+
+        if name is None:
+            path, file = os.path.split(self.katdal.name)
+            name, ext = os.path.splitext(file)
+
+            if dtype == "FITS":
+                name += '.uvfits'
+
+        if disk is None:
+            disk = 1
+
+        return AIPSPath(name=name, disk=disk, aclass=aclass,
+                        seq=seq, label=label, dtype=dtype)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """
@@ -306,7 +342,7 @@ class KatdalAdapter(object):
                 continue
 
             # Get a valid AIPS Source Name
-            name = _aips_source_name(t.name)
+            name = aips_source_name(t.name)
 
             # Right Ascension and Declination
             ras, decs = t.radec()
@@ -508,7 +544,7 @@ class KatdalAdapter(object):
             aips_src_index += 1
 
             # Get a valid AIPS Source Name
-            name = _aips_source_name(target.name)
+            name = aips_source_name(target.name)
 
             # AIPS Right Ascension and Declination
             ras, decs = target.radec()
@@ -602,15 +638,20 @@ class KatdalAdapter(object):
             List of dictionaries describing each
             spectral window.
         """
+
+        spw = self._katds.spectral_windows[self._katds.spw]
+        bandwidth = abs(self.chinc) * self.nchan
+
         return [{
             # Fill in data from MeerKAT spectral window
-            'FRQSEL': [i],
+            'FRQSEL': [1],
             'IF FREQ': [0.0],
-            'CH WIDTH': [sw.channel_width],
-            'RXCODE': ['L'],
-            'SIDEBAND': [1 if sw.channel_width > 0.0 else -1],
-            'TOTAL BANDWIDTH': [abs(sw.channel_width) * len(sw.channel_freqs)],
-        } for i, sw in enumerate(self._katds.spectral_windows, 1)]
+            'CH WIDTH': [self.chinc],
+            # Should be 'BANDCODE' according to AIPS MEMO 117!
+            'RXCODE': [spw.band],
+            'SIDEBAND': [spw.sideband],
+            'TOTAL BANDWIDTH': [bandwidth],
+        }]
 
     def fits_descriptor(self):
         """ FITS visibility descriptor setup """
@@ -631,6 +672,36 @@ class KatdalAdapter(object):
             'crval': [1.0, stokes_crval, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             'crota': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        }
+
+    def default_table_cmds(self):
+        """
+        Returns
+        -------
+        dict
+        """
+        return {
+            "AIPS AN" : {
+                "attach" : {'version': 1},
+                "keywords" : self.uv_antenna_keywords,
+                "rows": self.uv_antenna_rows,
+                "write": True,
+            },
+            "AIPS FQ" : {
+                "attach" : {'version': 1, 'numIF': 1 },
+                "keywords" : self.uv_spw_keywords,
+                "rows": self.uv_spw_rows,
+                "write": True,
+            },
+            "AIPS SU" : {
+                "attach" : {'version': 1},
+                "keywords" : self.uv_source_keywords,
+                "rows": self.uv_source_rows,
+                "write": True,
+            },
+            "AIPS NX" : {
+                "attach" : {'version': 1},
+            },
         }
 
     def uv_descriptor(self):
@@ -688,7 +759,7 @@ class KatdalAdapter(object):
         random_parameters = [
             RP('ilocu', 0, 'UU-L-SIN'),  # U Coordinate
             RP('ilocv', 1, 'VV-L-SIN'),  # V Coordinate
-            RP('ilovw', 2, 'WW-L-SIN'),  # W Coordinate
+            RP('ilocw', 2, 'WW-L-SIN'),  # W Coordinate
             RP('ilocb', 3, 'BASELINE'),  # Baseline ID
             RP('iloct', 4, 'TIME1'),     # Timestamp
             RP('iloscu', 5, 'SOURCE'),   # Source Index

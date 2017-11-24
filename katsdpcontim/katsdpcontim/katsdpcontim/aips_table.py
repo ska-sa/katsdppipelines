@@ -2,6 +2,8 @@ import attr
 import collections
 import logging
 
+import six
+
 import InfoList
 import Table
 
@@ -53,6 +55,30 @@ class AIPSTableKeywords(object):
         self._schema = {key: (type_, dims) for
                         key, (type_, dims, value) in
                         table.IODesc.List.Dict.items()}
+
+    def keys(self):
+        return self._schema.keys()
+
+    def iterkeys(self):
+        return iter(self._schema.keys())
+
+    def values(self):
+        return [self.__getitem__(key) for key in self.keys()]
+
+    def itervalues(self):
+        return iter(self.values())
+
+    def items(self):
+        return [(k, self.__getitem__(k)) for k in self.keys()]
+
+    def iteritems(self):
+        return iter((k, self.__getitem__(k)) for k in self.keys())
+
+    def __len__(self):
+        return len(self._schema)
+
+    def __iter__(self):
+        return self.iterkeys()
 
     def __getitem__(self, key):
         """

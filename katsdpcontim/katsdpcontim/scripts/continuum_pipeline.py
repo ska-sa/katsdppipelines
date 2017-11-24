@@ -14,6 +14,7 @@ Basic version of the continuum imaging pipeline.
 
 import argparse
 import collections
+from copy import deepcopy
 import logging
 import os.path
 from os.path import join as pjoin
@@ -27,10 +28,10 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
-                        UVFacade, task_factory, task_input_kwargs,
-                        task_output_kwargs, katdal_aips_path,
-                        uv_export, uv_factory)
+                        UVFacade, task_factory, uv_export, uv_factory)
 from katsdpcontim.util import parse_python_assigns
+
+log = logging.getLogger('katsdpcontim')
 
 def create_parser():
     parser = argparse.ArgumentParser()
@@ -46,39 +47,13 @@ def create_parser():
 
 args = create_parser().parse_args()
 KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
-
-log = logging.getLogger('katsdpcontim')
-
-_MERGE_PATH = None
-_MERGE_UVF = None
-
-def get_merge_uvf(KA, descriptor, global_select):
-    """
-    Defer creation of the merged UVFacade until
-    a descriptor is available from averaged scan data
-    to condition it.
-    """
-    global _MERGE_PATH
-    global _MERGE_UVF
-    global _MERGE_FIRSTVIS
-
-    if _MERGE_PATH is None:
-        # Create the path
-        _MERGE_PATH = katdal_aips_path(KA, aclass='merge', seq=1)
-        log.info("Creating '%s'" % _MERGE_PATH)
-
-        # Clear the selection and reselect globally
-        KA.select()
-        KA.select(**global_select)
-        # Create the UV object
-        _MERGE_UVF = uv_factory(aips_path=_MERGE_PATH, mode="w",
-                                nvispio=args.nvispio, katdata=KA,
-                                desc=descriptor)
-
-    return _MERGE_PATH, _MERGE_UVF
-
+uv_merge_path = KA.aips_path(aclass='merge', seq=1)
 
 with obit_context():
+    # The merged UV observation file. We wait until
+    # we have a baseline averaged file to condition it with
+    merge_uvf = None
+
     # Save katdal selection
     global_select = args.select.copy()
     scan_select = args.select.copy()
@@ -87,6 +62,8 @@ with obit_context():
     # retrieving selected scan indices as python ints
     # so that we can do per scan selection
     KA.select(**global_select)
+    global_desc = KA.uv_descriptor()
+    global_table_cmds = KA.default_table_cmds()
     scan_indices = [int(i) for i in KA.scan_indices]
 
     # FORTRAN indexing
@@ -96,47 +73,104 @@ with obit_context():
     # and merge it
     for si in scan_indices:
         # Clear katdal selection and set to global selection
-        KA.select() 
+        KA.select()
         KA.select(**global_select)
 
         # Get path, with sequence based on scan index
-        scan_path = katdal_aips_path(KA, aclass='raw', seq=si)
-        scan_select['scans'] = si
-        uv_export(KA, scan_path, nvispio=args.nvispio, kat_select=scan_select)
+        scan_path = uv_merge_path.copy(aclass='raw', seq=si)
 
-        task_kwargs = task_input_kwargs(scan_path)
+        log.info("Creating '%s'" % scan_path)
+
+        # Create a UV file for the scan
+        with uv_factory(aips_path=scan_path, mode="w",
+                            nvispio=args.nvispio,
+                            table_cmds=global_table_cmds,
+                            desc=global_desc) as uvf:
+
+            # Perform katdal selection on the specific scan
+            scan_select['scans'] = si
+            KA.select(**scan_select)
+
+            # Perform export to the file
+            uv_export(KA, uvf)
+
+        task_kwargs = scan_path.task_input_kwargs()
         blavg_path = scan_path.copy(aclass='uvav')
-        task_kwargs.update(task_output_kwargs(blavg_path))
+        task_kwargs.update(blavg_path.task_output_kwargs())
 
+        log.info("Time-dependent baseline "
+                "averaging '%s' to '%s'" % (scan_path, blavg_path))
         blavg = task_factory("UVBlAvg", **task_kwargs)
         blavg.go()
 
         # Retrieve the single scan index.
         # The time centroids and interval should be correct
         # but the visibility indices need to be repurposed
-        scan_uvf = UVFacade(scan_path)
-        assert len(scan_uvf.tables["AIPS NX"].rows) == 1
-        nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
-
-
-        blavg_uvf = uv_factory(aips_path=blavg_path, mode='r',
+        scan_uvf = uv_factory(aips_path=scan_path, mode='r',
                                         nvispio=args.nvispio)
 
+        assert len(scan_uvf.tables["AIPS NX"].rows) == 1, scan_uvf.tables["AIPS NX"].rows
+        nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
+
+        # If we've performed channel averaging, the FREQ dimension
+        # and FQ tables in the baseline averaged file will be smaller
+        # than that of the scan file. This data must either be
+        # (1) Used to condition a new merge UV file
+        # (2) compared against the method in the existing merge UV file
+        blavg_uvf = uv_factory(aips_path=blavg_path, mode='r',
+                                          nvispio=args.nvispio)
         blavg_desc = blavg_uvf.Desc.Dict
         blavg_nvis = blavg_desc['nvis']
 
+        blavg_fq_keywords = dict(blavg_uvf.tables["AIPS FQ"].keywords)
+        blavg_fq_rows = blavg_uvf.tables["AIPS FQ"].rows
+
         # Get the merge file if it hasn't yet been created,
         # conditioning it with the baseline averaged file
-        # descriptor. This is because baseline averaged files
+        # descriptor. Baseline averaged files
         # have integration time as an additional random parameter
         # so the merged file will need to take this into account.
-        merge_path, merge_uvf = get_merge_uvf(KA, blavg_desc, global_select)
+        if merge_uvf is None:
+            log.info("Creating '%s'" % uv_merge_path)
+
+            # Use the FQ table rows and keywords to create
+            # the merge UV file.
+            blavg_table_cmds = deepcopy(global_table_cmds)
+            fq_cmd = blavg_table_cmds["AIPS FQ"]
+            fq_cmd["keywords"] = blavg_fq_keywords
+            fq_cmd["rows"] = blavg_fq_rows
+
+            # Create the UV object
+            merge_uvf = uv_factory(aips_path=uv_merge_path, mode="w",
+                                    nvispio=args.nvispio,
+                                    table_cmds=blavg_table_cmds,
+                                    desc=blavg_desc)
+
+
+        # Now do some sanity checks of the merge UV file's metadata
+        # against that of the blavg UV file. Mostly we check that the
+        # frequency information is the same.
+        merge_desc = merge_uvf.Desc.Dict
+        merge_fq_keywords = dict(merge_uvf.tables["AIPS FQ"].keywords)
+        merge_fq_rows = merge_uvf.tables["AIPS FQ"].rows
+
+        # Compare
+        # (1) UV FITS shape parameters
+        # (2) FQ table keywords
+        # (3) FQ table rows
+        assert all(merge_desc[k] == blavg_desc[k] for k in (
+                    'inaxes', 'cdelt', 'crval', 'naxis', 'crota', 'crpix',
+                     'ilocu', 'ilocv', 'ilocw', 'ilocb', 'iloct', 'ilocsu',
+                    'jlocc', 'jlocs', 'jlocf', 'jlocif', 'jlocr', 'jlocd'))
+        assert all(merge_fq_keywords[k] == blavg_fq_keywords[k] for k in blavg_fq_keywords.keys())
+        assert len(merge_fq_rows) == len(blavg_fq_rows)
+        assert all(all(mr[k] == br[k] for k in br.keys()) for mr, br in zip(merge_fq_rows, blavg_fq_rows))
 
         # Record the starting visibility
         # for this scan in the merge file
         nx_row['START VIS'] = [merge_firstVis]
 
-        log.info("Merging '%s' into '%s'" % (blavg_path, merge_path))
+        log.info("Merging '%s' into '%s'" % (blavg_path, uv_merge_path))
 
         for blavg_firstVis in six.moves.range(1, blavg_nvis+1, args.nvispio):
             # How many visibilities do we write in this iteration?
@@ -185,14 +219,14 @@ with obit_context():
 
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
-    task_kwargs = task_input_kwargs(merge_path)
-    task_kwargs.update(task_output_kwargs(merge_path, name=None, aclass=None, seq=None))
+    task_kwargs = uv_merge_path.task_input_kwargs()
+    task_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**task_kwargs)
     mfimage.go()
 
     # Re-open and print empty calibration solutions
-    merge_uvf = uv_factory(aips_path=merge_path, mode='r',
+    merge_uvf = uv_factory(aips_path=uv_merge_path, mode='r',
                                     nvispio=args.nvispio)
 
     log.info("Calibration Solutions")

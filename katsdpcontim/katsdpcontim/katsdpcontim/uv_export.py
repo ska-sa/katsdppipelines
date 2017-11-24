@@ -1,187 +1,157 @@
 import logging
 
 import numpy as np
+import six
 
 import UVDesc
 import OTObit
 
 from katsdpcontim import uv_factory
+from katsdpcontim.katdal_adapter import aips_source_name
 from katsdpcontim.util import fmt_bytes
 
 log = logging.getLogger('katsdpcontim')
 
-def uv_export(kat_adapter, aips_path, nvispio=1024, kat_select=None):
+def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     """
-    Exports data in a katdal selection to an AIPS/FITS file.
+    Use as follows:
 
-    There are subtleties in this process that are
-    worth taking note of.
+    .. code-block:: python
 
-    ``uv_export`` contains a call to ``uv_factory`` which
-    creates a UV file *conditioned* by the observation dimensions
-    in the ``katd_adapter`` object.  Subsequent to UV file creation,
-    ``kat_select`` is applied to ``kat_adapter`` and the actual
-    observation data is exported.
-
-    So there are two katdal selections that must be kept track of:
-
-    1. The selection used to condition the UV file.
-    2. The selection used to place data in the file.
-
-    For example, we may wish to include all targets in the UV file,
-    but only export a selection including one scan (and thus one target).
-
-    .. code-block::
+        firstVis, numVisBuff = _write_buffer(uv, firstVis, numVisBuff, lrec)
 
     Parameters
     ----------
-    kat_adapter: :class:`KatdalAdapter`
-        Katdal Adapter supplying data for export
-    aips_path: :class:`AIPSPath`
-        Obit file to which data should be exported
-    nvispio: integer
-        Number of visibilities to read/write per I/O operation
-    kat_select (optional): dict
-        Dictionary of keyword arguments to apply
-        to katdal selection *after* the UV file
-        has been created.
+    uvf : :class:`UVFacade` object
+    firstVis : integer
+        First visibility to write in the file (FORTRAN indexing)
+    numVisBuff : integer
+        Number of visibilities to write to the file.
+    lrec : integer
+        Length of a visibility record in bytes.
+
+    Returns
+    -------
+    tuple
+        (firstVis + numVisBuff, 0)
+
     """
-    KA = kat_adapter
+    # Update descriptor
+    desc = uvf.Desc.Dict
+    desc.update(numVisBuff=numVisBuff)
+    uvf.Desc.Dict = desc
 
-    # UV file location variables
-    with uv_factory(aips_path=aips_path, mode="w",
-                    katdata=kat_adapter, nvispio=nvispio) as uvf:
+    nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
+    log.debug("Writing '{}' visibilities. "
+             "firstVis={} numVisBuff={}.".format(
+                fmt_bytes(nbytes), firstVis, numVisBuff))
 
-        uv_source_map = kat_adapter.uv_source_map
+    # If firstVis is passed through to this method, it uses FORTRAN
+    # indexing (1)
+    uvf.Write(firstVis=firstVis)
 
-        # Perform selection on the katdal object
-        if kat_select is not None:
-            KA.select(**kat_select)
+    # Pass through new firstVis and 0 numVisBuff
+    return firstVis + numVisBuff, 0
 
-        log.info("Created '%s'" % aips_path)
-        firstVis = 1    # FORTRAN indexing
-        numVisBuff = 0  # Number of visibilities in the buffer
+def uv_export(kat_adapter, uvf):
+    """
+    Exports data in a katdal selection to an AIPS/FITS file.
+    """
 
-        # NX table rows
-        nx_rows = []
+    # Map from AIPS SOURCE name to SOURCE data
+    uv_source_map = { source['SOURCE'][0] : source for source in uvf.tables['AIPS SU'].rows }
 
-        for si, (u, v, w, time, baselines, source_name, vis) in kat_adapter.uv_scans():
-            start = OTObit.day2dhms(time[0])
-            end = OTObit.day2dhms(time[1])
-            nbytes = fmt_bytes(vis.nbytes)
-            log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'" % (start, end, si, nbytes, source_name))
+    firstVis = 1            # FORTRAN indexing
+    numVisBuff = 0          # Number of visibilities in the buffer
 
-            try:
-                source = uv_source_map[source_name]
-            except KeyError:
-                log.warn("Source '%s' not recognised, skipping")
-                continue
-            else:
-                source_id = source["ID. NO."][0]
+    # Number of visibilities per IO operation
+    type_, dims, value = uvf.List.Dict['nVisPIO']
+    nvispio = value[0]
 
-            def _write_buffer(uvf, firstVis, numVisBuff):
-                """
-                Use as follows:
+    desc = uvf.Desc.Dict
+    # Number of random parameters
+    nrparm = desc['nrparm']
+    # Length of visibility buffer record
+    lrec = desc['lrec']
 
-                .. code-block:: python
+    # Random parameter indices
+    ilocu = desc['ilocu']     # U
+    ilocv = desc['ilocv']     # V
+    ilocw = desc['ilocw']     # W
+    iloct = desc['iloct']     # time
+    ilocb = desc['ilocb']     # baseline id
+    ilocsu = desc['ilocsu']   # source id
 
-                    firstVis, numVisBuff = _write_buffer(uv, firstVis,
-                                                            numVisBuff)
+    # NX table rows
+    nx_rows = []
 
-                Parameters
-                ----------
-                uvf: :class:`UVFacade` object
-                firstVis: integer
-                    First visibility to write in the file (FORTRAN indexing)
-                numVisBuff: integer
-                    Number of visibilities to write to the file.
+    # Iterate through kat adapter UV scans, writing their data to disk
+    for si, (u, v, w, time, baselines, target_name, vis) in kat_adapter.uv_scans():
+        try:
+            source = uv_source_map[aips_source_name(target_name)]
+        except KeyError:
+            log.warn("Source '%s' not recognised, skipping")
+            continue
+        else:
+            source_id = source["ID. NO."][0]
 
-                Returns
-                -------
-                tuple
-                    (firstVis + numVisBuff, 0)
+        start = OTObit.day2dhms(time[0])
+        end = OTObit.day2dhms(time[1])
+        nbytes = fmt_bytes(vis.nbytes)
 
-                """
-                # Update descriptor
-                desc = uvf.Desc.Dict
-                desc.update(numVisBuff=numVisBuff)
-                uvf.Desc.Dict = desc
+        log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'" %
+                                    (start, end, si, nbytes, target_name))
 
-                nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
-                log.debug("Writing {:.2f}MB visibilities. "
-                         "firstVis={} numVisBuff={}.".format(
-                            nbytes / (1024. * 1024.), firstVis, numVisBuff))
+        # Starting visibility of this scan
+        start_vis = firstVis
+        vis_buffer = np.frombuffer(uvf.VisBuf, count=-1, dtype=np.float32)
 
-                # If firstVis is passed through to this method, it uses FORTRAN
-                # indexing (1)
-                uvf.Write(firstVis=firstVis)
+        ntime, nbl = u.shape
 
-                # Pass through new firstVis and 0 numVisBuff
-                return firstVis + numVisBuff, 0
+        for t in range(ntime):
+            for bl in range(nbl):
+                # Index within vis_buffer
+                idx = numVisBuff * lrec
 
-            # Starting visibility of this scan
-            start_vis = firstVis
-            vis_buffer = np.frombuffer(uvf.VisBuf, count=-1, dtype=np.float32)
+                # Write random parameters
+                vis_buffer[idx + ilocu] = u[t, bl]           # U
+                vis_buffer[idx + ilocv] = v[t, bl]           # V
+                vis_buffer[idx + ilocw] = w[t, bl]           # W
+                vis_buffer[idx + iloct] = time[t]           # time
+                vis_buffer[idx + ilocb] = baselines[bl]     # baseline id
+                vis_buffer[idx + ilocsu] = source_id        # source id
 
-            # Number of random parameters
-            desc = uvf.Desc.Dict
-            nrparm = desc['nrparm']
-            lrec = desc['lrec']       # Length of visibility buffer record
+                # Flatten visibilities for buffer write
+                flat_vis = vis[t, bl].ravel()
+                vis_buffer[idx + nrparm:idx +
+                           nrparm + flat_vis.size] = flat_vis
 
-            # Random parameter indices
-            ilocu = desc['ilocu']     # U
-            ilocv = desc['ilocv']     # V
-            ilocw = desc['ilocw']     # W
-            iloct = desc['iloct']     # time
-            ilocb = desc['ilocb']     # baseline id
-            ilocsu = desc['ilocsu']   # source id
+                numVisBuff += 1
 
-            ntime, nbl = u.shape
+                # Hit the limit, write
+                if numVisBuff == nvispio:
+                    firstVis, numVisBuff = _write_buffer(
+                        uvf, firstVis, numVisBuff, lrec)
 
-            for t in range(ntime):
-                for bl in range(nbl):
-                    # Index within vis_buffer
-                    idx = numVisBuff * lrec
+        # Write out any remaining visibilities
+        if numVisBuff > 0:
+            firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff, lrec)
 
-                    # Write random parameters
-                    vis_buffer[idx + ilocu] = u[t, bl]           # U
-                    vis_buffer[idx + ilocv] = v[t, bl]           # V
-                    vis_buffer[idx + ilocw] = w[t, bl]           # W
-                    vis_buffer[idx + iloct] = time[t]           # time
-                    vis_buffer[idx + ilocb] = baselines[bl]     # baseline id
-                    vis_buffer[idx + ilocsu] = source_id        # source id
+        # Create an index for this scan
+        nx_rows.append({
+            'TIME': [(time[-1] + time[0]) / 2],  # Time Centroid
+            'TIME INTERVAL': [time[-1] - time[0]],
+            'SOURCE ID': [source_id],
+            # Should match 'AIPS AN' table version
+            # Each AN table defines a subarray
+            'SUBARRAY': [1],
+            'FREQ ID': [1],            # Should match 'AIPS FQ' row FRQSEL
+            'START VIS': [start_vis],  # FORTRAN indexing
+            'END VIS': [firstVis - 1]  # FORTRAN indexing
+        })
 
-                    # Flatten visibilities for buffer write
-                    flat_vis = vis[t, bl].ravel()
-                    vis_buffer[idx + nrparm:idx +
-                               nrparm + flat_vis.size] = flat_vis
-
-                    numVisBuff += 1
-
-                    # Hit the limit, write
-                    if numVisBuff == nvispio:
-                        firstVis, numVisBuff = _write_buffer(
-                            uvf, firstVis, numVisBuff)
-
-            # Write out any remaining visibilities
-            if numVisBuff > 0:
-                firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff)
-
-            # Create an index for this scan
-            nx_rows.append({
-                'TIME': [(time[-1] + time[0]) / 2],  # Time Centroid
-                'TIME INTERVAL': [time[-1] - time[0]],
-                'SOURCE ID': [source_id],
-                # Should match 'AIPS AN' table version
-                # Each AN table defines a subarray
-                'SUBARRAY': [1],
-                'FREQ ID': [1],            # Should match 'AIPS FQ' row FRQSEL
-                'START VIS': [start_vis],  # FORTRAN indexing
-                'END VIS': [firstVis - 1]  # FORTRAN indexing
-            })
-
-        # Create the index and calibration tables
-        uvf.attach_table("AIPS NX", 1)
-        uvf.tables["AIPS NX"].rows = nx_rows
-        uvf.tables["AIPS NX"].write()
-        uvf.attach_CL_from_NX_table(kat_adapter.max_antenna_number)
+    # Create the index and calibration tables
+    uvf.attach_table("AIPS NX", 1)
+    uvf.tables["AIPS NX"].rows = nx_rows
+    uvf.tables["AIPS NX"].write()
+    uvf.attach_CL_from_NX_table(kat_adapter.max_antenna_number)
