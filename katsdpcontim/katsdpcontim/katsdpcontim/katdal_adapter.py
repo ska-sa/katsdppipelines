@@ -33,7 +33,7 @@ def aips_catalogue(katdata):
     """
     catalogue = []
 
-    zero = "00:00:00.00"
+    zero = np.asarray([0.0, 0.0])
 
     # This is rarely referenced, according to AIPS Memo 117
     bandwidth = katdata.channel_freqs[-1] - katdata.channel_freqs[0]
@@ -41,19 +41,16 @@ def aips_catalogue(katdata):
     for aips_i, t in enumerate(katdata.catalogue.targets, 1):
         # Nothings have no position!
         if "Nothing" == t.name:
-            ras, decs = zero, zero
-            raas, decas = zero, zero
+            radec = zero
+            aradec = zero
         else:
-            ras, decs = t.radec()
-            raas, decas = t.apparent_radec()
+            radec = t.radec()
+            aradec = t.apparent_radec()
 
         # Right Ascension and Declination
-        ra = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
-        dec = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
-
+        ra, dec = np.rad2deg(radec)
         # Apparent position
-        raa = UVDesc.PHMS2RA(str(raas).replace(':', ' '))
-        deca = UVDesc.PDMS2Dec(str(decas).replace(':', ' '))
+        raa, deca = np.rad2deg(aradec)
 
         aips_source_data = {
             # Fill in data derived from katpoint target
