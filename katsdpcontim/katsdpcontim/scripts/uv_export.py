@@ -2,6 +2,7 @@ import argparse
 import os.path
 
 import numpy as np
+from pretty import pretty
 
 import katdal
 
@@ -47,6 +48,12 @@ with obit_context():
 
     # Apply the katdal selection
     KA.select(**args.select)
+
+    # Fall over on empty selections
+    if not KA.size > 0:
+        raise ValueError("The katdal selection produced an empty dataset"
+                        "\n'%s'\n" % pretty(args.select))
+
 
     # UV file location variables
     with uv_factory(aips_path=aips_path, mode="w",

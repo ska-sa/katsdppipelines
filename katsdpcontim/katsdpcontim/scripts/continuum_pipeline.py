@@ -62,6 +62,12 @@ with obit_context():
     # retrieving selected scan indices as python ints
     # so that we can do per scan selection
     KA.select(**global_select)
+
+    # Fall over on empty selections
+    if not KA.size > 0:
+        raise ValueError("The katdal selection produced an empty dataset"
+                        "\n'%s'\n" % pretty(global_select))
+
     global_desc = KA.uv_descriptor()
     global_table_cmds = KA.default_table_cmds()
     scan_indices = [int(i) for i in KA.scan_indices]

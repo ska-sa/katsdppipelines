@@ -181,6 +181,10 @@ class KatdalAdapter(object):
         return self._katds.select(**kwargs)
 
     @property
+    def size(self):
+        return self._katds.size
+
+    @property
     def shape(self):
         """ Proxies :meth:`katdal.DataSet.shape` """
         return self._katds.shape
