@@ -57,10 +57,6 @@ def uv_export(kat_adapter, uvf):
     """
     Exports data in a katdal selection to an AIPS/FITS file.
     """
-
-    # Map from AIPS SOURCE name to SOURCE data
-    uv_source_map = { source['SOURCE'][0] : source for source in uvf.tables['AIPS SU'].rows }
-
     firstVis = 1            # FORTRAN indexing
     numVisBuff = 0          # Number of visibilities in the buffer
 
@@ -86,21 +82,16 @@ def uv_export(kat_adapter, uvf):
     nx_rows = []
 
     # Iterate through kat adapter UV scans, writing their data to disk
-    for si, (u, v, w, time, baselines, target_name, vis) in kat_adapter.uv_scans():
-        try:
-            source = uv_source_map[aips_source_name(target_name)]
-        except KeyError:
-            log.warn("Source '%s' not recognised, skipping")
-            continue
-        else:
-            source_id = source["ID. NO."][0]
+    for si, (u, v, w, time, baselines, source, vis) in kat_adapter.uv_scans():
+        source_name = source["SOURCE"][0].strip()
+        source_id = source["ID. NO."][0]
 
         start = OTObit.day2dhms(time[0])
         end = OTObit.day2dhms(time[1])
         nbytes = fmt_bytes(vis.nbytes)
 
         log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'" %
-                                    (start, end, si, nbytes, target_name))
+                                    (start, end, si, nbytes, source_name))
 
         # Starting visibility of this scan
         start_vis = firstVis

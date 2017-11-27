@@ -18,6 +18,80 @@ def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
+def aips_catalogue(katdata):
+    """
+    Creates a catalogue of AIPS sources.
+    Resembles :attribute:`katdal.Dataset.catalogue`.
+    This is a list of dictionaries following the specification
+    of the AIPS SU table in AIPS Memo 117.
+
+    Returns
+    -------
+    list of dicts
+        List of dictionaries where each dictionary defines an AIPS source.
+
+    """
+    catalogue = []
+
+    zero = np.asarray([0.0, 0.0])
+
+    # This is rarely referenced, according to AIPS Memo 117
+    bandwidth = katdata.channel_freqs[-1] - katdata.channel_freqs[0]
+
+    for aips_i, t in enumerate(katdata.catalogue.targets, 1):
+        # Nothings have no position!
+        if "Nothing" == t.name:
+            radec = zero
+            aradec = zero
+        else:
+            radec = t.radec()
+            aradec = t.apparent_radec()
+
+        # Right Ascension and Declination
+        ra, dec = np.rad2deg(radec)
+        # Apparent position
+        raa, deca = np.rad2deg(aradec)
+
+        aips_source_data = {
+            # Fill in data derived from katpoint target
+            'ID. NO.': [aips_i],
+            'SOURCE': [aips_source_name(t.name)],
+            'RAEPO': [ra],
+            'DECEPO': [dec],
+            'RAOBS': [raa],
+            'DECOBS': [deca],
+            'RAAPP': [raa],
+            'DECAPP': [deca],
+            'EPOCH': [2000.0],
+            'BANDWIDTH': [bandwidth],
+
+            # No calibrator, fill with spaces
+            'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
+
+            # Following seven key-values technically vary by
+            # spectral window, but we're only handling one SPW
+            # at a time so it doesn't matter
+
+            # TODO(sjperkins). Perhaps fill these in with actual flux values
+            # derived from the internal katpoint spectral model.
+            # Zeros are fine for now
+            'IFLUX': [0.0],
+            'QFLUX': [0.0],
+            'VFLUX': [0.0],
+            'UFLUX': [0.0],
+            'LSRVEL': [0.0],    # Velocity
+            'FREQOFF': [0.0],   # Frequency Offset
+            'RESTFREQ': [0.0],  # Rest Frequency
+
+            # Don't have these, zero them
+            'PMRA': [0.0],      # Proper Motion in Right Ascension
+            'PMDEC': [0.0],     # Proper Motion in Declination
+            'QUAL': [0.0],      # Source Qualifier Number
+        }
+
+        catalogue.append(aips_source_data)
+
+    return catalogue
 
 MEERKAT = 'MeerKAT'
 
@@ -42,6 +116,7 @@ class KatdalAdapter(object):
         """
         self._katds = katds
         self._cache = {}
+        self._catalogue = aips_catalogue(katds)
 
     def uv_scans(self):
         """
@@ -127,9 +202,13 @@ class KatdalAdapter(object):
             # of the visibility.
             aips_time = (times - midnight) / 86400.0
 
+            ti = self._katds.target_indices
+            assert len(ti) == 1
+            aips_target = self._catalogue[ti[0]]
+
             # Yield this scan's data
             yield si, (aips_u, aips_v, aips_w,
-                       aips_time, aips_baselines, target.name,
+                       aips_time, aips_baselines, aips_target,
                        vis)
 
     def _antenna_map(self):
@@ -190,9 +269,22 @@ class KatdalAdapter(object):
         return self._katds.shape
 
     @property
+    def catalogue(self):
+        """
+        AIPS source catalogue, resembling
+        :attribute:`katdal.Dataset.catalogue`.
+        """
+        return self._catalogue
+
+    @property
     def scan_indices(self):
         """ Proxies :attr:`katdal.DataSet.scan_indices` """
         return self._katds.scan_indices
+
+    @property
+    def target_indices(self):
+        """ Proxies :attr:`katdal.DataSet.target_indices` """
+        return self._katds.target_indices
 
     @property
     def katdal(self):
@@ -326,43 +418,6 @@ class KatdalAdapter(object):
         return max(counts.itervalues())
 
     @property
-    def _targets(self):
-        """
-        Returns
-        -------
-        OrderedDict
-            Returns a {target_name : [ra, dec, raa, deca] } mapping,
-            where (ra, dec) are right ascension and declination and
-            (raa, deca) are their apparent counterparts.
-        """
-        Target = attr.make_class("Target", ["ra", "dec", "raa", "deca"])
-        targets = OrderedDict()
-
-        for i, ti in enumerate(self._katds.target_indices):
-            t = self._katds.catalogue.targets[ti]
-
-            # Ignore nothings
-            if "Nothing" == t.name:
-                continue
-
-            # Get a valid AIPS Source Name
-            name = aips_source_name(t.name)
-
-            # Right Ascension and Declination
-            ras, decs = t.radec()
-            ra = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
-            dec = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
-
-            # Apparent position
-            ras, decs = t.apparent_radec()
-            deca = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
-            raa = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
-
-            targets[name] = Target(ra, dec, raa, deca)
-
-        return targets
-
-    @property
     def nchan(self):
         """
         Returns
@@ -379,7 +434,7 @@ class KatdalAdapter(object):
 
         .. code-block:: python
 
-            KA = KatdalAdapter(katdal.open('...'), spw=0)
+            KA = KatdalAdapter(katdal.open('...'))
             assert KA.frqsel == 1
 
         Returns
@@ -522,78 +577,7 @@ class KatdalAdapter(object):
         list
             List of dictionaries describing sources.
         """
-        return self.uv_source_map.values()
-
-    @property
-    def uv_source_map(self):
-        """
-        Returns
-        -------
-        dict
-            A { name: dict } mapping where `name` is a
-            :py:class:`katpoint.Target` name and `dict` is a
-            dictionary describing a UV source.
-        """
-        targets = OrderedDict()
-        aips_src_index = 0
-        bandwidth = self.channel_freqs[-1] - self.channel_freqs[0]
-
-        for target_index in self._katds.target_indices:
-            target = self._katds.catalogue.targets[target_index]
-
-            # Ignore nothings
-            if "Nothing" == target.name:
-                continue
-
-            aips_src_index += 1
-
-            # Get a valid AIPS Source Name
-            name = aips_source_name(target.name)
-
-            # AIPS Right Ascension and Declination
-            ras, decs = target.radec()
-            ra = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
-            dec = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
-
-            # AIPS Apparent Right Ascension and Declination
-            ras, decs = target.apparent_radec()
-            raa = UVDesc.PHMS2RA(str(ras).replace(':', ' '))
-            deca = UVDesc.PDMS2Dec(str(decs).replace(':', ' '))
-
-            targets[target.name] = {
-                # Fill in data derived from katpoint targets
-                'ID. NO.': [aips_src_index],
-                'SOURCE': [name],
-                'RAEPO': [ra],
-                'DECEPO': [dec],
-                'RAOBS': [raa],
-                'DECOBS': [deca],
-                'RAAPP': [raa],
-                'DECAPP': [deca],
-                'EPOCH': [2000.0],
-                'BANDWIDTH': [bandwidth],
-
-                # No calibrator, fill with spaces
-                'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
-
-                # Following seven key-values technically vary by
-                # spectral window. Specify zero flux for sources
-                # since we don't know them yet
-                'IFLUX': [0.0],
-                'QFLUX': [0.0],
-                'VFLUX': [0.0],
-                'UFLUX': [0.0],
-                'LSRVEL': [0.0],  # Velocity
-                'FREQOFF': [0.0],  # Frequency Offset
-                'RESTFREQ': [0.0],  # Rest Frequency
-
-                # Don't have these, zero them
-                'PMRA': [0.0],  # Proper Motion in Right Ascension
-                'PMDEC': [0.0],  # Proper Motion in Declination
-                'QUAL': [0.0],  # Source Qualifier Number
-            }
-
-        return targets
+        return [self._catalogue[ti] for ti in self._katds.target_indices]
 
     @property
     def uv_spw_keywords(self):
