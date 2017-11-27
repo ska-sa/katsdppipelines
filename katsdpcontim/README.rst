@@ -1,7 +1,7 @@
 Obit Docker build
 =================
 
-Docker files for building ``AIPS`` and ``Obit`` on Ubuntu ``xenial``.
+Dockerfile for building ``AIPS`` and ``Obit`` on Ubuntu ``xenial``.
 
 ~~~~~~~~~~~~
 Requirements
@@ -33,8 +33,13 @@ Also, checkout the Obit source code @ revision ``574``.
 Build
 ~~~~~
 
+The ``Dockerfile`` is based on ``docker-gpu-base``.
+You'll need to install the SKA SDP docker registry certificate by
+following the instructions
+`here <https://github.com/ska-sa/katsdpinfrastructure/tree/master/registry#client-setup>`_.
+
 The following builds the docker containers.
-Inspect the ``docker-compose.yml`` and ``Dockerfile's``
+Inspect the ``docker-compose.yml`` and ``Dockerfile``
 for further insight.
 
 .. code-block::

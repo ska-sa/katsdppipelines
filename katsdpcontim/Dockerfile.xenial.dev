@@ -1,5 +1,7 @@
-FROM ubuntu:xenial-20170802
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu
 MAINTAINER sperkins@ska.ac.za
+
+USER root
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -111,7 +113,7 @@ RUN cd ObitSystem/ObitView && \
 
 # Compile and install ObitTalk
 RUN cd ObitSystem/ObitTalk && \
-    # --with-obit doesn'tt pick up the PYTHONPATH and libObit.so correctly
+    # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
     export PYTHONPATH=$OBIT/python && \
     export LD_LIBRARY_PATH=$OBIT/lib && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
