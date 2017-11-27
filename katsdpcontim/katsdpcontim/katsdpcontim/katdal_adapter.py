@@ -287,6 +287,26 @@ class KatdalAdapter(object):
         return self._katds.target_indices
 
     @property
+    def name(self):
+        """ Proxies :attr:`katdal.DataSet.name` """
+        return self._katds.name
+
+    @property
+    def experiment_id(self):
+        """ Proxies :attr:`katdal.DataSet.name` """
+        return self._katds.experiment_id
+
+    @property
+    def observer(self):
+        """ Proxies :attr:`katdal.DataSet.observer` """
+        return self._katds.observer
+
+    @property
+    def description(self):
+        """ Proxies :attr:`katdal.DataSet.description` """
+        return self._katds.description
+
+    @property
     def katdal(self):
         """ The `katdal.DataSet` adapted by this object """
         return self._katds
