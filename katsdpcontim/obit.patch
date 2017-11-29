@@ -100,7 +100,7 @@ Index: trunk/ObitSystem/Obit/lib/Makefile
 ===================================================================
 --- trunk/ObitSystem/Obit/lib/Makefile	(revision 570)
 +++ trunk/ObitSystem/Obit/lib/Makefile	(working copy)
-@@ -34,7 +34,7 @@
+@@ -34,12 +34,19 @@
  #
  #------------------------------------------------------------------------
  # targets to build
@@ -109,13 +109,30 @@ Index: trunk/ObitSystem/Obit/lib/Makefile
  SHTARGETS = libObit.so
  
  # list of object modules
-@@ -50,8 +50,8 @@
+ OBJECTS := $(wildcard *.o)
+ 
++# Location of the CUDA Toolkit
++NVCC = nvcc
++CUDA_PATH   = "/usr/local/cuda"
++CUDA_LIB    = -Wl,-rpath,$(CUDA_PATH)/lib64 -L$(CUDA_PATH)/lib64 -lcudart
++CUDA_FLAGS = -I$(CUDA_PATH)/samples/common/inc/ -I$(CUDA_PATH)/include/ -DHAVE_GPU=1
++GENCODE_FLAGS = -arch=sm_35
++
+ all:  $(TARGETS)
+ share: $(SHTARGETS)
+ 
+@@ -46,12 +53,12 @@
+ #  build static Obit library
+ libObit.a: ${OBJECTS}
+ 	ar rv libObit.a ${OBJECTS}
+-	${RANLIB} libObit.a
++	ranlib libObit.a
  
  #  build shared Obit library, put in dependencies library
  libObit.so: ${OBJECTS}
 -	gcc -shared -o libObit.so  ${OBJECTS}
 -	cp libObit.so ../../../deps/lib
-+	gcc -shared -o libObit.so  ${OBJECTS} -lglib-2.0 -lpthread -lgthread-2.0
++	gcc -shared -o libObit.so  ${OBJECTS} -lglib-2.0 -lpthread -lgthread-2.0 -lstdc++ ${CUDA_LIB}
 +	#cp libObit.so ../../../deps/lib
  
  clean:
@@ -236,7 +253,7 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/src/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/src/Makefile.in	(working copy)
-@@ -35,20 +35,21 @@
+@@ -35,37 +35,74 @@
  LIBDIR = $(top_srcdir)/lib/
  
  CC = @CC@
@@ -245,11 +262,11 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  # Turn off memory usage checking
 -CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM 
 +# Add AVX instructions
-+CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -mavx
++CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -msse -msse2 -mavx
  LDFLAGS = @LDFLAGS@
  LIBS = @LIBS@
 -DEFS = @DEFS@
-+DEFS = @DEFS@ -DHAVE_AVX=1
++DEFS = @DEFS@ -DHAVE_AVX=1 -DHAVE_GPU=1
  
  ALL_CPPFLAGS = $(CPPFLAGS) -I$(top_srcdir)/include $(DEFS) \
 -	@CFITSIO_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @XMLRPC_SERVER_CPPFLAGS@ 
@@ -257,21 +274,69 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  ALL_CFLAGS = $(CFLAGS) @GSL_CFLAGS@ @GLIB_CFLAGS@ @PLPLOT_CFLAGS@ \
  	@PGPLOT_CFLAGS@ @ZLIB_CFLAGS@ @WVR_CFLAGS@
  
++CUDA_CFLAGS = -g -O3 -I$(top_srcdir)/include -I$(OTHER)/include -I/usr/include/glib-2.0 -I/usr/lib64/glib-2.0/include
++
++
++# Location of the CUDA Toolkit
++NVCC = nvcc
++CUDA_PATH   = "/usr/local/cuda"
++CUDA_LIB    = -Wl,-rpath,$(CUDA_PATH)/lib64 -L$(CUDA_PATH)/lib64 -lcudart
++CUDA_FLAGS = -I$(CUDA_PATH)/samples/common/inc/ -I$(CUDA_PATH)/include/ -DHAVE_GPU=1
++GENCODE_FLAGS = -arch=sm_35
++
  # teach how to compile
 -.c.o:	
 +.c.o:
  	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $<
  	mv $@.o $(LIBDIR)
  
-@@ -59,7 +60,7 @@
++# generic CUDA compile
++.cu.o:
++	$(NVCC) -c -g $(ALL_CPPFLAGS) $(CUDA_INC) $(GENCODE_FLAGS) $(ALL_CFLAGS) $<
++	mv ./$*.o $@
++
++# get list of all c header files (*.h) files
++HEADERS := $(wildcard ../include/*.h)
++
+ # get list of all c source files (*.c) files
+ AllC := $(filter-out ObitAIPSFortran.c, $(filter-out ObitAIPSObject.c, $(wildcard *.c)))
+ OBJECTS := $(patsubst %.c,%.o, $(AllC))
+-
  CTARGETS := $(addprefix $(LIBDIR),$(OBJECTS))
++#CTARGETS := $(OBJECTS)
  
++# get list of all cu (CUDA) source files (*.cu) files
++AllCUDA := $(wildcard *.cu)
++CUDAOBJECTS := $(patsubst %.cu,%.o, $(AllCUDA))
++#CUDATARGETS := $(CUDAOBJECTS)
++CUDATARGETS := $(addprefix $(LIBDIR),$(CUDAOBJECTS))
  
 -all:  $(CTARGETS) 
-+all:  $(CTARGETS)
++all:  $(CTARGETS) $(CUDATARGETS)
  
++cuda: $(CUDATARGETS)
++
++# Some classes have individual includes
++#image_%.o: $@.c  ../include/image_%.h $(HEADERS)
++
  # generic C compile
  $(CTARGETS): $(LIBDIR)%.o: %.c $(wildcard ../include/%*.h)
+ 	$(CC) -c $(ALL_CPPFLAGS) $(ALL_CFLAGS) $*.c
+-	mv ./$*.o $@
++	mv ./$*.o  $@
+ 
++# generic CUDA compile - need to generate relocatable code
++# Use NVCC with -cuda to generate input for gcc
++$(CUDATARGETS): $(LIBDIR)%.o: %.cu $(wildcard ../include/%*.cuh)
++	echo "CUDATARGETS $(CTARGETS)"
++	$(NVCC) -cuda -g $(CUDA_FLAGS) $(CUDA_CFLAGS) $(GENCODE_FLAGS) $*.cu
++	$(CC) -c -fPIC $*.cu.cpp.ii
++	mv ./$*.cu.cpp.o $@
++
+ clean:
+-	rm -f $(CTARGETS)
++	rm -f $(CUDATARGETS) $(CTARGETS)
+ 	rm -f *.o
 Index: trunk/ObitSystem/Obit/tasks/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/tasks/Makefile.in	(revision 570)
@@ -312,27 +377,41 @@ Index: trunk/ObitSystem/Obit/tasks/Makefile.in
  
 +LIBS = $(OBIT_LIB) @CFITSIO_LIBS@ @FFTW_LIBS@ @FFTW3_LIBS@ @GLIB_LIBS@ \
 +        @GSL_LIBS@ @PLPLOT_LIBS@ @PGPLOT_LIBS@ $(CLIENT_LIBS) $(SERVER_LIBS) \
-+        @LIBS@ @FLIBS@ @GTHREAD_LIBS@ @WVR_LIBS@
++        @LIBS@ @FLIBS@ @GTHREAD_LIBS@ @WVR_LIBS@ -lstdc++
  
  # get list of all c source files (*.c) files
  AllC    := $(wildcard *.c)
-@@ -76,13 +82,13 @@
+@@ -73,20 +79,31 @@
+ EXECU   := $(patsubst %.c,%, $(AllC))
+ TARGETS := $(addprefix $(BINDIR),$(EXECU))
+ 
++CUDA_CFLAGS = -g -O3 -I$(top_srcdir)/include -I$(OTHER)/include -I/usr/include/glib-2.0 -I/usr/lib64/glib-2.0/include
++
++
++# Location of the CUDA Toolkit
++NVCC = nvcc
++CUDA_PATH   = "/usr/local/cuda"
++CUDA_LIB    = -Wl,-rpath,$(CUDA_PATH)/lib64 -L$(CUDA_PATH)/lib64 -lcudart
++CUDA_FLAGS = -I$(CUDA_PATH)/samples/common/inc/ -I$(CUDA_PATH)/include/ -DHAVE_GPU=1
++GENCODE_FLAGS = -arch=sm_35
++
  all: $(TARGETS)
  
  # generic C compile/link
 -$(TARGETS): $(BINDIR)% : %.c ../lib/libObit.a  
 +$(TARGETS): $(BINDIR)% : %.c $(OBIT_LIB_TARGET)
  	echo "compile $*.c"
- 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $*.c -o $* $(LIBS)
+-	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $*.c -o $* $(LIBS)
++	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $*.c -o $* $(LIBS) $(CUDA_LIB)
  	mv $* $(BINDIR)
  
  # For specific executables
 -$(EXECU): % : %.c ../lib/libObit.a  
+-	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $< -o $* $(LIBS)
 +$(EXECU): % : %.c $(OBIT_LIB_TARGET)
- 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $< -o $* $(LIBS)
++	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) $(ALL_LDFLAGS) $< -o $* $(LIBS) $(CUDA_LIB)
  	mv $* $(BINDIR)
  
-@@ -89,4 +95,5 @@
  clean:
  	rm -f $(TARGETS)
  	rm -f *.o
