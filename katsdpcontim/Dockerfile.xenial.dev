@@ -105,26 +105,26 @@ RUN cd ObitSystem/Obit && \
     make -j 8
 
 # Compile and install ObitView
-RUN cd ObitSystem/ObitView && \
-    ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
-    make clean && \
-    make && \
-    make install
+#RUN cd ObitSystem/ObitView && \
+#    ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
+#    make clean && \
+#    make && \
+#    make install
 
 # Compile and install ObitTalk
-RUN cd ObitSystem/ObitTalk && \
-    # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
-    export PYTHONPATH=$OBIT/python && \
-    export LD_LIBRARY_PATH=$OBIT/lib && \
-    ./configure --bindir=/bin --with-obit=$OBIT && \
-    # Run the main makefile. This gets some of the way but falls over
-    # due to lack of latex
-    make ||true && make install || true && \
-    # Just install ObitTalk and ObitTalkServer
-    cd bin && \
-    make clean && \
-    make && \
-    make install
+#RUN cd ObitSystem/ObitTalk && \
+#    # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
+#    export PYTHONPATH=$OBIT/python && \
+#    export LD_LIBRARY_PATH=$OBIT/lib && \
+#    ./configure --bindir=/bin --with-obit=$OBIT && \
+#    # Run the main makefile. This gets some of the way but falls over
+#    # due to lack of latex
+#    make ||true && make install || true && \
+#    # Just install ObitTalk and ObitTalkServer
+#    cd bin && \
+#    make clean && \
+#    make && \
+#    make install
 
 RUN pip install -U pkginfo
 
