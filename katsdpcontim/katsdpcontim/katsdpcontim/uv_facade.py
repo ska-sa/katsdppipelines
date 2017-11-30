@@ -1,4 +1,5 @@
 import logging
+from textwrap import TextWrapper
 
 import six
 import numpy as np
@@ -7,12 +8,18 @@ import TableList
 import UV
 
 from katsdpcontim import (AIPSTable,
+                          AIPSHistory,
                           AIPSPath,
                           obit_err,
                           handle_obit_err)
 
 log = logging.getLogger('katsdpcontim')
 
+""" TextWrapper for wrapping AIPS history text to 70 chars """
+_history_wrapper = TextWrapper(width=70, initial_indent='',
+                                subsequent_indent='  ',
+                                break_long_words=True,
+                                break_on_hyphens=True)
 
 def uv_file_mode(mode):
     """ Returns UV file mode given string mode """
@@ -259,6 +266,8 @@ class UVFacade(object):
                         for version, name in tables
                         if name not in ignored_tables}
 
+        self._tables["AIPS HI"] = AIPSHistory(uv, err)
+
     def close(self):
         """ Closes the wrapped UV file """
 
@@ -292,6 +301,16 @@ class UVFacade(object):
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
+
+
+    def append_history(self, msg):
+        """
+        Appends ``msg`` to the HISTORY table of this UV file.
+
+        Long lines will be broken at 70 chars.
+        """
+        for line in _history_wrapper.wrap(msg):
+            self._tables["AIPS HI"].append(line)
 
     @property
     def tables(self):

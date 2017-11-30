@@ -18,6 +18,7 @@ from copy import deepcopy
 import logging
 import os.path
 from os.path import join as pjoin
+import sys
 
 import pkg_resources
 import six
@@ -28,7 +29,11 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
-                        UVFacade, task_factory, uv_export, uv_factory)
+                        UVFacade, task_factory,
+                        uv_export,
+                        uv_history_obs_description,
+                        uv_history_selection,
+                        uv_factory)
 from katsdpcontim.util import parse_python_assigns
 
 log = logging.getLogger('katsdpcontim')
@@ -100,13 +105,21 @@ with obit_context():
             # Perform export to the file
             uv_export(KA, uvf)
 
-        task_kwargs = scan_path.task_input_kwargs()
-        blavg_path = scan_path.copy(aclass='uvav')
-        task_kwargs.update(blavg_path.task_output_kwargs())
+        # Get the AIPS source for logging purposes
+        aips_source = KA.catalogue[KA.target_indices[0]]
+        aips_source_name = aips_source["SOURCE"][0].strip()
 
-        log.info("Time-dependent baseline "
-                "averaging '%s' to '%s'" % (scan_path, blavg_path))
-        blavg = task_factory("UVBlAvg", **task_kwargs)
+        blavg_kwargs = scan_path.task_input_kwargs()
+        blavg_path = scan_path.copy(aclass='uvav')
+        blavg_kwargs.update(blavg_path.task_output_kwargs())
+
+        blavg_params = dict()
+        blavg_kwargs.update(blavg_params)
+
+        log.info("Time-dependent baseline averaging "
+                "'%s' to '%s'" % (scan_path, blavg_path))
+
+        blavg = task_factory("UVBlAvg", **blavg_kwargs)
         blavg.go()
 
         # Retrieve the single scan index.
@@ -117,6 +130,8 @@ with obit_context():
 
         assert len(scan_uvf.tables["AIPS NX"].rows) == 1, scan_uvf.tables["AIPS NX"].rows
         nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
+        scan_desc = scan_uvf.Desc.Dict
+        scan_nvis = scan_desc['nvis']
 
         # If we've performed channel averaging, the FREQ dimension
         # and FQ tables in the baseline averaged file will be smaller
@@ -127,6 +142,12 @@ with obit_context():
                                           nvispio=args.nvispio)
         blavg_desc = blavg_uvf.Desc.Dict
         blavg_nvis = blavg_desc['nvis']
+
+        # Record something about the baseline averaging process
+        param_str = ', '.join("%s=%s" % (k,v) for k,v in blavg_params.items())
+        blavg_history = ("Scan %d '%s' averaged %s to %s visiblities. UVBlAvg(%s)" %
+                (si, aips_source_name, scan_nvis, blavg_nvis, param_str))
+        log.info(blavg_history)
 
         blavg_fq_keywords = dict(blavg_uvf.tables["AIPS FQ"].keywords)
         blavg_fq_rows = blavg_uvf.tables["AIPS FQ"].rows
@@ -152,6 +173,9 @@ with obit_context():
                                     table_cmds=blavg_table_cmds,
                                     desc=blavg_desc)
 
+            # Write history
+            uv_history_obs_description(KA, merge_uvf)
+            uv_history_selection(global_select, merge_uvf)
 
         # Now do some sanity checks of the merge UV file's metadata
         # against that of the blavg UV file. Mostly we check that the
@@ -171,6 +195,8 @@ with obit_context():
         assert all(merge_fq_keywords[k] == blavg_fq_keywords[k] for k in blavg_fq_keywords.keys())
         assert len(merge_fq_rows) == len(blavg_fq_rows)
         assert all(all(mr[k] == br[k] for k in br.keys()) for mr, br in zip(merge_fq_rows, blavg_fq_rows))
+
+        merge_uvf.append_history(blavg_history)
 
         # Record the starting visibility
         # for this scan in the merge file
@@ -225,18 +251,17 @@ with obit_context():
 
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
-    task_kwargs = uv_merge_path.task_input_kwargs()
-    task_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
+    mfimage_kwargs = uv_merge_path.task_input_kwargs()
+    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
-    mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**task_kwargs)
-    mfimage.go()
+
+    mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**mfimage_kwargs)
+    #mfimage.go()
 
     # Re-open and print empty calibration solutions
     merge_uvf = uv_factory(aips_path=uv_merge_path, mode='r',
                                     nvispio=args.nvispio)
 
     log.info("Calibration Solutions")
-    log.info(pretty(merge_uvf.tables["AIPS CL"].rows))
+    #log.info(pretty(merge_uvf.tables["AIPS CL"].rows))
     merge_uvf.close()
-
-

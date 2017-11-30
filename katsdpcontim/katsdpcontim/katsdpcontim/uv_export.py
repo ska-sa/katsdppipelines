@@ -1,5 +1,7 @@
 import logging
 
+import katdal
+import katpoint
 import numpy as np
 import six
 
@@ -53,9 +55,59 @@ def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     # Pass through new firstVis and 0 numVisBuff
     return firstVis + numVisBuff, 0
 
+def uv_history_obs_description(kat_adapter, uvf):
+    """
+    Record MeerKAT observation metadata in AIPS history
+
+    Parameters
+    ----------
+    katdal_adapter : :class:`katsdpcontim.KatdalAdapter`
+        Katdal Adapter
+    uvf : :class:`katsdpcontim.UVFacade`
+        UV file
+    """
+
+    uvf.append_history("="*70)
+    uvf.append_history("MEERKAT OBSERVATION")
+    uvf.append_history("="*70)
+    uvf.append_history("name=%s" % kat_adapter.name)
+    uvf.append_history("experiment_id=%s" % kat_adapter.experiment_id)
+    uvf.append_history("description=%s" % kat_adapter.description)
+    uvf.append_history("observer=%s" % kat_adapter.observer)
+    uvf.append_history("date=%s" % kat_adapter.obsdat)
+    uvf.append_history("katdal.__version__=%s" % katdal.__version__)
+    uvf.append_history("katpoint.__version__=%s" % katpoint.__version__)
+
+def uv_history_selection(selection, uvf):
+    """
+    Record katdal data selection parameters in AIPS history
+
+    Parameters
+    ----------
+    selection : dict
+        katdal selection parameters
+    uvf : :class:`katsdpcontim.UVFacade`
+        UV file
+    """
+
+    uvf.append_history("="*70)
+    uvf.append_history("KATDAL SELECTION PARAMETERS")
+    uvf.append_history("="*70)
+
+    for k,v in selection.items():
+        uvf.append_history("%s=%s" % (k,v))
+
+
 def uv_export(kat_adapter, uvf):
     """
     Exports data in a katdal selection to an AIPS/FITS file.
+
+    Parameters
+    ----------
+    katdal_adapter : :class:`katsdpcontim.KatdalAdapter`
+        Katdal Adapter
+    uvf : :class:`katsdpcontim.UVFacade`
+        UV file
     """
     firstVis = 1            # FORTRAN indexing
     numVisBuff = 0          # Number of visibilities in the buffer

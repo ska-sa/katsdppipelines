@@ -4,6 +4,7 @@ import logging
 
 import six
 
+import History
 import InfoList
 import Table
 
@@ -624,3 +625,36 @@ class AIPSTable(object):
 
     def __exit__(self, etype, evalue, etraceback):
         return self.close()
+
+class AIPSHistory(object):
+    """
+    Basic AIPS History table wrapper
+    """
+    def __init__(self, uv, err):
+        self._err = err
+        self._table = History.History('AIPS HI', uv.List, self._err)
+        handle_obit_err("Error accessing history table", err)
+        self._table.Open(Table.READWRITE, err)
+        handle_obit_err("Error opening history table", err)
+
+    def close(self):
+        self._table.Close(self._err)
+        handle_obit_err("Error closing history table", self._err)
+
+    def name(self):
+        return "AIPS HI"
+
+    def __getitem__(self, index):
+        record = self._table.ReadRec(index+1, self._err)
+        if not record:
+            raise IndexError("No history record at index %d" % index+1)
+        handle_obit_err("Error reading history table record at index %d" % index+1)
+
+        return record
+
+    def __setitem__(self, index, record):
+        raise NotImplementedError("The history table may not be rewritten")
+
+    def append(self, record):
+        self._table.WriteRec(0, record, self._err)
+        handle_obit_err("Error appending history table record")
