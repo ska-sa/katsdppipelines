@@ -1,5 +1,7 @@
 import logging
 
+import katdal
+import katpoint
 import numpy as np
 import six
 
@@ -73,6 +75,8 @@ def uv_history_obs_description(kat_adapter, uvf):
     uvf.append_history("description=%s" % kat_adapter.description)
     uvf.append_history("observer=%s" % kat_adapter.observer)
     uvf.append_history("date=%s" % kat_adapter.obsdat)
+    uvf.append_history("katdal.__version__=%s" % katdal.__version__)
+    uvf.append_history("katpoint.__version__=%s" % katpoint.__version__)
 
 def uv_history_selection(selection, uvf):
     """
