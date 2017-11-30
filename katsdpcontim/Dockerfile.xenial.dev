@@ -124,7 +124,7 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make install
 
-RUN pip install -U pkginfo
+RUN pip install -U pkginfo katversion
 
 # Install master katpoint
 ADD katsdpcontim/katpoint /src/katpoint
