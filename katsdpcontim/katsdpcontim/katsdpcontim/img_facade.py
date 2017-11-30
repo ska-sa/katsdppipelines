@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+from pretty import pretty
 
 import FArray
 import Image
@@ -100,6 +101,55 @@ def img_factory(**kwargs):
 
     img = open_img(aips_path, mode)
     return ImageFacade(img)
+
+OBITIMAGEMF_CTYPE = ["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES"]
+
+def obit_image_mf_planes(imgf):
+    """
+    Generator returning SPECLNMF planes of an ObitImageMF AIPS Image.
+
+    The CTYPE of an ObitImageMF AIPS Image looks like
+    :code:`["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES", "", ""]` and
+    respectively correspond to the l, m, spectral logarithmic and stokes parameters.
+
+    Parameters
+    ----------
+    imgf : :class:`ImageFacade`
+        Image facade
+
+    Yields
+    ------
+    np.ndarray
+        Numpy arrays of shape (l,m,stokes)
+
+    """
+    desc = imgf.Desc.Dict
+    inaxes = desc['inaxes']
+    ctype = [s.strip() for s in desc['ctype']]
+
+    if not ctype[:4] == OBITIMAGEMF_CTYPE:
+        raise ValueError("'%s' doesn't appear to be an ObitImageMF. "
+                        "Required CTYPE[:4] is '%s' "
+                        "but got '%s'.\n"
+                        "Descriptor is '%s'." % (
+                            imgf.aips_path, OBITIMAGEMF_CTYPE,
+                            ctype[:4], pretty(desc)))
+
+    l, m, speclnmf, stokes = inaxes[:4]
+
+    for slnmf in range(1, speclnmf+1):
+        imgs = []
+
+        for stokes in range(1, stokes+1):
+            # Obit plane selects on axis 2 and onwards.
+            # So we get the [l,m] axes by default.
+            plane = [slnmf,stokes,1,1,1]
+            imgf.GetPlane(None, plane)
+            imgs.append(imgf.np_farray.reshape(l,m).copy())
+
+        # Yield arrays stacked on stokes
+        yield np.stack(imgs, axis=2)
+
 
 class ImageFacade(object):
     def __init__(self, img, **kwargs):
@@ -209,8 +259,28 @@ class ImageFacade(object):
             self._tables["AIPS HI"].append(line)
 
     @property
+    def FArray(self):
+        return self._img.FArray
+
+    @property
+    def np_farray(self):
+        buf = FArray.PGetBuf(self._img.FArray)
+        return np.frombuffer(buf, count=-1, dtype=np.float32)
+
+    @property
     def tables(self):
         return self._tables
+
+    def Open(self, mode):
+        if self._img is None:
+            self.open_logic(self._aips_path, self._err)
+
+        self._img.Open(mode, self._err)
+        handle_obit_err("Error opening Image file '%s'" % self.name, self._err)
+
+    def GetPlane(self, array, plane):
+        self._img.GetPlane(array, plane, self._err)
+        handle_obit_err("Error getting plane '%s'" % plane, self._err)
 
     @property
     def Desc(self):
