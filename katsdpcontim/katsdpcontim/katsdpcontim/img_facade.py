@@ -79,14 +79,14 @@ def open_img(aips_path, mode=None):
 
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
+    err_msg = "Error opening '%s'" % aips_path
+
     try:
         img.Open(img_mode, err)
     except Exception:
-        raise (ValueError("Error opening '%s'" % aips_path),
-                None, sys.exc_info()[2])
+        raise (ValueError(err_msg), None, sys.exc_info()[2])
 
-
-    handle_obit_err("Error opening '%s'" % aips_path, err)
+    handle_obit_err(err_msg, err)
 
     return img
 
@@ -247,13 +247,17 @@ class ImageFacade(object):
 
         self._tables = {}
 
+        err_msg = "Exception closing image file '%s'" % self.name
+
         try:
             self._img.Close(self._err)
         except AttributeError:
             # Already closed
             return
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
 
-        handle_obit_err("Error closing Image file", self._err)
+        handle_obit_err(err_msg, self._err)
         self._clear_img()
 
     @property
@@ -299,7 +303,13 @@ class ImageFacade(object):
 
     @property
     def np_farray(self):
-        buf = FArray.PGetBuf(self.img.FArray)
+        try:
+            buf = FArray.PGetBuf(self.img.FArray)
+        except Exception:
+            raise (Exception("Exception getting float array buffer "
+                            " on image '%s'" % self.name),
+                                None, sys.exc_info()[2])
+
         return np.frombuffer(buf, count=-1, dtype=np.float32)
 
     @property
@@ -307,13 +317,25 @@ class ImageFacade(object):
         return self._tables
 
     def Open(self, mode):
-        self.img.Open(mode, self._err)
-        handle_obit_err("Error opening Image file '%s'" % self.name, self._err)
+        err_msg = "Error opening Image file '%s'" % self.name
+
+        try:
+            self.img.Open(mode, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def GetPlane(self, array, plane):
-        self.img.GetPlane(array, plane, self._err)
-        handle_obit_err("Error getting plane '%s' on file '%s'" % (plane, self.name),
-                                                                            self._err)
+        err_msg = ("Error getting plane '%s' "
+                    "from image '%s'" % (plane, self.name))
+
+        try:
+            self.img.GetPlane(array, plane, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     @property
     def Desc(self):
@@ -327,6 +349,12 @@ class ImageFacade(object):
         self.close()
 
     def Zap(self):
-        self.img.Zap(self._err)
+        err_msg = "Exception zapping image file '%s'" % self.name
+
+        try:
+            self.img.Zap(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
         handle_obit_err("Error deleting Image file '%s'" % self.name, self._err)
         self._clear_img()

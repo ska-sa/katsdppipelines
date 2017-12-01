@@ -307,6 +307,9 @@ class UVFacade(object):
         except AttributeError:
             # Closed
             return
+        except Exception:
+            raise (Exception("Exception closing uv file '%s'" % self.name),
+                                                    None, sys.exc_info()[2])
 
         handle_obit_err("Error closing uv file '%s'" % self.name, self._err)
         self._clear_uv()
@@ -389,23 +392,47 @@ class UVFacade(object):
         return np.frombuffer(self.uv.VisBuf, count=-1, dtype=np.float32)
 
     def Open(self, mode):
-        self.uv.Open(mode, self._err)
-        handle_obit_err("Error opening UV file '%s'" % self.name, self._err)
+        err_msg = "Error opening UV file '%s'" % self.name
+
+        try:
+            self.uv.Open(mode, self._err)
+        except Exception:
+            raise (Exception(err_msg, None, sys.exc_info()[2]))
+
+        handle_obit_err(err_msg, self._err)
 
     def Close(self):
         return self.close()
 
     def Read(self, firstVis=None):
-        self.uv.Read(self._err, firstVis=firstVis)
-        handle_obit_err("Error reading UV file '%s'" % self.name, self._err)
+        err_msg = "Error reading UV file '%s'" % self.name
+
+        try:
+            self.uv.Read(self._err, firstVis=firstVis)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def Write(self, firstVis=None):
-        self.uv.Write(self._err, firstVis=firstVis)
-        handle_obit_err("Error writing UV file '%s'" % self.name, self._err)
+        err_msg = "Error writing UV file '%s'" % self.name
+
+        try:
+            self.uv.Write(self._err, firstVis=firstVis)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def Zap(self):
-        self.uv.Zap(self._err)
-        handle_obit_err("Error deleting UV file '%s'" % self.name, self._err)
+        err_msg = "Error zapping UV file '%s'" % self.name
+
+        try:
+            self.uv.Zap(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
         self._clear_uv()
 
     def update_descriptor(self, descriptor):
@@ -423,9 +450,15 @@ class UVFacade(object):
         desc = uv.Desc.Dict
         desc.update(descriptor)
         uv.Desc.Dict = desc
-        uv.UpdateDesc(self._err)
-        handle_obit_err("Error updating UV Descriptor on '{}'"
-                        .format(self.name), self._err)
+
+        err_msg = "Error updating descriptor on UV file '%s'" % self.name
+
+        try:
+            uv.UpdateDesc(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def attach_CL_from_NX_table(self, max_ant_nr):
         """
@@ -437,6 +470,12 @@ class UVFacade(object):
         max_ant_nr : integer
             Maximum antenna number written to the AIPS AN table.
         """
-        UV.PTableCLfromNX(self.uv, max_ant_nr, self._err)
-        handle_obit_err("Error creating '%s' CL table from NX table"
-                        % self.name, self._err)
+        err_msg = ("Error creating CL table "
+                    "from NX table on UV file '%s'" % self.name)
+
+        try:
+            UV.PTableCLfromNX(self.uv, max_ant_nr, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
