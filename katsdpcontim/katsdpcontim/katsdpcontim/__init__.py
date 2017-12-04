@@ -11,7 +11,8 @@ from aips_path import AIPSPath
 
 from util import task_factory
 from configuration import get_config
-from katdal_adapter import KatdalAdapter
+from katdal_adapter import (KatdalAdapter,
+                        time_chunked_scans)
 from aips_table import (AIPSTable,
                         AIPSHistory)
 from uv_facade import (UVFacade,
