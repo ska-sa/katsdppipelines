@@ -34,7 +34,8 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         uv_history_obs_description,
                         uv_history_selection,
                         uv_factory)
-from katsdpcontim.util import parse_python_assigns
+from katsdpcontim.util import (parse_python_assigns,
+                        fractional_bandwidth)
 
 log = logging.getLogger('katsdpcontim')
 
@@ -227,7 +228,7 @@ with obit_context():
             blavg_firstVis += numVisBuff
             merge_firstVis += numVisBuff
 
-        # Record the ending visilibity
+        # Record the ending visibility
         # for this scan in the merge file
         nx_row['END VIS'] = [merge_firstVis-1]
 
@@ -252,11 +253,14 @@ with obit_context():
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
     mfimage_kwargs = uv_merge_path.task_input_kwargs()
-    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
+    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass="imaged", seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
+    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0)
 
-    mfimage = task_factory("MFImage", mfimage_cfg, taskLog='', prtLv=5,**mfimage_kwargs)
-    #mfimage.go()
+    log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
+
+    mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
+    mfimage.go()
 
     # Re-open and print empty calibration solutions
     merge_uvf = uv_factory(aips_path=uv_merge_path, mode='r',
