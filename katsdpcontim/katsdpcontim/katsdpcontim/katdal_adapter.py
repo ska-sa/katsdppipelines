@@ -5,6 +5,7 @@ import os
 import time
 
 import attr
+import six
 import numpy as np
 
 import UVDesc
@@ -96,6 +97,49 @@ def aips_catalogue(katdata):
 MEERKAT = 'MeerKAT'
 
 
+class _KatdalTransformer(object):
+    """
+    Small wrapper around a katdal data attribute.
+
+    Performs two functions
+
+    1. Transforms katdal data into AIPS format
+    2. Implements __getitem__ to proxy indexing calls
+       to the underlying katdal data attribute.
+
+    Basic idea is as follows:
+
+    .. code-block:: python
+
+        def __init__(self, ...):
+            time_xform = lambda idx: (K.timestamps[idx] - midnight) / 86400.0
+            self._time_xformer = _KatdalTransformer(time_xform,
+                                    shape=lambda: K.timestamps.shape,
+                                    dtype=K.timestamps.dtype)
+
+        @property
+        def timestamps(self):
+            return self._time_xformer
+    """
+    def __init__(self, transform, shape, dtype):
+        self._transform = transform
+        self._shape = shape
+        self._dtype = dtype
+
+    def __getitem__(self, index):
+        return self._transform(index)
+
+    @property
+    def shape(self):
+        return self._shape()
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    def __len__(self):
+        return self.shape[0]
+
 class KatdalAdapter(object):
     """
     Adapts a :class:`katdal.DataSet` to look
@@ -118,98 +162,92 @@ class KatdalAdapter(object):
         self._cache = {}
         self._catalogue = aips_catalogue(katds)
 
-    def uv_scans(self):
-        """
-        Generator returning vibility data for scan's selected
-        via the :meth:`KatdalAdapter.select` method.
-
-        Returns
-        -------
-        tuple
-            (u, v, w, time, baseline_index, source_id, visibilities)
-        """
-        cp = self.correlator_products()
-        nstokes = self.nstokes
-
-        # Lexicographically sort correlation products on (a1, a2, cid)
-        sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
-        cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
-        corr_products = np.asarray([cp[i] for i in cp_argsort])
-
-        # Take baseline products so that we don't recompute
-        # UVW coordinates for all correlator products
-        bl_products = corr_products.reshape(-1, nstokes)[:, 0]
-        nbl, = bl_products.shape
-
-        # AIPS baseline IDs
-        aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
-                                    dtype=np.float32)
-
-        # Get the AIPS visibility data shape (inaxes)
-        # reverse to go from FORTRAN to C ordering
-        fits_desc = self.fits_descriptor()
-        inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
-
-        # Useful constants
-        refwave = self.refwave
-        midnight = self.midnight
-
-        for si, state, target in self._katds.scans():
-            # Retrieve scan data (ntime, nchan, nbl*npol), casting to float32
-            # nbl*npol is all mixed up at this point
-            times = self._katds.timestamps[:]
-            vis = self._katds.vis[:].astype(np.complex64)
-            weights = self._katds.weights[:].astype(np.float32)
-            flags = self._katds.flags[:]
-
-            # Get dimension shapes
-            ntime, nchan, ncorrprods = vis.shape
+        def _vis_xformer(index):
+            """
+            Transform katdal visibilities indexed by ``index``
+            into AIPS visiblities.
+            """
+            vis = self._katds.vis[index]
+            weights = self._katds.weights[index]
+            flags = self._katds.flags[index]
 
             # Apply flags by negating weights
             weights[np.where(flags)] = -32767.0
+            return np.stack([vis.real, vis.imag, weights], axis=3)
 
-            # AIPS visibility is [real, imag, weight]
-            # Stacking gives us (ntime, nchan, nbl*npol, 3)
-            vis = np.stack([vis.real, vis.imag, weights], axis=3)
-            assert vis.shape == (ntime, nchan, ncorrprods, 3)
+        def _time_xformer(index):
+            """
+            Transform katdal timestamps indexed by ``index``
+            into AIPS timestamps. These are the Julian days
+            since midnight on the observation date
+            """
+            return (self._katds.timestamps[index] - self.midnight) / 86400.0
 
-            # Reorganise correlation product dim so that
-            # polarisations are grouped per baseline.
-            # Then reshape to separate the two dimensions
-            vis = vis[:, :, cp_argsort, :].reshape(
-                ntime, nchan, nbl, nstokes, 3)
+        # Convert katdal UVW into AIPS UVW
+        _u_xformer = lambda i: self._katds.u[i] / self.refwave
+        _v_xformer = lambda i: self._katds.v[i] / self.refwave
+        _w_xformer = lambda i: self._katds.w[i] / self.refwave
 
-            # (1) transpose so that we have (ntime, nbl, nchan, npol, 3)
-            # (2) reshape to include the full inaxes shape,
-            #     including singleton nif, ra and dec dimensions
-            vis = (vis.transpose(0, 2, 1, 3, 4)
-                      .reshape((ntime, nbl,) + inaxes))
+        # Set up the actual transformers
+        self._vis_xformer = _KatdalTransformer(_vis_xformer,
+                                            shape=lambda: self._katds.vis.shape,
+                                            dtype=self._katds.weights.dtype)
 
-            # Compute UVW coordinates from baselines
-            # (3, ntimes, nbl)
-            u, v, w = np.stack([target.uvw(bp.ant1, antenna=bp.ant2,
-                                           timestamp=times)
-                                for bp in bl_products], axis=2)
+        self._time_xformer = _KatdalTransformer(_time_xformer,
+                                            shape=lambda: self._katds.timestamps.shape,
+                                            dtype=self._katds.timestamps.dtype)
 
-            assert u.shape == v.shape == w.shape == (ntime, nbl)
+        self._u_xformer = _KatdalTransformer(_u_xformer,
+                                            shape=lambda: self._katds.u.shape,
+                                            dtype=self._katds.u.dtype)
+        self._v_xformer = _KatdalTransformer(_v_xformer,
+                                            shape=lambda: self._katds.u.shape,
+                                            dtype=self._katds.u.dtype)
+        self._w_xformer = _KatdalTransformer(_w_xformer,
+                                            shape=lambda: self._katds.u.shape,
+                                            dtype=self._katds.u.dtype)
 
-            # UVW coordinates in seconds
-            aips_u, aips_v, aips_w = (c / refwave for c in (u, v, w))
-            # Convert difference between timestep and
-            # midnight on observation date to days.
-            # This, combined with (probably) JDObs in the
-            # UV descriptor, givens the Julian Date in days
-            # of the visibility.
-            aips_time = (times - midnight) / 86400.0
+    @property
+    def uv_timestamps(self):
+        """ Returns times in Julian days since midnight on the Observation Date """
+        return self._time_xformer
 
-            ti = self._katds.target_indices
-            assert len(ti) == 1
-            aips_target = self._catalogue[ti[0]]
+    @property
+    def uv_vis(self):
+        return self._vis_xformer
 
-            # Yield this scan's data
-            yield si, (aips_u, aips_v, aips_w,
-                       aips_time, aips_baselines, aips_target,
-                       vis)
+    @property
+    def uv_u(self):
+        """ U coordinate in seconds """
+        return self._u_xformer
+
+    @property
+    def uv_v(self):
+        """ V coordinate in seconds """
+        return self._v_xformer
+
+    @property
+    def uv_w(self):
+        """ W coordinate in seconds """
+        return self._w_xformer
+
+    def scans(self):
+        """
+        Generator iterating through scans in an observation.
+        Proxies :meth:`katdal.Dataset.scans`.
+
+        Yields
+        ------
+        scan_index : int
+            Scan index
+        state : str
+            State
+        aips_source : dict
+            AIPS Source
+
+        """
+        for si, state, target in self._katds.scans():
+            yield si, state, self._catalogue[self.target_indices[0]]
 
     def _antenna_map(self):
         """
@@ -792,3 +830,159 @@ class KatdalAdapter(object):
         desc.update({'nrparm': len(ptype), 'ptype': ptype})
 
         return desc
+
+def time_chunked_scans(kat_adapter, time_step=2):
+    """
+    Generator returning vibility data each scan, chunked
+    on the time dimensions in chunks of ``time_step``.
+    Internally, this iterates through :code:`kat_adapter.scan()`
+    to produce a :code:`(si, state, source, data_gen)` tuple,
+    where :code:`si` is the scan index, :code:`state` the state
+    of the scan and :code:`source` the AIPS source dictionary.
+    :code:`data_gen` is itself a generator that yields
+    :code:`time_step` chunks of the data.
+
+    Parameters
+    ----------
+    kat_adapter : `KatdalAdapter`
+        Katdal Adapter
+    time_step : integer
+        Size of time chunks (Default 2).
+        2 timesteps x 32768 channels x 2016 baselines x 4 stokes x 8 bytes
+        works out to about ~3.9375 GB
+
+    Yields
+    ------
+    si : int
+        Scan index
+    state : str
+        Scan state
+    aips source : dict
+        Dictionary describing AIPS source
+    data_gen : generator
+        Generator yielding (u, v, w, time, baseline_index, visibilities)
+        where :code:`len(time) <= time_step`
+    """
+    cp = kat_adapter.correlator_products()
+    nstokes = kat_adapter.nstokes
+
+    # Lexicographically sort correlation products on (a1, a2, cid)
+    sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+    cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
+    corr_products = np.asarray([cp[i] for i in cp_argsort])
+
+    # Use first stokes parameter index of each baseline
+    bl_argsort = cp_argsort[::nstokes]
+
+    # Take baseline products so that we don't recompute
+    # UVW coordinates for all correlator products
+    bl_products = corr_products.reshape(-1, nstokes)[:, 0]
+    nbl, = bl_products.shape
+
+    # AIPS baseline IDs
+    aips_baselines = np.asarray([bp.aips_bl_ix for bp in bl_products],
+                                dtype=np.float32)
+
+    # Get the AIPS visibility data shape (inaxes)
+    # reverse to go from FORTRAN to C ordering
+    fits_desc = kat_adapter.fits_descriptor()
+    inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
+
+    def _get_data(time_start, time_end):
+        """
+        Retrieve data for the given time index range.
+
+        Parameters
+        ----------
+        time_start : integer
+            Start time index for this scan
+        time_end : integer
+            Ending time index for this scan
+
+        Returns
+        -------
+        u : np.ndarray
+            AIPS baseline U coordinates
+        v : np.ndarray
+            AIPS baseline V coordinates
+        w : np.ndarray
+            AIPS baseline W coordinates
+        time : np.ndarray
+            AIPS timestamp
+        baselines : np.ndarray
+            AIPS baselines id's
+        vis : np.ndarray
+            AIPS visibilities
+        """
+        _, nchan, ncorrprods = kat_adapter.shape
+        ntime = time_end - time_start
+
+        chunk_shape = (ntime,nchan,ncorrprods)
+        cplx_size = np.dtype('complex64').itemsize
+        vis_size_estimate = np.product(chunk_shape, dtype=np.int64)*cplx_size
+
+        FOUR_GB = 4*1024**3
+
+        if vis_size_estimate > FOUR_GB:
+            log.warn("Visibility chunk '%s' is greater than '%s'. "
+                    "Check that sufficient memory is available"
+                    % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
+
+        # Retrieve scan data (ntime, nchan, nbl*nstokes)
+        # nbl*nstokes is all mixed up at this point
+        aips_time = kat_adapter.uv_timestamps[time_start:time_end]
+        aips_vis = kat_adapter.uv_vis[time_start:time_end]
+        aips_u = kat_adapter.uv_u[time_start:time_end]
+        aips_v = kat_adapter.uv_v[time_start:time_end]
+        aips_w = kat_adapter.uv_w[time_start:time_end]
+
+        # Check dimension shapes
+        assert aips_vis.dtype == np.float32
+        assert aips_time.dtype == np.float64
+        assert aips_u.dtype == np.float64
+        assert aips_v.dtype == np.float64
+        assert aips_w.dtype == np.float64
+        assert (ntime,) == aips_time.shape
+        assert (ntime, nchan, ncorrprods, 3) == aips_vis.shape
+        assert (ntime, ncorrprods) == aips_u.shape
+        assert (ntime, ncorrprods) == aips_v.shape
+        assert (ntime, ncorrprods) == aips_w.shape
+
+        # Reorganise correlation product dim so that
+        # correlations are grouped per baseline.
+        # Then reshape to separate the two dimensions
+        aips_vis = aips_vis[:, :, cp_argsort, :].reshape(
+            ntime, nchan, nbl, nstokes, 3)
+
+        # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
+        # (2) reshape to include the full inaxes shape,
+        #     including singleton nif, ra and dec dimensions
+        aips_vis = (aips_vis.transpose(0, 2, 1, 3, 4)
+                  .reshape((ntime, nbl,) + inaxes))
+
+        # Select UVW coordinate of each baseline
+        aips_u = aips_u[:,bl_argsort]
+        aips_v = aips_v[:,bl_argsort]
+        aips_w = aips_w[:,bl_argsort]
+
+        assert aips_u.shape == (ntime, nbl)
+        assert aips_v.shape == (ntime, nbl)
+        assert aips_w.shape == (ntime, nbl)
+
+        # Yield this scan's data
+        return (aips_u, aips_v, aips_w,
+                   aips_time, aips_baselines,
+                   aips_vis)
+
+    # Iterate through scans
+    for si, state, target in kat_adapter.scans():
+        # Work out the data shape
+        ntime, nchan, ncorrprods = kat_adapter.shape
+
+        # Create a generator returning data
+        # associated with chunks of time data.
+        data_gen = (_get_data(ts, min(ts+time_step, ntime)) for ts
+                                in six.moves.range(0, ntime, time_step))
+
+        # Yield scan variables and the generator
+        yield si, state, target, data_gen
