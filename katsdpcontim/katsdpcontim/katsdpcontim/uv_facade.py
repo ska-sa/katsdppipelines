@@ -1,5 +1,6 @@
 import logging
 from textwrap import TextWrapper
+import sys
 
 import six
 import numpy as np
@@ -67,20 +68,33 @@ def open_uv(aips_path, nvispio=1024, mode=None):
     exists = False  # Test if the file exists
 
     if aips_path.dtype == "AIPS":
-        uv = UV.newPAUV(aips_path.label, aips_path.name,
-                        aips_path.aclass, aips_path.disk,
-                        aips_path.seq, exists, err, nvis=nvispio)
+        try:
+            uv = UV.newPAUV(aips_path.label, aips_path.name,
+                            aips_path.aclass, aips_path.disk,
+                            aips_path.seq, exists, err, nvis=nvispio)
+        except Exception:
+            raise (ValueError("Error calling newPAUV on '%s'" % aips_path),
+                                                None, sys.exc_info()[2])
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFUV calls do not currently work")
 
-        uv = UV.newPFUV(aips_path.label, aips_path.name, aips_path.disk,
-                        exists, err, nvis=nvispio)
+        try:
+            uv = UV.newPFUV(aips_path.label, aips_path.name, aips_path.disk,
+                            exists, err, nvis=nvispio)
+        except Exception:
+            raise (ValueError("Error calling newPFUV on '%s'" % aips_path),
+                                                None, sys.exc_info()[2])
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
-    uv.Open(uv_mode, err)
+    try:
+        uv.Open(uv_mode, err)
+    except Exception:
+        raise (ValueError("Error opening '%s'" % aips_path),
+                None, sys.exc_info()[2])
+
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
     return uv
@@ -224,6 +238,19 @@ class UVFacade(object):
         self._open_logic(uv, err, **kwargs)
 
     def _open_logic(self, uv, err, **kwargs):
+        """
+        Peforms logic for opening a UV file
+
+        * Opening the UV File if given an AIPS path.
+        * Setting up the AIPS Path if given a UV file.
+        * Open any Tables attached to the UV file.
+
+        Parameters
+        ----------
+        uv: :class:`UV` or :class:`AIPSPath`
+            Either a Obit UV object or an AIPSPath describing it
+        """
+
         # Given an AIPSPath. open it.
         if isinstance(uv, AIPSPath):
             self._aips_path = uv
@@ -275,9 +302,33 @@ class UVFacade(object):
 
         self._tables = {}
 
-        self._uv.Close(self._err)
-        handle_obit_err("Error closing uv file", self._err)
+        try:
+            self._uv.Close(self._err)
+        except AttributeError:
+            # Closed
+            return
+        except Exception:
+            raise (Exception("Exception closing uv file '%s'" % self.name),
+                                                    None, sys.exc_info()[2])
+
+        handle_obit_err("Error closing uv file '%s'" % self.name, self._err)
         self._clear_uv()
+
+    @property
+    def uv(self):
+        """
+        The Obit :class:`UV.UV` object encapsulated in the :class:`UVFacade`.
+
+        Returns
+        -------
+        :class:`UV.UV`
+        """
+        try:
+            return self._uv
+        except AttributeError:
+            self._open_logic(self._aips_path, self._err)
+
+        return self._uv
 
     def _clear_uv(self):
         """
@@ -291,8 +342,6 @@ class UVFacade(object):
             del self._uv
         except AttributeError:
             pass
-
-        self._uv = None
 
     def __enter__(self):
         return self
@@ -315,7 +364,7 @@ class UVFacade(object):
         return self._tables
 
     def attach_table(self, name, version, **kwargs):
-        self._tables[name] = AIPSTable(self._uv, name, version, 'r',
+        self._tables[name] = AIPSTable(self.uv, name, version, 'r',
                                        self._err, **kwargs)
 
     @property
@@ -328,41 +377,62 @@ class UVFacade(object):
 
     @property
     def Desc(self):
-        return self._uv.Desc
+        return self.uv.Desc
 
     @property
     def List(self):
-        return self._uv.List
+        return self.uv.List
 
     @property
     def VisBuf(self):
-        return self._uv.VisBuf
+        return self.uv.VisBuf
 
     @property
     def np_visbuf(self):
-        return np.frombuffer(self._uv.VisBuf, count=-1, dtype=np.float32)
+        return np.frombuffer(self.uv.VisBuf, count=-1, dtype=np.float32)
 
     def Open(self, mode):
-        if self._uv is None:
-            self.open_logic(self._aips_path, self._err)
+        err_msg = "Error opening UV file '%s'" % self.name
 
-        self._uv.Open(mode, self._err)
-        handle_obit_err("Error opening UV file '%s'" % self.name, self._err)
+        try:
+            self.uv.Open(mode, self._err)
+        except Exception:
+            raise (Exception(err_msg, None, sys.exc_info()[2]))
+
+        handle_obit_err(err_msg, self._err)
 
     def Close(self):
         return self.close()
 
     def Read(self, firstVis=None):
-        self._uv.Read(self._err, firstVis=firstVis)
-        handle_obit_err("Error reading UV file '%s'" % self.name, self._err)
+        err_msg = "Error reading UV file '%s'" % self.name
+
+        try:
+            self.uv.Read(self._err, firstVis=firstVis)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def Write(self, firstVis=None):
-        self._uv.Write(self._err, firstVis=firstVis)
-        handle_obit_err("Error writing UV file '%s'" % self.name, self._err)
+        err_msg = "Error writing UV file '%s'" % self.name
+
+        try:
+            self.uv.Write(self._err, firstVis=firstVis)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def Zap(self):
-        self._uv.Zap(self._err)
-        handle_obit_err("Error deleting UV file '%s'" % self.name, self._err)
+        err_msg = "Error zapping UV file '%s'" % self.name
+
+        try:
+            self.uv.Zap(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
         self._clear_uv()
 
     def update_descriptor(self, descriptor):
@@ -375,12 +445,20 @@ class UVFacade(object):
             Dictionary containing updates applicable to
             :code:`uv.Desc.Dict`.
         """
-        desc = self._uv.Desc.Dict
+        uv = self.uv
+
+        desc = uv.Desc.Dict
         desc.update(descriptor)
-        self._uv.Desc.Dict = desc
-        self._uv.UpdateDesc(self._err)
-        handle_obit_err("Error updating UV Descriptor on '{}'"
-                        .format(self.name), self._err)
+        uv.Desc.Dict = desc
+
+        err_msg = "Error updating descriptor on UV file '%s'" % self.name
+
+        try:
+            uv.UpdateDesc(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def attach_CL_from_NX_table(self, max_ant_nr):
         """
@@ -392,6 +470,12 @@ class UVFacade(object):
         max_ant_nr : integer
             Maximum antenna number written to the AIPS AN table.
         """
-        UV.PTableCLfromNX(self._uv, max_ant_nr, self._err)
-        handle_obit_err("Error creating '%s' CL table from NX table"
-                        % self.name, self._err)
+        err_msg = ("Error creating CL table "
+                    "from NX table on UV file '%s'" % self.name)
+
+        try:
+            UV.PTableCLfromNX(self.uv, max_ant_nr, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)

@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import numpy as np
 from pretty import pretty
@@ -57,21 +58,35 @@ def open_img(aips_path, mode=None):
     exists = False  # Test if the file exists
 
     if aips_path.dtype == "AIPS":
-        img = Image.newPAImage(aips_path.label, aips_path.name,
-                        aips_path.aclass, aips_path.disk,
-                        aips_path.seq, exists, err)
+        try:
+            img = Image.newPAImage(aips_path.label, aips_path.name,
+                            aips_path.aclass, aips_path.disk,
+                            aips_path.seq, exists, err)
+        except Exception:
+            raise (ValueError("Error calling newPAImage on '%s'" % aips_path),
+                                None, sys.exc_info()[2])
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFImage calls do not currently work")
 
-        img = Image.newPFImage(aips_path.label, aips_path.name, aips_path.disk,
-                        exists, err)
+        try:
+            img = Image.newPFImage(aips_path.label, aips_path.name, aips_path.disk,
+                            exists, err)
+        except Exception:
+            raise (ValueError("Error calling newPFImage on '%s'" % aips_path),
+                                None, sys.exc_info()[2])
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
-    img.Open(img_mode, err)
-    handle_obit_err("Error opening '%s'" % aips_path, err)
+    err_msg = "Error opening '%s'" % aips_path
+
+    try:
+        img.Open(img_mode, err)
+    except Exception:
+        raise (ValueError(err_msg), None, sys.exc_info()[2])
+
+    handle_obit_err(err_msg, err)
 
     return img
 
@@ -157,6 +172,14 @@ class ImageFacade(object):
         self._open_logic(img, err, **kwargs)
 
     def _open_logic(self, img, err, **kwargs):
+        """
+        Peforms logic for opening a Image file
+
+        * Opening the Image File if given an AIPS path.
+        * Setting up the AIPS Path if given a Image file.
+        * Open any Tables attached to the Image file.
+        """
+
         # Given an AIPSPath. open it.
         if isinstance(img, AIPSPath):
             self._aips_path = img
@@ -204,7 +227,7 @@ class ImageFacade(object):
         return self._tables
 
     def attach_table(self, name, version, **kwargs):
-        self._tables[name] = AIPSTable(self._uv, name, version, 'r',
+        self._tables[name] = AIPSTable(self.img, name, version, 'r',
                                        self._err, **kwargs)
 
     @property
@@ -224,9 +247,27 @@ class ImageFacade(object):
 
         self._tables = {}
 
-        self._img.Close(self._err)
-        handle_obit_err("Error closing Image file", self._err)
+        err_msg = "Exception closing image file '%s'" % self.name
+
+        try:
+            self._img.Close(self._err)
+        except AttributeError:
+            # Already closed
+            return
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
         self._clear_img()
+
+    @property
+    def img(self):
+        try:
+            return self._img
+        except AttributeError:
+            self._open_logic(self._aips_path, self._err)
+
+        return self._img
 
     def _clear_img(self):
         """
@@ -240,8 +281,6 @@ class ImageFacade(object):
             del self._img
         except AttributeError:
             pass
-
-        self._img = None
 
     def __enter__(self):
         return self
@@ -260,11 +299,17 @@ class ImageFacade(object):
 
     @property
     def FArray(self):
-        return self._img.FArray
+        return self.img.FArray
 
     @property
     def np_farray(self):
-        buf = FArray.PGetBuf(self._img.FArray)
+        try:
+            buf = FArray.PGetBuf(self.img.FArray)
+        except Exception:
+            raise (Exception("Exception getting float array buffer "
+                            " on image '%s'" % self.name),
+                                None, sys.exc_info()[2])
+
         return np.frombuffer(buf, count=-1, dtype=np.float32)
 
     @property
@@ -272,28 +317,44 @@ class ImageFacade(object):
         return self._tables
 
     def Open(self, mode):
-        if self._img is None:
-            self.open_logic(self._aips_path, self._err)
+        err_msg = "Error opening Image file '%s'" % self.name
 
-        self._img.Open(mode, self._err)
-        handle_obit_err("Error opening Image file '%s'" % self.name, self._err)
+        try:
+            self.img.Open(mode, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     def GetPlane(self, array, plane):
-        self._img.GetPlane(array, plane, self._err)
-        handle_obit_err("Error getting plane '%s'" % plane, self._err)
+        err_msg = ("Error getting plane '%s' "
+                    "from image '%s'" % (plane, self.name))
+
+        try:
+            self.img.GetPlane(array, plane, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
+        handle_obit_err(err_msg, self._err)
 
     @property
     def Desc(self):
-        return self._img.Desc
+        return self.img.Desc
 
     @property
     def List(self):
-        return self._img.List
+        return self.img.List
 
     def Close(self):
         self.close()
 
     def Zap(self):
-        self._img.Zap(self._err)
+        err_msg = "Exception zapping image file '%s'" % self.name
+
+        try:
+            self.img.Zap(self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+
         handle_obit_err("Error deleting Image file '%s'" % self.name, self._err)
         self._clear_img()
