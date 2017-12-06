@@ -1,6 +1,7 @@
 import ast
 import logging
 
+from pretty import pretty
 import six
 
 from katsdpcontim.aips_parser import obit_config_from_aips
@@ -119,6 +120,43 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
                 raise
 
     return task
+
+def fractional_bandwidth(uv_desc):
+    """
+    Returns the fractional bandwidth, given a uv descriptor dictionary
+
+    Parameters
+    ----------
+    uv_desc : dict
+        UV descriptor
+
+    Returns
+    -------
+    float
+        fractional bandwidth
+    """
+    try:
+        ctypes = uv_desc['ctype']
+    except KeyError:
+        raise KeyError("The following UV descriptor is missing "
+                        "a 'ctype': %s" % pretty(uv_desc))
+
+    ctypes = [ct.strip() for ct in ctypes]
+
+    try:
+        freq_idx = ctypes.index('FREQ')
+    except ValueError:
+        raise ValueError("The following UV descriptor is missing "
+                        "FREQ in it's 'ctype' field: %s" % pretty(uv_desc))
+
+    freq_crval = uv_desc['crval'][freq_idx]
+    freq_cdelt = uv_desc['cdelt'][freq_idx]
+    freq_naxis = uv_desc['inaxes'][freq_idx]
+
+    f1 = freq_crval
+    f2 = freq_crval + freq_naxis*freq_cdelt
+
+    return 2.0*(f2 - f1) / (f2 + f1)
 
 def fmt_bytes(nbytes):
     """ Returns a human readable string, given the number of bytes """
