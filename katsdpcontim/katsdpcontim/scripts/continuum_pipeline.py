@@ -253,7 +253,7 @@ with obit_context():
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
     mfimage_kwargs = uv_merge_path.task_input_kwargs()
-    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
+    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass="imaged", seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0)
 
