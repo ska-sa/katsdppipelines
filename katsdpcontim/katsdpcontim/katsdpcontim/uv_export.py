@@ -98,7 +98,6 @@ def uv_history_selection(selection, uvf):
     for k,v in selection.items():
         uvf.append_history("%s=%s" % (k,v))
 
-
 def uv_export(kat_adapter, uvf):
     """
     Exports data in a katdal selection to an AIPS/FITS file.
@@ -139,9 +138,15 @@ def uv_export(kat_adapter, uvf):
         source_name = aips_source["SOURCE"][0].strip()
         source_id = aips_source["ID. NO."][0]
 
+        # Starting visibility of this scan
+        start_vis = firstVis
+
+        scan_start = kat_adapter.uv_timestamps[0]
+        scan_end = kat_adapter.uv_timestamps[-1]
+
         # Start and end of the scan
-        start = OTObit.day2dhms(kat_adapter.uv_timestamps[0])
-        end = OTObit.day2dhms(kat_adapter.uv_timestamps[-1])
+        start = OTObit.day2dhms(scan_start)
+        end = OTObit.day2dhms(scan_end)
 
         # Size of the scan
         nbytes = fmt_bytes(kat_adapter.size)
@@ -151,8 +156,6 @@ def uv_export(kat_adapter, uvf):
 
         # Retrieve observational data from the data generator
         for u, v, w, time, baselines, vis in data_gen:
-            # Starting visibility of this scan
-            start_vis = firstVis
             vis_buffer = np.frombuffer(uvf.VisBuf, count=-1, dtype=np.float32)
 
             ntime, nbl = u.shape
@@ -172,8 +175,8 @@ def uv_export(kat_adapter, uvf):
 
                     # Flatten visibilities for buffer write
                     flat_vis = vis[t, bl].ravel()
-                    vis_buffer[idx + nrparm:idx +
-                               nrparm + flat_vis.size] = flat_vis
+                    vis_idx = idx + nrparm
+                    vis_buffer[vis_idx:vis_idx + flat_vis.size] = flat_vis
 
                     numVisBuff += 1
 
@@ -182,14 +185,14 @@ def uv_export(kat_adapter, uvf):
                         firstVis, numVisBuff = _write_buffer(
                             uvf, firstVis, numVisBuff, lrec)
 
-            # Write out any remaining visibilities
-            if numVisBuff > 0:
-                firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff, lrec)
+        # Write out any remaining visibilities
+        if numVisBuff > 0:
+            firstVis, numVisBuff = _write_buffer(uvf, firstVis, numVisBuff, lrec)
 
         # Create an index for this scan
         nx_rows.append({
-            'TIME': [(time[-1] + time[0]) / 2],  # Time Centroid
-            'TIME INTERVAL': [time[-1] - time[0]],
+            'TIME': [(scan_start + scan_end) / 2],  # Time Centroid
+            'TIME INTERVAL': [scan_end - scan_start],
             'SOURCE ID': [source_id],
             # Should match 'AIPS AN' table version
             # Each AN table defines a subarray
@@ -204,3 +207,4 @@ def uv_export(kat_adapter, uvf):
     uvf.tables["AIPS NX"].rows = nx_rows
     uvf.tables["AIPS NX"].write()
     uvf.attach_CL_from_NX_table(kat_adapter.max_antenna_number)
+
