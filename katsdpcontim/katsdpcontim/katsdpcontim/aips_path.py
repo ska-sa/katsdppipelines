@@ -1,7 +1,61 @@
 import os
 
+from katsdpcontim import obit_err
+
+from AIPSDir import PHiSeq, PTestCNO
+from OSystem import PGetAIPSuser
+
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
+def _highest_seq_nr(name, disk, aclass, label):
+    """
+    Returns the highest sequence number
+
+    Parameters
+    ----------
+    name : str
+        AIPS name
+    disk : integer
+        AIPS disk
+    aclass : str
+        AIPS class
+    label : str
+        AIPS label
+
+    Returns
+    -------
+    integer
+        Highest sequence number
+    """
+
+    return PHiSeq(Aname=name, user=PGetAIPSuser(),
+                    disk=disk, Aclass=aclass,
+                    Atype=label, err=obit_err())
+
+def _catalogue_entry_exists(name, disk, aclass, seq, label):
+    """
+    Returns True if catalogue entry exists for the supplied arguments.
+
+    Parameters
+    ----------
+    name : str
+        AIPS name
+    disk : integer
+        AIPS disk
+    aclass : str
+        AIPS class
+    seq : integer
+        AIPS sequence number
+    label : str
+        AIPS label
+
+    Returns
+    -------
+    bool
+        True if catalogue entry exists
+
+    """
+    return PTestCNO(disk, PGetAIPSuser(), name, aclass, label, seq, obit_err())
 
 def _check_disk_type(dtype, check=True):
     """
@@ -54,7 +108,8 @@ class AIPSPath(object):
         aclass (optional): string
             AIPS file class
         seq (optional): integer
-            AIPS file sequence number
+            AIPS file sequence number. If None or less than 1,
+            the next available sequence number will be selected.
         label (optional): string
             AIPS label
         dtype (optional): string
@@ -66,12 +121,20 @@ class AIPSPath(object):
             dtype = "AIPS"
 
         if label is None:
-            label = "katuv"
+            label = "UV"
 
         if dtype == "AIPS":
             # Provide sensible defaults for missing class and sequence
             self._aclass = "default" if aclass is None else aclass
-            self._seq = 1 if seq is None else seq
+
+            if seq is None or seq < 1:
+                seq = _highest_seq_nr(name, disk, aclass, label)
+
+                if _catalogue_entry_exists(name, disk, aclass, seq, label):
+                    seq += 1
+
+            self._seq = seq
+
         elif dtype == "FITS":
             # FITS file don't have class or sequences,
             # just provide something sensible
@@ -168,7 +231,6 @@ class AIPSPath(object):
             return "%s on FITS %d" % (self._name, self._disk)
         else:
             _check_disk_type(self._dtype, False)
-
 
     def task_input_kwargs(self):
         """

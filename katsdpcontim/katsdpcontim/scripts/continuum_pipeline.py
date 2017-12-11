@@ -52,10 +52,13 @@ def create_parser():
     return parser
 
 args = create_parser().parse_args()
-KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
-uv_merge_path = KA.aips_path(aclass='merge', seq=1)
 
 with obit_context():
+    KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
+    uv_merge_path = KA.aips_path(aclass='merge', seq=None)
+
+    log.info("Exporting to '%s'" % uv_merge_path)
+
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
     merge_uvf = None
@@ -253,9 +256,11 @@ with obit_context():
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
     mfimage_kwargs = uv_merge_path.task_input_kwargs()
-    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass="imaged", seq=None))
+    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
+    mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name=None, aclass=None, seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
-    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0)
+    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
+                          Niter=10)
 
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 

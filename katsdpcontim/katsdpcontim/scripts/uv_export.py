@@ -17,14 +17,18 @@ from katsdpcontim.util import parse_python_assigns
 
 def create_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("katdata", help="hdf5 observation file")
-    parser.add_argument("-l", "--label", default="MeerKAT")
-    parser.add_argument("-n", "--name", help="AIPS name")
-    parser.add_argument("-c", "--class", default="raw", dest="aclass",
+    parser.add_argument("katdata", help="hdf5 observation file", type=str)
+    parser.add_argument("-l", "--label", default="MeerKAT", type=str)
+    parser.add_argument("-n", "--name", help="AIPS name", type=str)
+    parser.add_argument("-c", "--class", default="raw",
+                                        type=str,
+                                        dest="aclass",
                                         help="AIPS class")
     parser.add_argument("-d", "--disk", default=1,
+                                        type=int,
                                         help="AIPS disk")
-    parser.add_argument("-s", "--seq", default=1,
+    parser.add_argument("-s", "--seq", default=None,
+                                        type=int,
                                         help="AIPS sequence")
     parser.add_argument("--nvispio", default=1024,
                                      type=int,
