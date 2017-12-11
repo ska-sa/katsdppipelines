@@ -29,7 +29,8 @@ import katdal
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
-                        UVFacade, task_factory,
+                        task_factory,
+                        img_factory,
                         uv_export,
                         uv_history_obs_description,
                         uv_history_selection,
@@ -42,6 +43,8 @@ log = logging.getLogger('katsdpcontim')
 def create_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("katdata", help="Katdal observation file")
+    parser.add_argument("-d", "--disk", default=1, type=int,
+                                        help="AIPS disk")
     parser.add_argument("--nvispio", default=1024, type=int)
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
                                         type=parse_python_assigns,
@@ -80,6 +83,27 @@ with obit_context():
     global_desc = KA.uv_descriptor()
     global_table_cmds = KA.default_table_cmds()
     scan_indices = [int(i) for i in KA.scan_indices]
+
+    def _output_filenames(KA):
+        """
+        Guess MFImage output files names
+        For each source, MFImage outputs UV data and a CLEAN file.
+        """
+
+        # Source names
+        uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
+
+        uv_files = [AIPSPath(name=s, disk=args.disk, aclass="MFImag",
+                                                seq=None, label="UV")
+                                                        for s in uv_sources]
+
+        clean_files = [AIPSPath(name=s, disk=args.disk, aclass="IClean",
+                                                seq=None, label="MA")
+                                                    for s in uv_sources]
+
+        return uv_files, clean_files
+
+    uv_files, clean_files = _output_filenames(KA)
 
     # FORTRAN indexing
     merge_firstVis = 1
@@ -260,17 +284,22 @@ with obit_context():
     mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name=None, aclass=None, seq=None))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
-                          Niter=10)
+                          Niter=1)
 
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
     mfimage.go()
 
-    # Re-open and print empty calibration solutions
-    merge_uvf = uv_factory(aips_path=uv_merge_path, mode='r',
-                                    nvispio=args.nvispio)
+    for uv_file in uv_files:
+        with uv_factory(aips_path=uv_file, mode='r') as uvf:
+            log.info("'%s' calibration solutions" % uv_file)
+            log.info(pretty(uvf.tables["AIPS CL"].rows))
 
-    log.info("Calibration Solutions")
+    for clean_file in clean_files:
+        with img_factory(aips_path=clean_file, mode='r') as cf:
+            log.info("'%s' Clean components" % clean_file)
+            log.info(pretty(cf.tables["AIPS CC"].rows))
+
     #log.info(pretty(merge_uvf.tables["AIPS CL"].rows))
     merge_uvf.close()
