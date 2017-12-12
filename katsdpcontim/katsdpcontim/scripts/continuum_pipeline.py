@@ -56,6 +56,10 @@ def create_parser():
 
 args = create_parser().parse_args()
 
+# Standard MFImage output classes for UV and CLEAN images
+UV_CLASS = "MFImag"
+IMG_CLASS = "IClean"
+
 with obit_context():
     KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
     uv_merge_path = KA.aips_path(aclass='merge', seq=None)
@@ -86,18 +90,18 @@ with obit_context():
 
     def _output_filenames(KA):
         """
-        Guess MFImage output files names
+        Infer MFImage output files names
         For each source, MFImage outputs UV data and a CLEAN file.
         """
 
         # Source names
         uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
 
-        uv_files = [AIPSPath(name=s, disk=args.disk, aclass="MFImag",
+        uv_files = [AIPSPath(name=s, disk=args.disk, aclass=UV_CLASS,
                                                 seq=None, atype="UV")
-                                                        for s in uv_sources]
+                                                    for s in uv_sources]
 
-        clean_files = [AIPSPath(name=s, disk=args.disk, aclass="IClean",
+        clean_files = [AIPSPath(name=s, disk=args.disk, aclass=IMG_CLASS,
                                                 seq=None, atype="MA")
                                                     for s in uv_sources]
 
@@ -277,14 +281,16 @@ with obit_context():
     # Close merge file
     merge_uvf.close()
 
+    uv_seq = max(f.seq for f in uv_files)
+    clean_seq = max(f.seq for f in clean_files)
+
     # Run MFImage task on merged file,
     # using no-self calibration config options (mfimage_nosc.in)
     mfimage_kwargs = uv_merge_path.task_input_kwargs()
-    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name=None, aclass=None, seq=None))
-    mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name=None, aclass=None, seq=None))
+    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name='', aclass=IMG_CLASS, seq=clean_seq))
+    mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name='', aclass=UV_CLASS, seq=uv_seq))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
-    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
-                          Niter=1)
+    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0)
 
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
@@ -293,13 +299,26 @@ with obit_context():
 
     for uv_file in uv_files:
         with uv_factory(aips_path=uv_file, mode='r') as uvf:
-            log.info("'%s' calibration solutions" % uv_file)
-            log.info(pretty(uvf.tables["AIPS CL"].rows))
+            try:
+                sntab = uvf.tables["AIPS SN"]
+            except KeyError:
+                log.info("No calibration solutions in '%s'" % uv_file)
+            else:
+                log.info("'%s' calibration solutions" % uv_file)
+                log.info(pretty(sntab.rows))
+
+        uvf.Zap()
 
     for clean_file in clean_files:
         with img_factory(aips_path=clean_file, mode='r') as cf:
-            log.info("'%s' Clean components" % clean_file)
-            log.info(pretty(cf.tables["AIPS CC"].rows))
+            try:
+                cctab = cf.tables["AIPS CC"]
+            except KeyError:
+                log.info("No clean components in '%s'" % clean_file)
+            else:
+                log.info("'%s' Clean components" % clean_file)
+                log.info(pretty(cctab.rows))
+        cf.Zap()
 
-    #log.info(pretty(merge_uvf.tables["AIPS CL"].rows))
+
     merge_uvf.close()
