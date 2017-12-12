@@ -32,9 +32,10 @@ def _highest_seq_nr(name, disk, aclass, atype):
                     disk=disk, Aclass=aclass,
                     Atype=atype, err=obit_err())
 
-def _catalogue_entry_exists(name, disk, aclass, seq, atype):
+def _catalogue_entry(name, disk, aclass, seq, atype):
     """
-    Returns True if catalogue entry exists for the supplied arguments.
+    Returns catalogue entry if it exists for the supplied arguments,
+    otherwise -1
 
     Parameters
     ----------
@@ -51,8 +52,8 @@ def _catalogue_entry_exists(name, disk, aclass, seq, atype):
 
     Returns
     -------
-    bool
-        True if catalogue entry exists
+    integer
+        catalogue entry, else -1 if it does not exist
 
     """
     return PTestCNO(disk=disk, user=PGetAIPSuser(),
@@ -138,8 +139,10 @@ class AIPSPath(object):
 
             if seq is None or seq < 1:
                 seq = _highest_seq_nr(name, disk, aclass, atype)
+                cno = _catalogue_entry(name, disk, aclass, seq, atype)
 
-                if _catalogue_entry_exists(name, disk, aclass, seq, atype):
+                # Choose next highest seq nr if no catalogue entry exists
+                if not cno == -1:
                     seq += 1
 
             self._seq = seq
