@@ -20,10 +20,11 @@ import os.path
 from os.path import join as pjoin
 import sys
 
-import pkg_resources
-import six
 import numpy as np
+import pkg_resources
 from pretty import pprint, pretty
+import psutil
+import six
 
 import katdal
 
@@ -291,6 +292,8 @@ with obit_context():
     mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name='', aclass=UV_CLASS, seq=uv_seq))
     mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0)
+    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
+                          nThreads=psutil.cpu_count(logical=True))
 
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
