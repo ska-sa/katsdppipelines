@@ -262,7 +262,8 @@ class KatdalAdapter(object):
 
 
     def aips_path(self, name=None, disk=None, aclass=None,
-                         seq=None, label=None, dtype=None):
+                         seq=None, atype=None,
+                         label=None, dtype=None):
         """
         Constructs an aips path from a :class:`KatdalAdapter`
 
@@ -280,6 +281,9 @@ class KatdalAdapter(object):
         if dtype is None:
             dtype = "AIPS"
 
+        if atype is None:
+            atype = "UV"
+
         if name is None:
             path, file = os.path.split(self.katdal.name)
             name, ext = os.path.splitext(file)
@@ -291,7 +295,8 @@ class KatdalAdapter(object):
             disk = 1
 
         return AIPSPath(name=name, disk=disk, aclass=aclass,
-                        seq=seq, label=label, dtype=dtype)
+                        seq=seq, label=label,
+                        atype=atype, dtype=dtype)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """

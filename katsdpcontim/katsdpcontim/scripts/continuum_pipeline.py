@@ -94,11 +94,11 @@ with obit_context():
         uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
 
         uv_files = [AIPSPath(name=s, disk=args.disk, aclass="MFImag",
-                                                seq=None, label="UV")
+                                                seq=None, atype="UV")
                                                         for s in uv_sources]
 
         clean_files = [AIPSPath(name=s, disk=args.disk, aclass="IClean",
-                                                seq=None, label="MA")
+                                                seq=None, atype="MA")
                                                     for s in uv_sources]
 
         return uv_files, clean_files

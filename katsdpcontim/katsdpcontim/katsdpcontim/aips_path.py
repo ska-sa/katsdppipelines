@@ -7,7 +7,7 @@ from OSystem import PGetAIPSuser
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
-def _highest_seq_nr(name, disk, aclass, label):
+def _highest_seq_nr(name, disk, aclass, atype):
     """
     Returns the highest sequence number
 
@@ -19,8 +19,8 @@ def _highest_seq_nr(name, disk, aclass, label):
         AIPS disk
     aclass : str
         AIPS class
-    label : str
-        AIPS label
+    atype : str
+        AIPS type
 
     Returns
     -------
@@ -30,9 +30,9 @@ def _highest_seq_nr(name, disk, aclass, label):
 
     return PHiSeq(Aname=name, user=PGetAIPSuser(),
                     disk=disk, Aclass=aclass,
-                    Atype=label, err=obit_err())
+                    Atype=atype, err=obit_err())
 
-def _catalogue_entry_exists(name, disk, aclass, seq, label):
+def _catalogue_entry_exists(name, disk, aclass, seq, atype):
     """
     Returns True if catalogue entry exists for the supplied arguments.
 
@@ -46,8 +46,8 @@ def _catalogue_entry_exists(name, disk, aclass, seq, label):
         AIPS class
     seq : integer
         AIPS sequence number
-    label : str
-        AIPS label
+    atype : str
+        AIPS type
 
     Returns
     -------
@@ -55,7 +55,9 @@ def _catalogue_entry_exists(name, disk, aclass, seq, label):
         True if catalogue entry exists
 
     """
-    return PTestCNO(disk, PGetAIPSuser(), name, aclass, label, seq, obit_err())
+    return PTestCNO(disk=disk, user=PGetAIPSuser(),
+        Aname=name, Aclass=aclass, Atype=atype, seq=seq,
+        err=obit_err())
 
 def _check_disk_type(dtype, check=True):
     """
@@ -95,7 +97,8 @@ class AIPSPath(object):
     """
 
     def __init__(self, name, disk, aclass=None,
-                 seq=None, label=None, dtype=None):
+                 seq=None, atype=None,
+                 label=None, dtype=None):
         """
         Constructs an :class:`AIPSPath`.
 
@@ -110,10 +113,13 @@ class AIPSPath(object):
         seq (optional): integer
             AIPS file sequence number. If None or less than 1,
             the next available sequence number will be selected.
+        atype (optional): str
+            AIPS file type. Typically either 'UV' or 'MA' for
+            UV or Image data, respectively. Defaults to 'UV'
         label (optional): string
             AIPS label
         dtype (optional): string
-            Disk type. Should be "AIPS" or "FITS".
+            Data type. Should be "AIPS" or "FITS".
             Defaults to "AIPS" if not provided.
 
         """
@@ -121,16 +127,19 @@ class AIPSPath(object):
             dtype = "AIPS"
 
         if label is None:
-            label = "UV"
+            label = "katuv"
+
+        if atype is None:
+            atype = "UV"
 
         if dtype == "AIPS":
             # Provide sensible defaults for missing class and sequence
-            self._aclass = "default" if aclass is None else aclass
+            self._aclass = "aips" if aclass is None else aclass
 
             if seq is None or seq < 1:
-                seq = _highest_seq_nr(name, disk, aclass, label)
+                seq = _highest_seq_nr(name, disk, aclass, atype)
 
-                if _catalogue_entry_exists(name, disk, aclass, seq, label):
+                if _catalogue_entry_exists(name, disk, aclass, seq, atype):
                     seq += 1
 
             self._seq = seq
@@ -144,22 +153,24 @@ class AIPSPath(object):
             _check_disk_type(dtype, False)
 
         self._label = label
+        self._atype = atype
         self._dtype = dtype
         self._name = name
         self._disk = disk
 
     def copy(self, name=None, disk=None, aclass=None,
-             seq=None, label=None, dtype=None):
+             seq=None, atype=None, label=None, dtype=None):
         """
         Returns a copy of this object. Supplied parameters can
         override properties transferred to the new object.
         """
-        return AIPSPath(self._name if name is None else name,
-                        self._disk if disk is None else disk,
-                        self._aclass if aclass is None else aclass,
-                        self._seq if seq is None else seq,
-                        self._label if label is None else label,
-                        self._dtype if dtype is None else dtype)
+        return AIPSPath(name=self._name if name is None else name,
+                        disk=self._disk if disk is None else disk,
+                        aclass=self._aclass if aclass is None else aclass,
+                        seq=self._seq if seq is None else seq,
+                        atype=self._atype if atype is None else atype,
+                        label=self._label if label is None else label,
+                        dtype=self._dtype if dtype is None else dtype)
 
     @property
     def name(self):
@@ -213,6 +224,16 @@ class AIPSPath(object):
         self._seq = value
 
     @property
+    def atype(self):
+        """ AIPS type """
+        return self._atype
+
+    @atype.setter
+    def atype(self, value):
+        """ AIPS type """
+        self._atype = value
+
+    @property
     def label(self):
         """ File label """
         return self._label
@@ -225,10 +246,10 @@ class AIPSPath(object):
     def __str__(self):
         """ String representation """
         if self._dtype == "AIPS":
-            return "%s.%s.%s on AIPS %d" % (self._name, self._aclass,
-                                            self._seq, self._disk)
+            return "%s.%s.%s.%s on AIPS %d" % (self._name, self._aclass,
+                                            self._atype, self._seq, self._disk)
         elif self._dtype == "FITS":
-            return "%s on FITS %d" % (self._name, self._disk)
+            return "%s.%s on FITS %d" % (self._name, self._atype, self._disk)
         else:
             _check_disk_type(self._dtype, False)
 
