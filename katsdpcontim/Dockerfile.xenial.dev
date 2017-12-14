@@ -134,6 +134,10 @@ RUN pip install -e /src/katpoint
 ADD katsdpcontim/katdal /src/katdal
 RUN pip install -e /src/katdal
 
+# Install katsdpcontim package
+ADD katsdpcontim/katsdptelstate /src/katsdptelstate
+RUN pip install -e /src/katsdptelstate
+
 # Install katim
 ADD . /src/katsdppipelines
 RUN pip install -e /src/katsdppipelines/Obit-pipeline

@@ -22,6 +22,7 @@ Clone the following repositories:
 
     # git clone git@github.com:ska-sa/katpoint.git
     # git clone git@github.com:ska-sa/katdal.git
+    # git clone git@github.com:ska-sa/katsdptelstate.git
 
 Also, checkout the Obit source code @ revision ``574``.
 
