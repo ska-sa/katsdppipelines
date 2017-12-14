@@ -8,13 +8,13 @@ Basic version of the continuum imaging pipeline.
         on scan UV file to produce blavg UV file.
     (c) Merges blavg UV file into global merge file.
 (3) Runs MFImage Obit task on global merge file.
-(4) Prints calibration solutions
+(4) Writes calibration solutions and clean components to telstate
 """
-
 
 import argparse
 import collections
 from copy import deepcopy
+import json
 import logging
 import os.path
 from os.path import join as pjoin
@@ -27,6 +27,7 @@ import psutil
 import six
 
 import katdal
+from katsdptelstate import TelescopeState
 
 import katsdpcontim
 from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
@@ -54,6 +55,9 @@ def create_parser():
                                              "assignment statements to python "
                                              "literals, separated by semi-colons")
     return parser
+
+# Backed by a fake REDIS server
+telstate = TelescopeState()
 
 args = create_parser().parse_args()
 
@@ -89,9 +93,9 @@ with obit_context():
     global_table_cmds = KA.default_table_cmds()
     scan_indices = [int(i) for i in KA.scan_indices]
 
-    def _output_filenames(KA):
+    def _source_info(KA):
         """
-        Infer MFImage output files names
+        Infer MFImage source names and file  outputs for each sources.
         For each source, MFImage outputs UV data and a CLEAN file.
         """
 
@@ -106,9 +110,9 @@ with obit_context():
                                                 seq=None, atype="MA")
                                                     for s in uv_sources]
 
-        return uv_files, clean_files
+        return uv_sources, uv_files, clean_files
 
-    uv_files, clean_files = _output_filenames(KA)
+    uv_sources, uv_files, clean_files = _source_info(KA)
 
     # FORTRAN indexing
     merge_firstVis = 1
@@ -300,27 +304,90 @@ with obit_context():
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
     mfimage.go()
 
-    for uv_file in uv_files:
-        with uv_factory(aips_path=uv_file, mode='r') as uvf:
+    # AIPS Table entries follow this kind of schema where data
+    # is stored in singleton lists, while book-keeping entries
+    # are not.
+    # { 'DELTAX' : [1.4], 'NumFields' : 4, 'Table name' : 'AIPS CC' }
+    # Strip out book-keeping keys and flatten lists
+    DROP = { "Table name", "NumFields", "_status" }
+    def _condition(row):
+        """ Flatten singleton lists and drop book-keeping keys """
+        return { k: v[0] for k, v in row.items() if k not in DROP }
+
+    # Create a view based on the experiment ID
+    # TODO(sjperkins) Replace with capture block ID
+    ts_view = telstate.view(str(KA.experiment_id))
+
+    # MFImage outputs a UV file per source.  Iterate through each source:
+    # (1) Extract complex gains from attached "AIPS SN" table
+    # (2) Write them to telstate
+    for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
+        target = "target%04d" % si
+
+        # Create contexts
+        uvf_ctx = uv_factory(aips_path=uv_file, mode='r')
+        json_ctx = open(target + "-solutions.json", "w")
+
+        with uvf_ctx as uvf, json_ctx as json_f:
             try:
                 sntab = uvf.tables["AIPS SN"]
             except KeyError:
-                log.info("No calibration solutions in '%s'" % uv_file)
+                log.warn("No calibration solutions in '%s'" % uv_file)
             else:
-                log.info("'%s' calibration solutions" % uv_file)
-                log.info(pretty(sntab.rows))
+                # Handle cases for single/dual pol gains
+                if "REAL2" in sntab.rows[0]:
+                    def _extract_gains(row):
+                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
+                                         row["REAL2"] + 1j*row["IMAG2"]])
+                else:
+                    def _extract_gains(row):
+                        return np.array([row["REAL1"] + 1j*row["IMAG1"]])
+
+                # Write each complex gain out per antenna
+                for row in (_condition(r) for r in sntab.rows):
+                    # Convert time back from AIPS to katdal UTC
+                    time = row["TIME"]*86400.0 + KA.midnight
+                    # Convert from AIPS FORTRAN indexing to katdal C indexing
+                    ant = "m%04d-gains" % (row["ANTENNA NO."]-1)
+
+                    # Store complex gain in telstate
+                    key = ts_view.SEPARATOR.join((target,ant))
+                    ts_view.add(key, _extract_gains(row), ts=time)
+
+                    # Dump each row to file
+                    json.dump(row, json_f)
+                    json_f.write("\n")
 
         uvf.Zap()
 
-    for clean_file in clean_files:
-        with img_factory(aips_path=clean_file, mode='r') as cf:
+    # MFImage outputs a CLEAN image per source.  Iterate through each source:
+    # (1) Extract clean components from attached "AIPS CC" table
+    # (2) Write them to telstate
+    for si, (clean_file, uv_source) in enumerate(zip(clean_files, uv_sources)):
+        target = "target%04d" % si
+
+        # Create contexts
+        img_ctx = img_factory(aips_path=clean_file, mode='r')
+        json_ctx = open(target + "-clean.json", "w")
+
+        with img_ctx as cf, json_ctx as json_f:
             try:
                 cctab = cf.tables["AIPS CC"]
             except KeyError:
-                log.info("No clean components in '%s'" % clean_file)
+                log.warn("No clean components in '%s'" % clean_file)
             else:
-                log.info("'%s' Clean components" % clean_file)
-                log.info(pretty(cctab.rows))
+                # Condition all rows up front
+                rows = [_condition(r) for r in cctab.rows]
+
+                # Store them in telstate
+                key = ts_view.SEPARATOR.join((target, "clean-components"))
+                ts_view.add(key, rows)
+
+                # Dump each row to file
+                for row in rows:
+                    json.dump(row, json_f)
+                    json_f.write("\n")
+
         cf.Zap()
 
 
