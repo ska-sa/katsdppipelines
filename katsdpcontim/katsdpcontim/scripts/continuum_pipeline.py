@@ -382,8 +382,8 @@ with obit_context():
     # MFImage outputs a CLEAN image per source.  Iterate through each source:
     # (1) Extract clean components from attached "AIPS CC" table
     # (2) Write them to telstate
-    it = enumerate(zip(clean_files, uv_sources, target_indices)):
-    for si, (clean_file, uv_source, ti) in it
+    it = enumerate(zip(clean_files, uv_sources, target_indices))
+    for si, (clean_file, uv_source, ti) in it:
         target = "target%d" % si
 
         # Create contexts
