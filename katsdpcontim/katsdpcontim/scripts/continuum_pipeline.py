@@ -53,6 +53,11 @@ def create_parser():
                                         help="Capture Block ID. Unique identifier "
                                              "for the observation on which the "
                                              "continuum pipeline is run.")
+    parser.add_argument("-sbid", "--sub-band-id", default=0, type=int,
+                                        help="Sub-band ID. Unique integer "
+                                             "identifier for the sub-band "
+                                             "on which the continuum pipeline "
+                                             "is run.")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
                                         type=parse_python_assigns,
                                         help="katdal select statement "
