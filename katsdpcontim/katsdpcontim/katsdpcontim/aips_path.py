@@ -97,46 +97,43 @@ class AIPSPath(object):
     or sequences, these are defaulted to "fits" and 1, respectively.
     """
 
-    def __init__(self, name, disk, aclass=None,
-                 seq=None, atype=None,
-                 label=None, dtype=None):
+    def __init__(self, name, disk=1, aclass="aips",
+                 seq=None, atype="UV",
+                 label="katuv", dtype="AIPS"):
         """
         Constructs an :class:`AIPSPath`.
 
         Parameters
         ----------
-        name: string
+        name : string
             File name
-        disk: integer
-            Disk on which the file is located
-        aclass (optional): string
-            AIPS file class
-        seq (optional): integer
+        disk (optional) : integer
+            Disk on which the file is located. Defaults to 1.
+        aclass (optional) : string
+            AIPS file class.
+        seq (optional) : integer
             AIPS file sequence number. If None or less than 1,
             the next available sequence number will be selected.
-        atype (optional): str
+            Defaults to None.
+        atype (optional) : str
             AIPS file type. Typically either 'UV' or 'MA' for
             UV or Image data, respectively. Defaults to 'UV'
-        label (optional): string
-            AIPS label
-        dtype (optional): string
+        label (optional) : string
+            AIPS label. Defaults to 'katuv'.
+        dtype (optional) : string
             Data type. Should be "AIPS" or "FITS".
             Defaults to "AIPS" if not provided.
 
         """
-        if dtype is None:
-            dtype = "AIPS"
-
-        if label is None:
-            label = "katuv"
-
-        if atype is None:
-            atype = "UV"
+        self.name = name
+        self.disk = disk
+        self.aclass = aclass
+        self.label = label
+        self.atype = atype
+        self.dtype = dtype
 
         if dtype == "AIPS":
-            # Provide sensible defaults for missing class and sequence
-            self.aclass = "aips" if aclass is None else aclass
-
+            # Provide sensible default  for missing sequence
             if seq is None or seq < 1:
                 seq = _highest_seq_nr(name, disk, aclass, atype)
                 cno = _catalogue_entry(name, disk, aclass, seq, atype)
@@ -146,7 +143,6 @@ class AIPSPath(object):
                     seq += 1
 
             self.seq = seq
-
         elif dtype == "FITS":
             # FITS file don't have class or sequences,
             # just provide something sensible
@@ -155,11 +151,6 @@ class AIPSPath(object):
         else:
             _check_disk_type(dtype, False)
 
-        self.label = label
-        self.atype = atype
-        self.dtype = dtype
-        self.name = name
-        self.disk = disk
 
     def copy(self, name=None, disk=None, aclass=None,
              seq=None, atype=None, label=None, dtype=None):

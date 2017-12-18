@@ -261,9 +261,7 @@ class KatdalAdapter(object):
                            in enumerate(sorted(self._katds.ants)))
 
 
-    def aips_path(self, name=None, disk=None, aclass=None,
-                         seq=None, atype=None,
-                         label=None, dtype=None):
+    def aips_path(self, **kwargs):
         """
         Constructs an aips path from a :class:`KatdalAdapter`
 
@@ -278,11 +276,8 @@ class KatdalAdapter(object):
         :class:`AIPSPath`
             AIPS path describing this observation
         """
-        if dtype is None:
-            dtype = "AIPS"
-
-        if atype is None:
-            atype = "UV"
+        name = kwargs.pop('name', None)
+        dtype = kwargs.get('dtype', "AIPS")
 
         if name is None:
             path, file = os.path.split(self.katdal.name)
@@ -291,12 +286,7 @@ class KatdalAdapter(object):
             if dtype == "FITS":
                 name += '.uvfits'
 
-        if disk is None:
-            disk = 1
-
-        return AIPSPath(name=name, disk=disk, aclass=aclass,
-                        seq=seq, label=label,
-                        atype=atype, dtype=dtype)
+        return AIPSPath(name=name, **kwargs)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """
