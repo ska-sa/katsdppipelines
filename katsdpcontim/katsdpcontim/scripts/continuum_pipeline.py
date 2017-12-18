@@ -392,7 +392,7 @@ with obit_context():
                 rows = [_condition(r) for r in cctab.rows]
 
                 # Store them in telstate
-                key = ts_view.SEPARATOR.join((target, "clean-components"))
+                key = ts_view.SEPARATOR.join((target, "clean_components"))
                 ts_view.add(key, rows)
 
                 # Dump each row to file
