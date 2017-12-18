@@ -34,7 +34,7 @@ def post_process_args(args, kat_adapter):
         args.capture_block_id = kat_adapter.experiment_id
 
         log.warn("No capture block ID was specified. "
-                "Using experiment_id '%s' instead." % kat_adapter.experiment_id)
+                "Using experiment_id '%s' instead.", kat_adapter.experiment_id)
 
     return args
 
@@ -103,8 +103,7 @@ def parse_python_assigns(assign_str):
                 for stmt in ast.parse(assign_str, mode='single').body
                 for target in stmt.targets}
     except Exception as e:
-        log.exception("Exception parsing assignment string "
-                      "'{}'".format(assign_str))
+        log.exception("Exception parsing assignment string '%s'", assign_str)
         raise e
 
 
@@ -170,8 +169,8 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         except AttributeError as e:
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
-                log.warn("Key '{}' is not valid for this "
-                         "task and will be ignored".format(k))
+                log.warn("Key '%s is not valid for this "
+                         "task and will be ignored", k)
             else:
                 raise
 

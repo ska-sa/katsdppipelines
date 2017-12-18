@@ -45,9 +45,8 @@ def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     uvf.Desc.Dict = desc
 
     nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
-    log.debug("Writing '{}' visibilities. "
-             "firstVis={} numVisBuff={}.".format(
-                fmt_bytes(nbytes), firstVis, numVisBuff))
+    log.debug("Writing '%s visibilities. firstVis=%s numVisBuff=%s",
+                            fmt_bytes(nbytes), firstVis, numVisBuff)
 
     # If firstVis is passed through to this method, it uses FORTRAN
     # indexing (1)
@@ -151,8 +150,8 @@ def uv_export(kat_adapter, uvf):
         # Size of the scan
         nbytes = fmt_bytes(kat_adapter.size)
 
-        log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'" %
-                                    (start, end, si, nbytes, source_name))
+        log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'",
+                                    start, end, si, nbytes, source_name)
 
         # Retrieve observational data from the data generator
         for u, v, w, time, baselines, vis in data_gen:

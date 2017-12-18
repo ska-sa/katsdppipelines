@@ -78,7 +78,7 @@ IMG_CLASS = "IClean"
 with obit_context():
     KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
     uv_merge_path = KA.aips_path(aclass='merge', seq=None)
-    log.info("Exporting to '%s'" % uv_merge_path)
+    log.info("Exporting to '%s'", uv_merge_path)
 
     # Perform argument postprocessing
     args = post_process_args(args, KA)
@@ -144,7 +144,7 @@ with obit_context():
         # Get path, with sequence based on scan index
         scan_path = uv_merge_path.copy(aclass='raw', seq=si)
 
-        log.info("Creating '%s'" % scan_path)
+        log.info("Creating '%s'", scan_path)
 
         # Create a UV file for the scan
         with uv_factory(aips_path=scan_path, mode="w",
@@ -171,7 +171,7 @@ with obit_context():
         blavg_kwargs.update(blavg_params)
 
         log.info("Time-dependent baseline averaging "
-                "'%s' to '%s'" % (scan_path, blavg_path))
+                "'%s' to '%s'", scan_path, blavg_path)
 
         blavg = task_factory("UVBlAvg", **blavg_kwargs)
         blavg.go()
@@ -212,7 +212,7 @@ with obit_context():
         # have integration time as an additional random parameter
         # so the merged file will need to take this into account.
         if merge_uvf is None:
-            log.info("Creating '%s'" % uv_merge_path)
+            log.info("Creating '%s'",  uv_merge_path)
 
             # Use the FQ table rows and keywords to create
             # the merge UV file.
@@ -256,7 +256,7 @@ with obit_context():
         # for this scan in the merge file
         nx_row['START VIS'] = [merge_firstVis]
 
-        log.info("Merging '%s' into '%s'" % (blavg_path, uv_merge_path))
+        log.info("Merging '%s' into '%s'", blavg_path, uv_merge_path)
 
         for blavg_firstVis in six.moves.range(1, blavg_nvis+1, args.nvispio):
             # How many visibilities do we write in this iteration?
@@ -289,9 +289,9 @@ with obit_context():
         merge_uvf.tables["AIPS NX"].rows.append(nx_row)
 
         # Remove scan and baseline averaged files once merged
-        log.info("Zapping '%s'" % scan_uvf.aips_path)
+        log.info("Zapping '%s'", scan_uvf.aips_path)
         scan_uvf.Zap()
-        log.info("Zapping '%s'" % blavg_uvf.aips_path)
+        log.info("Zapping '%s'", blavg_uvf.aips_path)
         blavg_uvf.Zap()
 
     # Write the index table
@@ -348,7 +348,7 @@ with obit_context():
             try:
                 sntab = uvf.tables["AIPS SN"]
             except KeyError:
-                log.warn("No calibration solutions in '%s'" % uv_file)
+                log.warn("No calibration solutions in '%s'", uv_file)
             else:
                 # Handle cases for single/dual pol gains
                 if "REAL2" in sntab.rows[0]:
@@ -394,7 +394,7 @@ with obit_context():
             try:
                 cctab = cf.tables["AIPS CC"]
             except KeyError:
-                log.warn("No clean components in '%s'" % clean_file)
+                log.warn("No clean components in '%s'", clean_file)
             else:
                 # Condition all rows up front
                 rows = [_condition(r) for r in cctab.rows]
