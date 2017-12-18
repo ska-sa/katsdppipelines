@@ -396,7 +396,7 @@ with obit_context():
 
                 # Store them in telstate
                 key = ts_view.SEPARATOR.join((target, "clean_components"))
-                ts_view.add(key, rows)
+                ts_view.add(key, rows, immutable=True)
 
                 # Dump each row to file
                 for row in rows:
