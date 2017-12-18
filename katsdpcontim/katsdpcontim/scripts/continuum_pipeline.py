@@ -128,6 +128,8 @@ with obit_context():
         return uv_sources, uv_files, clean_files
 
     uv_sources, uv_files, clean_files = _source_info(KA)
+    target_indices = KA.target_indices
+    assert len(target_indices) == len(uv_sources)
 
     # FORTRAN indexing
     merge_firstVis = 1
@@ -380,7 +382,8 @@ with obit_context():
     # MFImage outputs a CLEAN image per source.  Iterate through each source:
     # (1) Extract clean components from attached "AIPS CC" table
     # (2) Write them to telstate
-    for si, (clean_file, uv_source) in enumerate(zip(clean_files, uv_sources)):
+    it = enumerate(zip(clean_files, uv_sources, target_indices)):
+    for si, (clean_file, uv_source, ti) in it
         target = "target%d" % si
 
         # Create contexts
@@ -396,9 +399,13 @@ with obit_context():
                 # Condition all rows up front
                 rows = [_condition(r) for r in cctab.rows]
 
+                # Extract description
+                description = KA.katdal.catalogue.targets[ti].description
+                data = { 'description': description, 'components': rows }
+
                 # Store them in telstate
                 key = ts_view.SEPARATOR.join((target, "clean_components"))
-                ts_view.add(key, rows, immutable=True)
+                ts_view.add(key, data, immutable=True)
 
                 # Dump each row to file
                 for row in rows:
