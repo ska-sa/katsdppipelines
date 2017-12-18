@@ -53,6 +53,8 @@ def create_parser():
                                         help="Capture Block ID. Unique identifier "
                                              "for the observation on which the "
                                              "continuum pipeline is run.")
+    parser.add_argument("-ts", "--telstate-server", default='', type=str,
+                                        help="Address of the telstate server")
     parser.add_argument("-sbid", "--sub-band-id", default=0, type=int,
                                         help="Sub-band ID. Unique integer "
                                              "identifier for the sub-band "
@@ -66,10 +68,8 @@ def create_parser():
                                              "literals, separated by semi-colons")
     return parser
 
-# Backed by a fake REDIS server
-telstate = TelescopeState()
-
 args = create_parser().parse_args()
+
 
 # Standard MFImage output classes for UV and CLEAN images
 UV_CLASS = "MFImag"
@@ -82,6 +82,9 @@ with obit_context():
 
     # Perform argument postprocessing
     args = post_process_args(args, KA)
+
+    # Backed by a fake REDIS server
+    telstate = TelescopeState(args.telstate_server)
 
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
