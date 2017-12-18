@@ -20,17 +20,17 @@ def parse_python_assigns(assign_str):
     .. code-block:: python
 
         h5 = katdal.open('123456789.h5')
-        kwargs = parse_python_assigns("spw=3; scans=[1,2];
-                                      targets='bpcal,radec'")
+        kwargs = parse_python_assigns("spw=3; scans=[1,2];"
+                                      "targets='bpcal,radec';"
+                                      "channels=slice(0,2048)")
         h5.select(**kwargs)
 
     Parameters
     ----------
     assign_str: str
-        Assignment string. Should only contain
-        assignment statements assigning
-        python literal values to names,
-        separated by semi-colons.
+        Assignment string. Should only contain assignment statements
+	assigning python literals or calls to builtin calls, to variable names.
+        Multiple assignment statements should be separated by semi-colons.
 
     Returns
     -------
@@ -39,14 +39,43 @@ def parse_python_assigns(assign_str):
         assignment results.
     """
 
+    import __builtin__
+
     if not assign_str:
         return {}
 
+    def _eval_value(stmt_value):
+        # If the statement value is a call to a builtin, try evaluate it
+        if isinstance(stmt_value, ast.Call):
+            func_name = stmt_value.func.id
+
+            if not func_name in dir(__builtin__):
+                raise ValueError("'%s' is not a builtin function '%s'" % func_name)
+            else:
+                # Recursively pass arguments through this same function
+                if stmt_value.args is not None:
+                    args = tuple(_eval_value(a) for a in stmt_value.args)
+                else:
+                    args = ()
+
+                # Recursively pass keyword arguments through this same function
+                if stmt_value.kwargs is not None:
+                    kwargs = {_eval_value(k) : _eval_value(v) for k, v
+                                        in stmt_value.kwargs.items()}
+                else:
+                    kwargs = {}
+
+                return getattr(__builtin__, func_name)(*args, **kwargs)
+        # Try a literal eval
+        else:
+            return ast.literal_eval(stmt_value)
+
+
     try:
-        return {target.id: ast.literal_eval(stmt.value)
+        return {target.id: _eval_value(stmt.value)
                 for stmt in ast.parse(assign_str, mode='single').body
                 for target in stmt.targets}
-    except SyntaxError as e:
+    except Exception as e:
         log.exception("Exception parsing assignment string "
                       "'{}'".format(assign_str))
         raise e
