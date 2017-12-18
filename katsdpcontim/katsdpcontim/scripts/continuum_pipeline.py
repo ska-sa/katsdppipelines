@@ -38,6 +38,7 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         uv_history_selection,
                         uv_factory)
 from katsdpcontim.util import (parse_python_assigns,
+                        post_process_args,
                         fractional_bandwidth)
 
 log = logging.getLogger('katsdpcontim')
@@ -48,6 +49,10 @@ def create_parser():
     parser.add_argument("-d", "--disk", default=1, type=int,
                                         help="AIPS disk")
     parser.add_argument("--nvispio", default=1024, type=int)
+    parser.add_argument("-cbid", "--capture-block-id", default=None, type=str,
+                                        help="Capture Block ID. Unique identifier "
+                                             "for the observation on which the "
+                                             "continuum pipeline is run.")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
                                         type=parse_python_assigns,
                                         help="katdal select statement "
@@ -68,8 +73,10 @@ IMG_CLASS = "IClean"
 with obit_context():
     KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
     uv_merge_path = KA.aips_path(aclass='merge', seq=None)
-
     log.info("Exporting to '%s'" % uv_merge_path)
+
+    # Perform argument postprocessing
+    args = post_process_args(args, KA)
 
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
@@ -314,9 +321,8 @@ with obit_context():
         """ Flatten singleton lists and drop book-keeping keys """
         return { k: v[0] for k, v in row.items() if k not in DROP }
 
-    # Create a view based on the experiment ID
-    # TODO(sjperkins) Replace with capture block ID
-    ts_view = telstate.view(str(KA.experiment_id))
+    # Create a view based the capture block ID
+    ts_view = telstate.view(args.capture_block_id)
 
     # MFImage outputs a UV file per source.  Iterate through each source:
     # (1) Extract complex gains from attached "AIPS SN" table
