@@ -56,7 +56,7 @@ def parse_python_assigns(assign_str):
     ----------
     assign_str: str
         Assignment string. Should only contain assignment statements
-	assigning python literals or calls to builtin calls, to variable names.
+        assigning python literals or calls to builtin calls, to variable names.
         Multiple assignment statements should be separated by semi-colons.
 
     Returns
@@ -77,7 +77,7 @@ def parse_python_assigns(assign_str):
             func_name = stmt_value.func.id
 
             if not func_name in dir(__builtin__):
-                raise ValueError("'%s' is not a builtin function '%s'" % func_name)
+                raise ValueError("'%s' is not a builtin function" % func_name)
             else:
                 # Recursively pass arguments through this same function
                 if stmt_value.args is not None:
