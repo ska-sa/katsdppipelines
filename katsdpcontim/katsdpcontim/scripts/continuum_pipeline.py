@@ -331,7 +331,7 @@ with obit_context():
         return { k: v[0] for k, v in row.items() if k not in DROP }
 
     # Create a view based the capture block ID
-    view = '_'.join((args.capture_block_id, "sub_band_%d" % args.sub_band_id))
+    view = '_'.join((args.capture_block_id, "sub_band%d" % args.sub_band_id))
     ts_view = telstate.view(view)
 
     # MFImage outputs a UV file per source.  Iterate through each source:
