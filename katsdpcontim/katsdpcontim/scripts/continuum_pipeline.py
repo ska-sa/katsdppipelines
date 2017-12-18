@@ -360,7 +360,7 @@ with obit_context():
                     # Convert time back from AIPS to katdal UTC
                     time = row["TIME"]*86400.0 + KA.midnight
                     # Convert from AIPS FORTRAN indexing to katdal C indexing
-                    ant = "m%04d-gains" % (row["ANTENNA NO."]-1)
+                    ant = "m%03d_gains" % (row["ANTENNA NO."]-1)
 
                     # Store complex gain in telstate
                     key = ts_view.SEPARATOR.join((target,ant))
