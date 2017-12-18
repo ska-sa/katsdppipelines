@@ -135,7 +135,7 @@ class AIPSPath(object):
 
         if dtype == "AIPS":
             # Provide sensible defaults for missing class and sequence
-            self._aclass = "aips" if aclass is None else aclass
+            self.aclass = "aips" if aclass is None else aclass
 
             if seq is None or seq < 1:
                 seq = _highest_seq_nr(name, disk, aclass, atype)
@@ -145,21 +145,21 @@ class AIPSPath(object):
                 if not cno == -1:
                     seq += 1
 
-            self._seq = seq
+            self.seq = seq
 
         elif dtype == "FITS":
             # FITS file don't have class or sequences,
             # just provide something sensible
-            self._aclass = "fits"
-            self._seq = 1
+            self.aclass = "fits"
+            self.seq = 1
         else:
             _check_disk_type(dtype, False)
 
-        self._label = label
-        self._atype = atype
-        self._dtype = dtype
-        self._name = name
-        self._disk = disk
+        self.label = label
+        self.atype = atype
+        self.dtype = dtype
+        self.name = name
+        self.disk = disk
 
     def copy(self, name=None, disk=None, aclass=None,
              seq=None, atype=None, label=None, dtype=None):
@@ -167,94 +167,23 @@ class AIPSPath(object):
         Returns a copy of this object. Supplied parameters can
         override properties transferred to the new object.
         """
-        return AIPSPath(name=self._name if name is None else name,
-                        disk=self._disk if disk is None else disk,
-                        aclass=self._aclass if aclass is None else aclass,
-                        seq=self._seq if seq is None else seq,
-                        atype=self._atype if atype is None else atype,
-                        label=self._label if label is None else label,
-                        dtype=self._dtype if dtype is None else dtype)
-
-    @property
-    def name(self):
-        """ File name """
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        """ File name """
-        self._name = value
-
-    @property
-    def disk(self):
-        """ File disk """
-        return self._disk
-
-    @disk.setter
-    def disk(self, value):
-        """ File disk """
-        self._disk = value
-
-    @property
-    def dtype(self):
-        """ File disk type """
-        return self._dtype
-
-    @dtype.setter
-    def dtype(self, value):
-        """ File disk type """
-        _check_disk_type(value)
-        self._dtype = value
-
-    @property
-    def aclass(self):
-        """ File class """
-        return self._aclass
-
-    @aclass.setter
-    def aclass(self, value):
-        """ File class """
-        self._aclass = value
-
-    @property
-    def seq(self):
-        """ File sequence number """
-        return self._seq
-
-    @seq.setter
-    def seq(self, value):
-        """ File sequence number """
-        self._seq = value
-
-    @property
-    def atype(self):
-        """ AIPS type """
-        return self._atype
-
-    @atype.setter
-    def atype(self, value):
-        """ AIPS type """
-        self._atype = value
-
-    @property
-    def label(self):
-        """ File label """
-        return self._label
-
-    @label.setter
-    def label(self, value):
-        """ File label """
-        self._label = value
+        return AIPSPath(name=self.name if name is None else name,
+                        disk=self.disk if disk is None else disk,
+                        aclass=self.aclass if aclass is None else aclass,
+                        seq=self.seq if seq is None else seq,
+                        atype=self.atype if atype is None else atype,
+                        label=self.label if label is None else label,
+                        dtype=self.dtype if dtype is None else dtype)
 
     def __str__(self):
         """ String representation """
-        if self._dtype == "AIPS":
-            return "%s.%s.%s.%s on AIPS %d" % (self._name, self._aclass,
-                                            self._atype, self._seq, self._disk)
-        elif self._dtype == "FITS":
-            return "%s.%s on FITS %d" % (self._name, self._atype, self._disk)
+        if self.dtype == "AIPS":
+            return "%s.%s.%s.%s on AIPS %d" % (self.name, self.aclass,
+                                            self.atype, self.seq, self.disk)
+        elif self.dtype == "FITS":
+            return "%s.%s on FITS %d" % (self.name, self.atype, self.disk)
         else:
-            _check_disk_type(self._dtype, False)
+            _check_disk_type(self.dtype, False)
 
     def task_input_kwargs(self):
         """
