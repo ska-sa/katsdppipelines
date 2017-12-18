@@ -110,7 +110,7 @@ with obit_context():
 
     def _source_info(KA):
         """
-        Infer MFImage source names and file  outputs for each sources.
+        Infer MFImage source names and file outputs for each sources.
         For each source, MFImage outputs UV data and a CLEAN file.
         """
 
