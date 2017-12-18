@@ -334,7 +334,7 @@ with obit_context():
     # (1) Extract complex gains from attached "AIPS SN" table
     # (2) Write them to telstate
     for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
-        target = "target%04d" % si
+        target = "target%d" % si
 
         # Create contexts
         uvf_ctx = uv_factory(aips_path=uv_file, mode='r')
@@ -376,7 +376,7 @@ with obit_context():
     # (1) Extract clean components from attached "AIPS CC" table
     # (2) Write them to telstate
     for si, (clean_file, uv_source) in enumerate(zip(clean_files, uv_sources)):
-        target = "target%04d" % si
+        target = "target%d" % si
 
         # Create contexts
         img_ctx = img_factory(aips_path=clean_file, mode='r')
