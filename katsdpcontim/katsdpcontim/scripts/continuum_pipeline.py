@@ -353,10 +353,13 @@ with obit_context():
                 if "REAL2" in sntab.rows[0]:
                     def _extract_gains(row):
                         return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL2"] + 1j*row["IMAG2"]])
+                                         row["REAL2"] + 1j*row["IMAG2"]],
+                                            dtype=np.complex64)
                 else:
                     def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"]])
+                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
+                                         row["REAL1"] + 1j*row["IMAG1"]],
+                                            dtype=np.complex64)
 
                 # Write each complex gain out per antenna
                 for row in (_condition(r) for r in sntab.rows):
