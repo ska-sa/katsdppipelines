@@ -341,8 +341,6 @@ with obit_context():
     # (1) Extract complex gains from attached "AIPS SN" table
     # (2) Write them to telstate
     for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
-        target = "target%d" % si
-
         # Create contexts
         uvf_ctx = uv_factory(aips_path=uv_file, mode='r')
         json_ctx = open(target + "-solutions.json", "w")
@@ -372,9 +370,9 @@ with obit_context():
                     # Convert from AIPS FORTRAN indexing to katdal C indexing
                     ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
 
-                    # Store complex gain in telstate
-                    key = ts_view.SEPARATOR.join((target,ant))
-                    ts_view.add(key, _extract_gains(row), ts=time)
+                    # Store complex gain for this antenna
+                    # in telstate at this timestamp
+                    ts_view.add(ant, _extract_gains(row), ts=time)
 
                     # Dump each row to file
                     json.dump(row, json_f)
