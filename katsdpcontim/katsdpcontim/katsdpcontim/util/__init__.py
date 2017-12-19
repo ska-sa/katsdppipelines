@@ -77,15 +77,13 @@ def parse_python_assigns(assign_str):
         # If the statement value is a call to a builtin, try evaluate it
         if isinstance(stmt_value, ast.Call):
             func_name = stmt_value.func.id
+            is_builtin = func_name in dir(__builtin__)
+            is_whitelisted = func_name in _BUILTIN_WHITELIST
 
-            if func_name not in dir(__builtin__):
-                raise ValueError("'%s' is not a builtin function" % func_name)
-
-            if func_name not in _BUILTIN_WHITELIST:
-                raise ValueError("'%s' is not a white-listed "
-                                 "builtin function. Available "
-                                 "functions '%s'" %
-                                    (func_name, list(_BUILTIN_WHITELIST)))
+            if not is_builtin or not is_whitelisted:
+                raise ValueError("Function '%s' in '%s' is not builtin. "
+                                 "Available builtins: '%s'"
+                                    % (func_name, assign_str, list(_BUILTIN_WHITELIST)))
 
             # Recursively pass arguments through this same function
             if stmt_value.args is not None:
@@ -105,16 +103,51 @@ def parse_python_assigns(assign_str):
         else:
             return ast.literal_eval(stmt_value)
 
-    try:
-        # Parse the assignment string to get a list of assignment statements,
-        # assigning evaluation of the assignment to the target variable name
-        return {target.id: _eval_value(stmt.value)
-                for stmt in ast.parse(assign_str, mode='single').body
-                for target in stmt.targets}
-    except Exception as e:
-        log.exception("Exception parsing assignment string '%s'", assign_str)
-        raise
+    # Variable dictionary
+    variables = {}
 
+    # Parse the assignment string
+    stmts = ast.parse(assign_str, mode='single').body
+
+    for i, stmt in enumerate(stmts):
+        if not isinstance(stmt, ast.Assign):
+            raise ValueError("Statement %d in '%s' is not a "
+                             "variable assignment." % (i, assign_str))
+
+        # Evaluate assignment lhs
+        values = _eval_value(stmt.value)
+
+        # Promote to tuple so that we can zip with multiple targets
+        # and handle possible tuple destructuring
+        if not isinstance(values, (tuple, list)):
+            values = (values,)
+
+        if not len(values) == len(stmt.targets):
+            raise ValueError("Number of targets '%d' in assigment %d "
+                             "of expression '%s' does not match "
+                             "the number of values '%s'" %
+                                (len(stmt.targets), i, assign_str, len(values)))
+
+        # Assign variables to values
+        for target, value in zip(stmt.targets, values):
+            variables[target.id] = value
+
+    return variables
+
+def log_exception(logger):
+    """ Decorator that wraps the passed log object and logs exceptions """
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except:
+                logger.exception("Exception in '%s'", func.__name__)
+                raise
+
+        return wrapper
+
+    return decorator
 
 def task_factory(name, aips_cfg_file=None, **kwargs):
     """

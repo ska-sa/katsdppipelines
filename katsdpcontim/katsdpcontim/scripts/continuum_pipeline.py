@@ -40,6 +40,7 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         katdal_timestamps,
                         katdal_ant_name)
 from katsdpcontim.util import (parse_python_assigns,
+                        log_exception,
                         post_process_args,
                         fractional_bandwidth)
 
@@ -63,7 +64,7 @@ def create_parser():
                                              "on which the continuum pipeline "
                                              "is run.")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=parse_python_assigns,
+                                        type=log_exception(log)(parse_python_assigns),
                                         help="katdal select statement "
                                              "Should only contain python "
                                              "assignment statements to python "
@@ -71,7 +72,6 @@ def create_parser():
     return parser
 
 args = create_parser().parse_args()
-
 
 # Standard MFImage output classes for UV and CLEAN images
 UV_CLASS = "MFImag"
