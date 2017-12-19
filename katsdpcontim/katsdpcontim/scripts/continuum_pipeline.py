@@ -55,7 +55,7 @@ def create_parser():
                                         help="Capture Block ID. Unique identifier "
                                              "for the observation on which the "
                                              "continuum pipeline is run.")
-    parser.add_argument("-ts", "--telstate-server", default='', type=str,
+    parser.add_argument("-ts", "--telstate", default='', type=str,
                                         help="Address of the telstate server")
     parser.add_argument("-sbid", "--sub-band-id", default=0, type=int,
                                         help="Sub-band ID. Unique integer "
@@ -85,8 +85,8 @@ with obit_context():
     # Perform argument postprocessing
     args = post_process_args(args, KA)
 
-    # Backed by a fake REDIS server
-    telstate = TelescopeState(args.telstate_server)
+    # Set up telstate link
+    telstate = TelescopeState(args.telstate)
 
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
@@ -332,8 +332,9 @@ with obit_context():
         """ Flatten singleton lists and drop book-keeping keys """
         return { k: v[0] for k, v in row.items() if k not in DROP }
 
-    # Create a view based the capture block ID
-    view = '_'.join((args.capture_block_id, "sub_band%d" % args.sub_band_id))
+    # Create a view based the capture block ID and sub-band ID
+    sub_band_id_str = "sub_band%d" % args.sub_band_id
+    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
     ts_view = telstate.view(view)
 
     # MFImage outputs a UV file per source.  Iterate through each source:
