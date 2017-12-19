@@ -14,7 +14,6 @@ Basic version of the continuum imaging pipeline.
 import argparse
 import collections
 from copy import deepcopy
-import json
 import logging
 import multiprocessing
 import os.path
@@ -341,11 +340,7 @@ with obit_context():
     # (1) Extract complex gains from attached "AIPS SN" table
     # (2) Write them to telstate
     for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
-        # Create contexts
-        uvf_ctx = uv_factory(aips_path=uv_file, mode='r')
-        json_ctx = open(target + "-solutions.json", "w")
-
-        with uvf_ctx as uvf, json_ctx as json_f:
+        with uv_factory(aips_path=uv_file, mode='r') as uvf:
             try:
                 sntab = uvf.tables["AIPS SN"]
             except KeyError:
@@ -374,10 +369,6 @@ with obit_context():
                     # in telstate at this timestamp
                     ts_view.add(ant, _extract_gains(row), ts=time)
 
-                    # Dump each row to file
-                    json.dump(row, json_f)
-                    json_f.write("\n")
-
         uvf.Zap()
 
     # MFImage outputs a CLEAN image per source.  Iterate through each source:
@@ -385,18 +376,14 @@ with obit_context():
     # (2) Write them to telstate
     it = enumerate(zip(clean_files, uv_sources, target_indices))
     for si, (clean_file, uv_source, ti) in it:
-        target = "target%d" % si
-
-        # Create contexts
-        img_ctx = img_factory(aips_path=clean_file, mode='r')
-        json_ctx = open(target + "-clean.json", "w")
-
-        with img_ctx as cf, json_ctx as json_f:
+        with img_factory(aips_path=clean_file, mode='r') as cf:
             try:
                 cctab = cf.tables["AIPS CC"]
             except KeyError:
                 log.warn("No clean components in '%s'", clean_file)
             else:
+                target = "target%d" % si
+
                 # Condition all rows up front
                 rows = [_condition(r) for r in cctab.rows]
 
@@ -407,11 +394,6 @@ with obit_context():
                 # Store them in telstate
                 key = ts_view.SEPARATOR.join((target, "clean_components"))
                 ts_view.add(key, data, immutable=True)
-
-                # Dump each row to file
-                for row in rows:
-                    json.dump(row, json_f)
-                    json_f.write("\n")
 
         cf.Zap()
 
