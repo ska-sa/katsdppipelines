@@ -22,7 +22,7 @@ def post_process_args(args, kat_adapter):
     args : object
         Arguments created by :meth:`argparse.ArgumentParser.parse_args()`
     kat_adapter : :class:`katsdpcontim.KatdalAdapter`
-        Katdal Adapater
+        Katdal Adapter
 
     Returns
     -------
@@ -178,7 +178,7 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         except AttributeError as e:
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
-                log.warn("Key '%s is not valid for this "
+                log.warn("Key '%s' is not valid for this "
                          "task and will be ignored", k)
             else:
                 raise

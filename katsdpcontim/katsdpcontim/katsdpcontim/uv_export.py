@@ -45,7 +45,7 @@ def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     uvf.Desc.Dict = desc
 
     nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
-    log.debug("Writing '%s visibilities. firstVis=%s numVisBuff=%s",
+    log.debug("Writing '%s' visibilities. firstVis=%s numVisBuff=%s",
                             fmt_bytes(nbytes), firstVis, numVisBuff)
 
     # If firstVis is passed through to this method, it uses FORTRAN
