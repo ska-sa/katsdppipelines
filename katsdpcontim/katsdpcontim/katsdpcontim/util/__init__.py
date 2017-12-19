@@ -38,6 +38,8 @@ def post_process_args(args, kat_adapter):
 
     return args
 
+# builtin function whitelist
+_BUILTIN_WHITELIST = {'slice'}
 
 def parse_python_assigns(assign_str):
     """
@@ -56,7 +58,7 @@ def parse_python_assigns(assign_str):
     ----------
     assign_str: str
         Assignment string. Should only contain assignment statements
-        assigning python literals or calls to builtin calls, to variable names.
+        assigning python literals or builtin function calls, to variable names.
         Multiple assignment statements should be separated by semi-colons.
 
     Returns
@@ -76,29 +78,36 @@ def parse_python_assigns(assign_str):
         if isinstance(stmt_value, ast.Call):
             func_name = stmt_value.func.id
 
-            if not func_name in dir(__builtin__):
+            if func_name not in dir(__builtin__):
                 raise ValueError("'%s' is not a builtin function" % func_name)
+
+            if func_name not in _BUILTIN_WHITELIST:
+                raise ValueError("'%s' is not a white-listed "
+                                 "builtin function. Available "
+                                 "functions '%s'" %
+                                    (func_name, list(_BUILTIN_WHITELIST)))
+
+            # Recursively pass arguments through this same function
+            if stmt_value.args is not None:
+                args = tuple(_eval_value(a) for a in stmt_value.args)
             else:
-                # Recursively pass arguments through this same function
-                if stmt_value.args is not None:
-                    args = tuple(_eval_value(a) for a in stmt_value.args)
-                else:
-                    args = ()
+                args = ()
 
-                # Recursively pass keyword arguments through this same function
-                if stmt_value.kwargs is not None:
-                    kwargs = {_eval_value(k) : _eval_value(v) for k, v
+            # Recursively pass keyword arguments through this same function
+            if stmt_value.kwargs is not None:
+                kwargs = {_eval_value(k) : _eval_value(v) for k, v
                                         in stmt_value.kwargs.items()}
-                else:
-                    kwargs = {}
+            else:
+                kwargs = {}
 
-                return getattr(__builtin__, func_name)(*args, **kwargs)
+            return getattr(__builtin__, func_name)(*args, **kwargs)
         # Try a literal eval
         else:
             return ast.literal_eval(stmt_value)
 
-
     try:
+        # Parse the assignment string to get a list of assignment statements,
+        # assigning evaluation of the assignment to the target variable name
         return {target.id: _eval_value(stmt.value)
                 for stmt in ast.parse(assign_str, mode='single').body
                 for target in stmt.targets}
