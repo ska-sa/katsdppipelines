@@ -137,10 +137,42 @@ def aips_source_name(name):
 
 def aips_catalogue(katdata):
     """
-    Creates a catalogue of AIPS sources.
-    Resembles :attribute:`katdal.Dataset.catalogue`.
-    This is a list of dictionaries following the specification
+    Creates a catalogue of AIPS sources from :attribute:`katdata.catalogue`
+    It resembles :attribute:`katdal.Dataset.catalogue`.
+
+    Returns a list of dictionaries following the specification
     of the AIPS SU table in AIPS Memo 117.
+
+    Notes
+    -----
+    At present, the following is set for each source:
+
+    1. AIPS Source ID
+    2. Source name
+    3. Source position
+
+    Other quantities such as:
+
+    1. Flux
+    2. Frequency Offset
+    3. Rest Frequency
+    4. Bandwidth
+
+    are defaulted to zero for now as these are not strictly required for
+    the purposes of the continuum pipeline.
+
+    In the context of the KatdalAdapter object, these may be difficult
+    to correctly derive *once*, as different katdal selections on
+    channel/frequency may modify the frequency data.
+    katpoint targets also generate flux values from an internal
+    spectral model.
+    In these cases, the catalogue may need to be regenerated on each
+    katdal selection.
+
+    Parameters
+    ----------
+    katdata : :class:`katdal.Dataset`
+        katdal object
 
     Returns
     -------
@@ -151,9 +183,6 @@ def aips_catalogue(katdata):
     catalogue = []
 
     zero = np.asarray([0.0, 0.0])
-
-    # This is rarely referenced, according to AIPS Memo 117
-    bandwidth = katdata.channel_freqs[-1] - katdata.channel_freqs[0]
 
     for aips_i, t in enumerate(katdata.catalogue.targets, 1):
         # Nothings have no position!
@@ -180,7 +209,6 @@ def aips_catalogue(katdata):
             'RAAPP': [raa],
             'DECAPP': [deca],
             'EPOCH': [2000.0],
-            'BANDWIDTH': [bandwidth],
 
             # No calibrator, fill with spaces
             'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
@@ -199,6 +227,7 @@ def aips_catalogue(katdata):
             'LSRVEL': [0.0],    # Velocity
             'FREQOFF': [0.0],   # Frequency Offset
             'RESTFREQ': [0.0],  # Rest Frequency
+            'BANDWIDTH': [0.0], # Bandwidth of the SPW
 
             # Don't have these, zero them
             'PMRA': [0.0],      # Proper Motion in Right Ascension
@@ -503,8 +532,8 @@ class KatdalAdapter(object):
         Returns
         -------
         list
-            (antenna1, antenna2, correlator_product_id) tuples, with the
-            correlator_product_id mapped in the following manner.
+            CorrelatorProduct(antenna1, antenna2, correlator_product_id)
+            objects, with the correlator_product_id mapped as follows:
 
             .. code-block:: python
 
@@ -799,7 +828,7 @@ class KatdalAdapter(object):
 
         return [{
             # Fill in data from MeerKAT spectral window
-            'FRQSEL': [1],
+            'FRQSEL': [self.frqsel],        # Frequency setup ID
             'IF FREQ': [0.0],
             'CH WIDTH': [self.chinc],
             # Should be 'BANDCODE' according to AIPS MEMO 117!
