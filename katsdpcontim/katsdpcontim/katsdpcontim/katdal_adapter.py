@@ -14,6 +14,104 @@ from katsdpcontim import AIPSPath
 
 log = logging.getLogger('katsdpcontim')
 
+ONE_DAY_IN_SECONDS = 24*60*60.0
+
+def aips_timestamps(timestamps, midnight):
+    """
+    Given katdal timestamps and midnight on the observation date in UTC,
+    calculates the Julian Day offset from midnight on the observation date.
+
+    Parameters
+    ----------
+    timestamps : np.ndarray
+        katdal UTC timestamps
+    midnight : float
+        midnight on day of observation in UTC
+
+    Returns
+    -------
+    np.ndarray
+        AIPS Julian Day timestamps, offset from midnight on the
+        observation date.
+    """
+    return (timestamps - midnight) / ONE_DAY_IN_SECONDS
+
+def katdal_timestamps(timestamps, midnight):
+    """
+    Given AIPS Julian day timestamps offset from midnight on the day
+    of the observation, calculates the katdal UTC timestamp
+
+    Parameters
+    ----------
+    timestamsp : np.ndarray
+        AIPS Julian Day timestamps, offset from midnight on the
+        observation date.
+    midnight : float
+        midnight on day of observation in UTC
+
+    Returns
+    -------
+    np.ndarray
+        katdal UTC timestamps
+    """
+    return midnight + (timestamps * ONE_DAY_IN_SECONDS)
+
+def aips_ant_nr(ant_name):
+    """
+    Given a MeerKAT antenna name of the form 'mnnnp' where
+    'm' is a character constant, 'nnn' is the antenna number
+    and 'p' is the polarisation, returns 'nnn+1'.
+
+    Parameters
+    ----------
+    ant_name : str
+        Antenna Name
+
+    Returns
+    ------
+    integer
+        AIPS antenna number from MeerKAT antenna name
+    """
+    try:
+        return int(ant_name[1:4]) + 1
+    except (ValueError, IndexError) as e:
+        raise ValueError("Invalid antenna name '%s'" % ant_name)
+
+def katdal_ant_name(aips_ant_nr):
+    """ Return katdal antenna name, given the AIPS antenna number """
+    return "m%03d" % (aips_ant_nr - 1)
+
+def aips_uvw(uvw, refwave):
+    """
+    Parameters
+    ----------
+    uvw : np.ndarray
+        katdal UVW coordinates in metres/second
+    refwave : float
+        Reference wavelength in metres
+
+    Returns
+    -------
+    np.ndarray
+        AIPS UVW coordinates, in seconds
+    """
+    return uvw / refwave
+
+def katdal_uvw(uvw, refwave):
+    """
+    Parameters
+    ----------
+    uvw : np.ndarray
+        AIPS UVW coordinates in seconds
+    refwave : float
+        Reference wavelength in metres
+
+    Returns
+    -------
+    np.ndarray
+        katdal UVW coordinates, in metres/second
+    """
+    return refwave * uvw
 
 def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
@@ -181,12 +279,12 @@ class KatdalAdapter(object):
             into AIPS timestamps. These are the Julian days
             since midnight on the observation date
             """
-            return (self._katds.timestamps[index] - self.midnight) / 86400.0
+            return aips_timestamps(self._katds.timestamps[index], self.midnight)
 
         # Convert katdal UVW into AIPS UVW
-        _u_xformer = lambda i: self._katds.u[i] / self.refwave
-        _v_xformer = lambda i: self._katds.v[i] / self.refwave
-        _w_xformer = lambda i: self._katds.w[i] / self.refwave
+        _u_xformer = lambda i: aips_uvw(self._katds.u[i], self.refwave)
+        _v_xformer = lambda i: aips_uvw(self._katds.v[i], self.refwave)
+        _w_xformer = lambda i: aips_uvw(self._katds.w[i], self.refwave)
 
         # Set up the actual transformers
         self._vis_xformer = _KatdalTransformer(_vis_xformer,
@@ -214,6 +312,7 @@ class KatdalAdapter(object):
 
     @property
     def uv_vis(self):
+        """ Returns AIPS visibilities """
         return self._vis_xformer
 
     @property
@@ -587,7 +686,7 @@ class KatdalAdapter(object):
 
         return [{
             # MeerKAT antenna information
-            'NOSTA': [i],
+            'NOSTA': [aips_ant_nr(a.name)],
             'ANNAME': [a.name],
             'STABXYZ': list(a.position_ecef),
             'DIAMETER': [a.diameter],
@@ -603,7 +702,7 @@ class KatdalAdapter(object):
             'BEAMFWHM': [0.0],
             'ORBPARM': [],
             'MNTSTA': [0]
-        } for i, a in enumerate(sorted(self._katds.ants), 1)]
+        } for a in sorted(self._katds.ants)]
 
     @property
     def uv_source_keywords(self):

@@ -36,7 +36,9 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         uv_export,
                         uv_history_obs_description,
                         uv_history_selection,
-                        uv_factory)
+                        uv_factory,
+                        katdal_timestamps,
+                        katdal_ant_name)
 from katsdpcontim.util import (parse_python_assigns,
                         post_process_args,
                         fractional_bandwidth)
@@ -365,9 +367,9 @@ with obit_context():
                 # Write each complex gain out per antenna
                 for row in (_condition(r) for r in sntab.rows):
                     # Convert time back from AIPS to katdal UTC
-                    time = row["TIME"]*86400.0 + KA.midnight
+                    time = katdal_timestamps(row["TIME"], KA.midnight)
                     # Convert from AIPS FORTRAN indexing to katdal C indexing
-                    ant = "m%03d_gains" % (row["ANTENNA NO."]-1)
+                    ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
 
                     # Store complex gain in telstate
                     key = ts_view.SEPARATOR.join((target,ant))
