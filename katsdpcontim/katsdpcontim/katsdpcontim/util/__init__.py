@@ -113,7 +113,7 @@ def parse_python_assigns(assign_str):
                 for target in stmt.targets}
     except Exception as e:
         log.exception("Exception parsing assignment string '%s'", assign_str)
-        raise e
+        raise
 
 
 def task_factory(name, aips_cfg_file=None, **kwargs):
