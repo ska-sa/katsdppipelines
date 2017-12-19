@@ -1,4 +1,4 @@
-from collections import OrderedDict, Counter
+from collections import Counter
 import datetime
 import logging
 import os
@@ -56,6 +56,27 @@ def katdal_timestamps(timestamps, midnight):
     """
     return midnight + (timestamps * ONE_DAY_IN_SECONDS)
 
+def katdal_ant_nr(ant_name):
+    """
+    Given a MeerKAT antenna name of the form 'mnnnp' where
+    'm' is a character constant, 'nnn' is the antenna number
+    and 'p' is the polarisation, returns 'nnn'.
+
+    Parameters
+    ----------
+    ant_name : str
+        Antenna Name
+
+    Returns
+    ------
+    integer
+        katdal antenna number in MeerKAT antenna name
+    """
+    try:
+        return int(ant_name[1:4])
+    except (ValueError, IndexError) as e:
+        raise ValueError("Invalid antenna name '%s'" % ant_name)
+
 def aips_ant_nr(ant_name):
     """
     Given a MeerKAT antenna name of the form 'mnnnp' where
@@ -72,10 +93,7 @@ def aips_ant_nr(ant_name):
     integer
         AIPS antenna number from MeerKAT antenna name
     """
-    try:
-        return int(ant_name[1:4]) + 1
-    except (ValueError, IndexError) as e:
-        raise ValueError("Invalid antenna name '%s'" % ant_name)
+    return katdal_ant_nr(ant_name) + 1
 
 def katdal_ant_name(aips_ant_nr):
     """ Return katdal antenna name, given the AIPS antenna number """
@@ -348,18 +366,6 @@ class KatdalAdapter(object):
         for si, state, target in self._katds.scans():
             yield si, state, self._catalogue[self.target_indices[0]]
 
-    def _antenna_map(self):
-        """
-        Returns
-        -------
-        dict
-            A { antenna_name: (index, antenna) } mapping
-        """
-        A = attr.make_class("IndexedAntenna", ["index", "antenna"])
-        return OrderedDict((a.name, A(i, a)) for i, a
-                           in enumerate(sorted(self._katds.ants)))
-
-
     def aips_path(self, **kwargs):
         """
         Constructs an aips path from a :class:`KatdalAdapter`
@@ -507,25 +513,35 @@ class KatdalAdapter(object):
                   ('h','v'): 2,
                   ('v','h'): 3 }
         """
-        attrs = ["ant1", "ant2", "ant1_ix", "ant2_ix", "cid"]
-        CorrelatorProductBase = attr.make_class("CorrelatorProductBase", attrs)
+        class CorrelatorProduct(object):
+            def __init__(self, ant1, ant2, cid):
+                self.ant1 = ant1
+                self.ant2 = ant2
+                self.cid = cid
 
-        # Add properties onto the base class
-        class CorrelatorProduct(CorrelatorProductBase):
+            @property
+            def ant1_ix(self):
+                return katdal_ant_nr(self.ant1.name)
+
+            @property
+            def ant2_ix(self):
+                return katdal_ant_nr(self.ant2.name)
+
             @property
             def aips_ant1_ix(self):
-                return self.ant1_ix + 1
+                return aips_ant_nr(self.ant1.name)
 
             @property
             def aips_ant2_ix(self):
-                return self.ant2_ix + 1
+                return aips_ant_nr(self.ant2.name)
 
             @property
             def aips_bl_ix(self):
+                """ This produces the AIPS baseline index random parameter """
                 return self.aips_ant1_ix * 256.0 + self.aips_ant2_ix
 
-        antenna_map = self._antenna_map()
-
+        # { name : antenna } mapping
+        antenna_map = { a.name : a for a in self._katds.ants }
         products = []
 
         for a1_corr, a2_corr in self._katds.corr_products:
@@ -542,14 +558,13 @@ class KatdalAdapter(object):
                 cid = self.CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError:
                 raise ValueError("Invalid Correlator Product "
-                                 "['{}', '{}']".format(a1_corr, a2_corr))
+                                 "['%s, '%s']" % (a1_corr, a2_corr))
 
             # Look up katdal antenna pair
             a1 = antenna_map[a1_name]
             a2 = antenna_map[a2_name]
 
-            products.append(CorrelatorProduct(a1.antenna, a2.antenna,
-                                              a1.index, a2.index, cid))
+            products.append(CorrelatorProduct(a1, a2, cid))
 
         return products
 
