@@ -92,9 +92,9 @@ def parse_python_assigns(assign_str):
                 args = ()
 
             # Recursively pass keyword arguments through this same function
-            if stmt_value.kwargs is not None:
-                kwargs = {_eval_value(k) : _eval_value(v) for k, v
-                                        in stmt_value.kwargs.items()}
+            if stmt_value.keywords is not None:
+                kwargs = {kw.arg : _eval_value(kw.value) for kw
+                                          in stmt_value.keywords}
             else:
                 kwargs = {}
 
