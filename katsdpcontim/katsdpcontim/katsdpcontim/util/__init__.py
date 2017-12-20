@@ -42,8 +42,11 @@ def post_process_args(args, kat_adapter):
 import __builtin__
 
 # builtin function whitelist
-_BUILTIN_WHITELIST = set.intersection(set(dir(__builtin__)),
-                                                { 'slice'})
+_BUILTIN_WHITELIST = frozenset(['slice'])
+_missing = _BUILTIN_WHITELIST.difference(dir(__builtin__))
+if len(_missing) > 0:
+    raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
+
 
 def parse_python_assigns(assign_str):
     """
