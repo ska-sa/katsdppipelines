@@ -1,4 +1,5 @@
 import ast
+import functools
 import logging
 
 from pretty import pretty
@@ -138,6 +139,7 @@ def log_exception(logger):
     """ Decorator that wraps the passed log object and logs exceptions """
 
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
