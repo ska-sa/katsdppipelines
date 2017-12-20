@@ -768,7 +768,7 @@ class KatdalAdapter(object):
 
         return {
             'ARRNAM': MEERKAT,
-            'FREQ': self.channel_freqs[0],  # Reference frequency
+            'FREQ': self.reffreq,           # Reference frequency
             'FREQID': self.frqsel,          # Frequency setup id
             'RDATE': self.obsdat,           # Reference date
             'NO_IF': self.nif,              # Number of spectral windows
