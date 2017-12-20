@@ -104,14 +104,14 @@ def aips_uvw(uvw, refwave):
     Parameters
     ----------
     uvw : np.ndarray
-        katdal UVW coordinates in metres/second
+        katdal UVW coordinates in hertz
     refwave : float
         Reference wavelength in metres
 
     Returns
     -------
     np.ndarray
-        AIPS UVW coordinates, in seconds
+        AIPS UVW coordinates, in light seconds
     """
     return uvw / refwave
 
@@ -120,14 +120,14 @@ def katdal_uvw(uvw, refwave):
     Parameters
     ----------
     uvw : np.ndarray
-        AIPS UVW coordinates in seconds
+        AIPS UVW coordinates in light seconds
     refwave : float
         Reference wavelength in metres
 
     Returns
     -------
     np.ndarray
-        katdal UVW coordinates, in metres/second
+        katdal UVW coordinates, in hertz
     """
     return refwave * uvw
 
@@ -691,7 +691,7 @@ class KatdalAdapter(object):
         Returns
         -------
         float
-            Reference wavelength
+            Reference wavelength in metres
         """
         return 2.997924562e8 / self.reffreq
 
