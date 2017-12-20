@@ -38,8 +38,11 @@ def post_process_args(args, kat_adapter):
 
     return args
 
+import __builtin__
+
 # builtin function whitelist
-_BUILTIN_WHITELIST = {'slice'}
+_BUILTIN_WHITELIST = set.intersection(set(dir(__builtin__)),
+                                                { 'slice'})
 
 def parse_python_assigns(assign_str):
     """
@@ -68,7 +71,6 @@ def parse_python_assigns(assign_str):
         assignment results.
     """
 
-    import __builtin__
 
     if not assign_str:
         return {}
@@ -77,10 +79,8 @@ def parse_python_assigns(assign_str):
         # If the statement value is a call to a builtin, try evaluate it
         if isinstance(stmt_value, ast.Call):
             func_name = stmt_value.func.id
-            is_builtin = func_name in dir(__builtin__)
-            is_whitelisted = func_name in _BUILTIN_WHITELIST
 
-            if not is_builtin or not is_whitelisted:
+            if func_name not in _BUILTIN_WHITELIST:
                 raise ValueError("Function '%s' in '%s' is not builtin. "
                                  "Available builtins: '%s'"
                                     % (func_name, assign_str, list(_BUILTIN_WHITELIST)))
