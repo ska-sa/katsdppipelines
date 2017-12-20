@@ -101,33 +101,48 @@ def katdal_ant_name(aips_ant_nr):
 
 def aips_uvw(uvw, refwave):
     """
+    Converts katdal UVW coordinates in metres to AIPS UVW coordinates
+    in metres *at the reference frequency*.
+
+    Notes
+    -----
+    Metres at the reference frequency differs from AIPS documentation
+    (AIPS Memo 117, Going AIPS, Obitdoc) which state that UVW coordinates
+    should be in lightseconds.
+
     Parameters
     ----------
     uvw : np.ndarray
-        katdal UVW coordinates in hertz
+        katdal UVW coordinates in metres
     refwave : float
         Reference wavelength in metres
 
     Returns
     -------
     np.ndarray
-        AIPS UVW coordinates, in light seconds
+        AIPS UVW coordinates, in metres
+        (wavelengths at the reference frequency)
     """
     return uvw / refwave
 
 def katdal_uvw(uvw, refwave):
     """
+    Converts AIPS UVW coordinates in metres *at the reference frequency*
+    to katdal UVW coordinates in metres. Set :function:`aips_uvw` for
+    further discussion.
+
     Parameters
     ----------
     uvw : np.ndarray
-        AIPS UVW coordinates in light seconds
+        AIPS UVW coordinates in metres
+        (wavelengths at the reference frequency)
     refwave : float
         Reference wavelength in metres
 
     Returns
     -------
     np.ndarray
-        katdal UVW coordinates, in hertz
+        katdal UVW coordinates, in metres
     """
     return refwave * uvw
 
