@@ -174,15 +174,8 @@ def aips_catalogue(katdata):
     4. Bandwidth
 
     are defaulted to zero for now as these are not strictly required for
-    the purposes of the continuum pipeline.
-
-    In the context of the KatdalAdapter object, these may be difficult
-    to correctly derive *once*, as different katdal selections on
-    channel/frequency may modify the frequency data.
-    katpoint targets also generate flux values from an internal
-    spectral model.
-    In these cases, the catalogue may need to be regenerated on each
-    katdal selection.
+    the purposes of the continuum pipeline. See Bill Cotton's description
+    of parameter and why it is unnecessary above each row entry in the code.
 
     Parameters
     ----------
@@ -225,28 +218,81 @@ def aips_catalogue(katdata):
             'DECAPP': [deca],
             'EPOCH': [2000.0],
 
-            # No calibrator, fill with spaces
+            # NOTE(bcotton)
+            # CALCODE -  is used to distinguish type and usage of calibrator
+            # source and is used to carry intent from the scheduling process,
+            # e.g. this is a bandpass calibrator.
+            # Since this data will likely never be used to derive the
+            # external calibration, it is unlikely to ever be used.
             'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
 
             # Following seven key-values technically vary by
             # spectral window, but we're only handling one SPW
             # at a time so it doesn't matter
 
-            # TODO(sjperkins). Perhaps fill these in with actual flux values
-            # derived from the internal katpoint spectral model.
-            # Zeros are fine for now
+            # NOTE(bcotton)
+            # I/Q/U/VFLUX are the flux densities, per spectral window,
+            # either determined from a standard model or derived in the
+            # calibration process from a standard calibrator. 
+            # Since this data will likely never be used to derive the
+            # external calibration, they are unlikely to ever be used.
             'IFLUX': [0.0],
             'QFLUX': [0.0],
             'VFLUX': [0.0],
             'UFLUX': [0.0],
+
+            # NOTE(bcotton)
+            # LSRVEL, FREQOFF,RESTFREQ are used in making Doppler corrections
+            # for the Earth's motion.  Since MeerKAT data can, in principle
+            # include both HI and OH lines (separate spectral windows?)
+            # the usage may be complicated.  Look at the documentation for
+            # either Obit/CVel or AIPS/CVEL for more details on usage.
+            # I'm not sure how the Doppler corrections will be made but
+            # likely not on the data in question. In practice, for
+            #  NRAO related telescopes this information is not reliable
+            # and can be supplied as parameters to the correction software.
+            # There are only a handful of transition available to MeerKAT
+            # which all have very well known rest frequencies.
+            # I don't know if MeerKAT plans online Doppler tracking which
+            # I think is a bad idea anyway.
             'LSRVEL': [0.0],    # Velocity
             'FREQOFF': [0.0],   # Frequency Offset
             'RESTFREQ': [0.0],  # Rest Frequency
+
+            # NOTE(bcotton)
+            # BANDWIDTH was probably a mistake although, in principle,
+            # it can be used to override the value in the FQ table.
+            # I'm not sure if anything actually uses this.
             'BANDWIDTH': [0.0], # Bandwidth of the SPW
 
-            # Don't have these, zero them
+            # NOTE(bcotton)
+            # PMRA, PMDEC are the proper motions of Galactic or extragalactic
+            # objects. These are a rather muddled implementation as they also
+            # need both equinox and epoch of the standard position, which for
+            # Hipparcos positions are different. In practice, these are usually
+            # included in the apparent position of date. I can't see these ever
+            # being useful for MeerKAT as they are never more than a few mas/yr.
+            # There is a separate Planetary Ephemeris (PO) table for solar
+            # system objects which may be needed for the Sun or planets
+            # (a whole different bucket of worms).PMRA, PMDEC are the proper
+            # motions of Galactic or extragalactic objects.
+            # These are a rather muddled implementation as they also need
+            # both equinox and epoch of the standard position, which for
+            # Hipparcos positions are different. In practice, these are
+            # usually included in the apparent position of date.
+            # I can't see these ever being useful for MeerKAT as they are never
+            # more than a few mas/yr. There is a separate
+            # Planetary Ephemeris (PO) table for solar system objects which
+            # may be needed for the Sun or planets
+            # (a whole different bucket of worms).
             'PMRA': [0.0],      # Proper Motion in Right Ascension
             'PMDEC': [0.0],     # Proper Motion in Declination
+
+            # NOTE(bcotton)
+            # QUAL can be used to subdivide data for a given "SOURCE"
+            # (say for a mosaic).# "SOURCE" plus "QUAL" uniquely define
+            # an entry in the table. The MeerKAT field of view is SO HUGE
+            # I can't see this being needed.
             'QUAL': [0.0],      # Source Qualifier Number
         }
 
