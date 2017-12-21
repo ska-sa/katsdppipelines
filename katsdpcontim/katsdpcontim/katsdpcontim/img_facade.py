@@ -114,7 +114,7 @@ def img_factory(**kwargs):
 
     mode = kwargs.pop('mode', 'r')
 
-    img = open_img(aips_path, mode)
+    img = open_img(ofile, mode)
     return ImageFacade(img)
 
 OBITIMAGEMF_CTYPE = ["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES"]

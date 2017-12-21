@@ -45,7 +45,7 @@ def rewrite_dadevs(cfg):
 
         # Write out AIPS directories
         for url, aipsdir in cfg.obit.aipsdirs:
-            log.info("Adding AIPS Disk '{}' to '{}'".format(aipsdir, dadevs_list))
+            log.info("Adding AIPS Disk '%s' to '%s'", aipsdir, dadevs_list)
             wf.write("-  " + aipsdir + '\n')
 
     # Remove the copy
@@ -76,7 +76,7 @@ def rewrite_netsp(cfg):
 
         # Write out AIPS Directory parameters
         for url, aipsdir in cfg.obit.aipsdirs:
-            log.info("Adding AIPS Disk '{}' to '{}'".format(aipsdir, netsp))
+            log.info("Adding AIPS Disk '%s to '%s'", aipsdir, netsp)
             wf.write(aipsdir + ' 365.0    0    0    0    0    0    0    0    0\n')
 
     # Remove the copy
@@ -91,8 +91,8 @@ def setup_aips_disks(cfg):
     for url, aipsdir in cfg.obit.aipsdirs:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
-            log.warn("AIPS Disk '{}' does not exist "
-                     "and will be created".format(aipsdir))
+            log.warn("AIPS Disk '%s' does not exist "
+                     "and will be created", aipsdir)
             os.makedirs(aipsdir)
 
         # Create SPACE file

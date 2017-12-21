@@ -1,4 +1,4 @@
-from collections import OrderedDict, Counter
+from collections import Counter
 import datetime
 import logging
 import os
@@ -14,6 +14,135 @@ from katsdpcontim import AIPSPath
 
 log = logging.getLogger('katsdpcontim')
 
+ONE_DAY_IN_SECONDS = 24*60*60.0
+
+def aips_timestamps(timestamps, midnight):
+    """
+    Given katdal timestamps and midnight on the observation date in UTC,
+    calculates the Julian Day offset from midnight on the observation date.
+
+    Parameters
+    ----------
+    timestamps : np.ndarray
+        katdal UTC timestamps
+    midnight : float
+        midnight on day of observation in UTC
+
+    Returns
+    -------
+    np.ndarray
+        AIPS Julian Day timestamps, offset from midnight on the
+        observation date.
+    """
+    return (timestamps - midnight) / ONE_DAY_IN_SECONDS
+
+def katdal_timestamps(timestamps, midnight):
+    """
+    Given AIPS Julian day timestamps offset from midnight on the day
+    of the observation, calculates the katdal UTC timestamp
+
+    Parameters
+    ----------
+    timestamsp : np.ndarray
+        AIPS Julian Day timestamps, offset from midnight on the
+        observation date.
+    midnight : float
+        midnight on day of observation in UTC
+
+    Returns
+    -------
+    np.ndarray
+        katdal UTC timestamps
+    """
+    return midnight + (timestamps * ONE_DAY_IN_SECONDS)
+
+def katdal_ant_nr(ant_name):
+    """
+    Given a MeerKAT antenna name of the form 'mnnnp' where
+    'm' is a character constant, 'nnn' is the antenna number
+    and 'p' is the polarisation, returns 'nnn'.
+
+    Parameters
+    ----------
+    ant_name : str
+        Antenna Name
+
+    Returns
+    ------
+    integer
+        katdal antenna number in MeerKAT antenna name
+    """
+    try:
+        return int(ant_name[1:4])
+    except (ValueError, IndexError) as e:
+        raise ValueError("Invalid antenna name '%s'" % ant_name)
+
+def aips_ant_nr(ant_name):
+    """
+    Given a MeerKAT antenna name of the form 'mnnnp' where
+    'm' is a character constant, 'nnn' is the antenna number
+    and 'p' is the polarisation, returns 'nnn+1'.
+
+    Parameters
+    ----------
+    ant_name : str
+        Antenna Name
+
+    Returns
+    ------
+    integer
+        AIPS antenna number from MeerKAT antenna name
+    """
+    return katdal_ant_nr(ant_name) + 1
+
+def katdal_ant_name(aips_ant_nr):
+    """ Return katdal antenna name, given the AIPS antenna number """
+    return "m%03d" % (aips_ant_nr - 1)
+
+def aips_uvw(uvw, refwave):
+    """
+    Converts katdal UVW coordinates in metres to AIPS UVW coordinates
+    in wavelengths *at the reference frequency*.
+
+    Notes
+    -----
+    Wavelengths at the reference frequency differs from AIPS documentation
+    (AIPS Memo 117, Going AIPS, Obitdoc) which state that UVW coordinates
+    should be in lightseconds.
+
+    Parameters
+    ----------
+    uvw : np.ndarray
+        katdal UVW coordinates in metres
+    refwave : float
+        Reference wavelength in metres
+
+    Returns
+    -------
+    np.ndarray
+        AIPS UVW coordinates in wavelengths at the reference frequency
+    """
+    return uvw / refwave
+
+def katdal_uvw(uvw, refwave):
+    """
+    Converts AIPS UVW coordinates in wavelengths *at the reference frequency*
+    to katdal UVW coordinates in metres. Set :function:`aips_uvw` for
+    further discussion.
+
+    Parameters
+    ----------
+    uvw : np.ndarray
+        AIPS UVW coordinates in wavelengths at the reference frequency
+    refwave : float
+        Reference wavelength in metres
+
+    Returns
+    -------
+    np.ndarray
+        katdal UVW coordinates, in metres
+    """
+    return refwave * uvw
 
 def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
@@ -21,10 +150,35 @@ def aips_source_name(name):
 
 def aips_catalogue(katdata):
     """
-    Creates a catalogue of AIPS sources.
-    Resembles :attribute:`katdal.Dataset.catalogue`.
-    This is a list of dictionaries following the specification
+    Creates a catalogue of AIPS sources from :attribute:`katdata.catalogue`
+    It resembles :attribute:`katdal.Dataset.catalogue`.
+
+    Returns a list of dictionaries following the specification
     of the AIPS SU table in AIPS Memo 117.
+
+    Notes
+    -----
+    At present, the following is set for each source:
+
+    1. AIPS Source ID
+    2. Source name
+    3. Source position
+
+    Other quantities such as:
+
+    1. Flux
+    2. Frequency Offset
+    3. Rest Frequency
+    4. Bandwidth
+
+    are defaulted to zero for now as these are not strictly required for
+    the purposes of the continuum pipeline. See Bill Cotton's description
+    of parameter and why it is unnecessary above each row entry in the code.
+
+    Parameters
+    ----------
+    katdata : :class:`katdal.Dataset`
+        katdal object
 
     Returns
     -------
@@ -35,9 +189,6 @@ def aips_catalogue(katdata):
     catalogue = []
 
     zero = np.asarray([0.0, 0.0])
-
-    # This is rarely referenced, according to AIPS Memo 117
-    bandwidth = katdata.channel_freqs[-1] - katdata.channel_freqs[0]
 
     for aips_i, t in enumerate(katdata.catalogue.targets, 1):
         # Nothings have no position!
@@ -64,29 +215,82 @@ def aips_catalogue(katdata):
             'RAAPP': [raa],
             'DECAPP': [deca],
             'EPOCH': [2000.0],
-            'BANDWIDTH': [bandwidth],
 
-            # No calibrator, fill with spaces
+            # NOTE(bcotton)
+            # CALCODE -  is used to distinguish type and usage of calibrator
+            # source and is used to carry intent from the scheduling process,
+            # e.g. this is a bandpass calibrator.
+            # Since this data will likely never be used to derive the
+            # external calibration, it is unlikely to ever be used.
             'CALCODE': [' ' * 4],  # 4 spaces for calibrator code
 
             # Following seven key-values technically vary by
             # spectral window, but we're only handling one SPW
             # at a time so it doesn't matter
 
-            # TODO(sjperkins). Perhaps fill these in with actual flux values
-            # derived from the internal katpoint spectral model.
-            # Zeros are fine for now
+            # NOTE(bcotton)
+            # I/Q/U/VFLUX are the flux densities, per spectral window,
+            # either determined from a standard model or derived in the
+            # calibration process from a standard calibrator. 
+            # Since this data will likely never be used to derive the
+            # external calibration, they are unlikely to ever be used.
             'IFLUX': [0.0],
             'QFLUX': [0.0],
             'VFLUX': [0.0],
             'UFLUX': [0.0],
+
+            # NOTE(bcotton)
+            # LSRVEL, FREQOFF,RESTFREQ are used in making Doppler corrections
+            # for the Earth's motion.  Since MeerKAT data can, in principle
+            # include both HI and OH lines (separate spectral windows?)
+            # the usage may be complicated.  Look at the documentation for
+            # either Obit/CVel or AIPS/CVEL for more details on usage.
+            # I'm not sure how the Doppler corrections will be made but
+            # likely not on the data in question. In practice, for
+            #  NRAO related telescopes this information is not reliable
+            # and can be supplied as parameters to the correction software.
+            # There are only a handful of transition available to MeerKAT
+            # which all have very well known rest frequencies.
+            # I don't know if MeerKAT plans online Doppler tracking which
+            # I think is a bad idea anyway.
             'LSRVEL': [0.0],    # Velocity
             'FREQOFF': [0.0],   # Frequency Offset
             'RESTFREQ': [0.0],  # Rest Frequency
 
-            # Don't have these, zero them
+            # NOTE(bcotton)
+            # BANDWIDTH was probably a mistake although, in principle,
+            # it can be used to override the value in the FQ table.
+            # I'm not sure if anything actually uses this.
+            'BANDWIDTH': [0.0], # Bandwidth of the SPW
+
+            # NOTE(bcotton)
+            # PMRA, PMDEC are the proper motions of Galactic or extragalactic
+            # objects. These are a rather muddled implementation as they also
+            # need both equinox and epoch of the standard position, which for
+            # Hipparcos positions are different. In practice, these are usually
+            # included in the apparent position of date. I can't see these ever
+            # being useful for MeerKAT as they are never more than a few mas/yr.
+            # There is a separate Planetary Ephemeris (PO) table for solar
+            # system objects which may be needed for the Sun or planets
+            # (a whole different bucket of worms).PMRA, PMDEC are the proper
+            # motions of Galactic or extragalactic objects.
+            # These are a rather muddled implementation as they also need
+            # both equinox and epoch of the standard position, which for
+            # Hipparcos positions are different. In practice, these are
+            # usually included in the apparent position of date.
+            # I can't see these ever being useful for MeerKAT as they are never
+            # more than a few mas/yr. There is a separate
+            # Planetary Ephemeris (PO) table for solar system objects which
+            # may be needed for the Sun or planets
+            # (a whole different bucket of worms).
             'PMRA': [0.0],      # Proper Motion in Right Ascension
             'PMDEC': [0.0],     # Proper Motion in Declination
+
+            # NOTE(bcotton)
+            # QUAL can be used to subdivide data for a given "SOURCE"
+            # (say for a mosaic).# "SOURCE" plus "QUAL" uniquely define
+            # an entry in the table. The MeerKAT field of view is SO HUGE
+            # I can't see this being needed.
             'QUAL': [0.0],      # Source Qualifier Number
         }
 
@@ -181,12 +385,12 @@ class KatdalAdapter(object):
             into AIPS timestamps. These are the Julian days
             since midnight on the observation date
             """
-            return (self._katds.timestamps[index] - self.midnight) / 86400.0
+            return aips_timestamps(self._katds.timestamps[index], self.midnight)
 
         # Convert katdal UVW into AIPS UVW
-        _u_xformer = lambda i: self._katds.u[i] / self.refwave
-        _v_xformer = lambda i: self._katds.v[i] / self.refwave
-        _w_xformer = lambda i: self._katds.w[i] / self.refwave
+        _u_xformer = lambda i: aips_uvw(self._katds.u[i], self.refwave)
+        _v_xformer = lambda i: aips_uvw(self._katds.v[i], self.refwave)
+        _w_xformer = lambda i: aips_uvw(self._katds.w[i], self.refwave)
 
         # Set up the actual transformers
         self._vis_xformer = _KatdalTransformer(_vis_xformer,
@@ -214,6 +418,7 @@ class KatdalAdapter(object):
 
     @property
     def uv_vis(self):
+        """ Returns AIPS visibilities """
         return self._vis_xformer
 
     @property
@@ -249,20 +454,7 @@ class KatdalAdapter(object):
         for si, state, target in self._katds.scans():
             yield si, state, self._catalogue[self.target_indices[0]]
 
-    def _antenna_map(self):
-        """
-        Returns
-        -------
-        dict
-            A { antenna_name: (index, antenna) } mapping
-        """
-        A = attr.make_class("IndexedAntenna", ["index", "antenna"])
-        return OrderedDict((a.name, A(i, a)) for i, a
-                           in enumerate(sorted(self._katds.ants)))
-
-
-    def aips_path(self, name=None, disk=None, aclass=None,
-                         seq=None, label=None, dtype=None):
+    def aips_path(self, **kwargs):
         """
         Constructs an aips path from a :class:`KatdalAdapter`
 
@@ -277,8 +469,8 @@ class KatdalAdapter(object):
         :class:`AIPSPath`
             AIPS path describing this observation
         """
-        if dtype is None:
-            dtype = "AIPS"
+        name = kwargs.pop('name', None)
+        dtype = kwargs.get('dtype', "AIPS")
 
         if name is None:
             path, file = os.path.split(self.katdal.name)
@@ -287,11 +479,7 @@ class KatdalAdapter(object):
             if dtype == "FITS":
                 name += '.uvfits'
 
-        if disk is None:
-            disk = 1
-
-        return AIPSPath(name=name, disk=disk, aclass=aclass,
-                        seq=seq, label=label, dtype=dtype)
+        return AIPSPath(name=name, **kwargs)
 
     def select(self, **kwargs):
         """ Proxies :meth:`katdal.DataSet.select` """
@@ -403,8 +591,8 @@ class KatdalAdapter(object):
         Returns
         -------
         list
-            (antenna1, antenna2, correlator_product_id) tuples, with the
-            correlator_product_id mapped in the following manner.
+            CorrelatorProduct(antenna1, antenna2, correlator_product_id)
+            objects, with the correlator_product_id mapped as follows:
 
             .. code-block:: python
 
@@ -413,25 +601,35 @@ class KatdalAdapter(object):
                   ('h','v'): 2,
                   ('v','h'): 3 }
         """
-        attrs = ["ant1", "ant2", "ant1_ix", "ant2_ix", "cid"]
-        CorrelatorProductBase = attr.make_class("CorrelatorProductBase", attrs)
+        class CorrelatorProduct(object):
+            def __init__(self, ant1, ant2, cid):
+                self.ant1 = ant1
+                self.ant2 = ant2
+                self.cid = cid
 
-        # Add properties onto the base class
-        class CorrelatorProduct(CorrelatorProductBase):
+            @property
+            def ant1_ix(self):
+                return katdal_ant_nr(self.ant1.name)
+
+            @property
+            def ant2_ix(self):
+                return katdal_ant_nr(self.ant2.name)
+
             @property
             def aips_ant1_ix(self):
-                return self.ant1_ix + 1
+                return aips_ant_nr(self.ant1.name)
 
             @property
             def aips_ant2_ix(self):
-                return self.ant2_ix + 1
+                return aips_ant_nr(self.ant2.name)
 
             @property
             def aips_bl_ix(self):
+                """ This produces the AIPS baseline index random parameter """
                 return self.aips_ant1_ix * 256.0 + self.aips_ant2_ix
 
-        antenna_map = self._antenna_map()
-
+        # { name : antenna } mapping
+        antenna_map = { a.name : a for a in self._katds.ants }
         products = []
 
         for a1_corr, a2_corr in self._katds.corr_products:
@@ -448,14 +646,13 @@ class KatdalAdapter(object):
                 cid = self.CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError:
                 raise ValueError("Invalid Correlator Product "
-                                 "['{}', '{}']".format(a1_corr, a2_corr))
+                                 "['%s, '%s']" % (a1_corr, a2_corr))
 
             # Look up katdal antenna pair
             a1 = antenna_map[a1_name]
             a2 = antenna_map[a2_name]
 
-            products.append(CorrelatorProduct(a1.antenna, a2.antenna,
-                                              a1.index, a2.index, cid))
+            products.append(CorrelatorProduct(a1, a2, cid))
 
         return products
 
@@ -553,7 +750,7 @@ class KatdalAdapter(object):
         Returns
         -------
         float
-            Reference wavelength
+            Reference wavelength in metres
         """
         return 2.997924562e8 / self.reffreq
 
@@ -592,7 +789,7 @@ class KatdalAdapter(object):
 
         return [{
             # MeerKAT antenna information
-            'NOSTA': [i],
+            'NOSTA': [aips_ant_nr(a.name)],
             'ANNAME': [a.name],
             'STABXYZ': list(a.position_ecef),
             'DIAMETER': [a.diameter],
@@ -608,7 +805,7 @@ class KatdalAdapter(object):
             'BEAMFWHM': [0.0],
             'ORBPARM': [],
             'MNTSTA': [0]
-        } for i, a in enumerate(sorted(self._katds.ants), 1)]
+        } for a in sorted(self._katds.ants)]
 
     @property
     def uv_source_keywords(self):
@@ -690,7 +887,7 @@ class KatdalAdapter(object):
 
         return [{
             # Fill in data from MeerKAT spectral window
-            'FRQSEL': [1],
+            'FRQSEL': [self.frqsel],        # Frequency setup ID
             'IF FREQ': [0.0],
             'CH WIDTH': [self.chinc],
             # Should be 'BANDCODE' according to AIPS MEMO 117!

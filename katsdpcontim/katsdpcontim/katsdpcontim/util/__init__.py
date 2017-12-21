@@ -1,4 +1,5 @@
 import ast
+import functools
 import logging
 
 from pretty import pretty
@@ -11,6 +12,41 @@ import ObitTask
 
 log = logging.getLogger('katsdpcontim')
 
+def post_process_args(args, kat_adapter):
+    """
+    Perform post-processing on command line arguments.
+
+    1. Capture Block ID set to katdal experiment ID if not present.
+
+    Parameters
+    ----------
+    args : object
+        Arguments created by :meth:`argparse.ArgumentParser.parse_args()`
+    kat_adapter : :class:`katsdpcontim.KatdalAdapter`
+        Katdal Adapter
+
+    Returns
+    -------
+    object
+        Modified arguments
+    """
+    # Set capture block ID to experiment ID if not set
+    if args.capture_block_id is None:
+        args.capture_block_id = kat_adapter.experiment_id
+
+        log.warn("No capture block ID was specified. "
+                "Using experiment_id '%s' instead.", kat_adapter.experiment_id)
+
+    return args
+
+import __builtin__
+
+# builtin function whitelist
+_BUILTIN_WHITELIST = frozenset(['slice'])
+_missing = _BUILTIN_WHITELIST.difference(dir(__builtin__))
+if len(_missing) > 0:
+    raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
+
 
 def parse_python_assigns(assign_str):
     """
@@ -20,17 +56,17 @@ def parse_python_assigns(assign_str):
     .. code-block:: python
 
         h5 = katdal.open('123456789.h5')
-        kwargs = parse_python_assigns("spw=3; scans=[1,2];
-                                      targets='bpcal,radec'")
+        kwargs = parse_python_assigns("spw=3; scans=[1,2];"
+                                      "targets='bpcal,radec';"
+                                      "channels=slice(0,2048)")
         h5.select(**kwargs)
 
     Parameters
     ----------
     assign_str: str
-        Assignment string. Should only contain
-        assignment statements assigning
-        python literal values to names,
-        separated by semi-colons.
+        Assignment string. Should only contain assignment statements
+        assigning python literals or builtin function calls, to variable names.
+        Multiple assignment statements should be separated by semi-colons.
 
     Returns
     -------
@@ -39,18 +75,84 @@ def parse_python_assigns(assign_str):
         assignment results.
     """
 
+
     if not assign_str:
         return {}
 
-    try:
-        return {target.id: ast.literal_eval(stmt.value)
-                for stmt in ast.parse(assign_str, mode='single').body
-                for target in stmt.targets}
-    except SyntaxError as e:
-        log.exception("Exception parsing assignment string "
-                      "'{}'".format(assign_str))
-        raise e
+    def _eval_value(stmt_value):
+        # If the statement value is a call to a builtin, try evaluate it
+        if isinstance(stmt_value, ast.Call):
+            func_name = stmt_value.func.id
 
+            if func_name not in _BUILTIN_WHITELIST:
+                raise ValueError("Function '%s' in '%s' is not builtin. "
+                                 "Available builtins: '%s'"
+                                    % (func_name, assign_str, list(_BUILTIN_WHITELIST)))
+
+            # Recursively pass arguments through this same function
+            if stmt_value.args is not None:
+                args = tuple(_eval_value(a) for a in stmt_value.args)
+            else:
+                args = ()
+
+            # Recursively pass keyword arguments through this same function
+            if stmt_value.keywords is not None:
+                kwargs = {kw.arg : _eval_value(kw.value) for kw
+                                          in stmt_value.keywords}
+            else:
+                kwargs = {}
+
+            return getattr(__builtin__, func_name)(*args, **kwargs)
+        # Try a literal eval
+        else:
+            return ast.literal_eval(stmt_value)
+
+    # Variable dictionary
+    variables = {}
+
+    # Parse the assignment string
+    stmts = ast.parse(assign_str, mode='single').body
+
+    for i, stmt in enumerate(stmts):
+        if not isinstance(stmt, ast.Assign):
+            raise ValueError("Statement %d in '%s' is not a "
+                             "variable assignment." % (i, assign_str))
+
+        # Evaluate assignment lhs
+        values = _eval_value(stmt.value)
+
+        # Promote to tuple so that we can zip with multiple targets
+        # and handle possible tuple destructuring
+        if not isinstance(values, (tuple, list)):
+            values = (values,)
+
+        if not len(values) == len(stmt.targets):
+            raise ValueError("Number of targets '%d' in assigment %d "
+                             "of expression '%s' does not match "
+                             "the number of values '%s'" %
+                                (len(stmt.targets), i, assign_str, len(values)))
+
+        # Assign variables to values
+        for target, value in zip(stmt.targets, values):
+            variables[target.id] = value
+
+    return variables
+
+def log_exception(logger):
+    """ Decorator that wraps the passed log object and logs exceptions """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except:
+                logger.exception("Exception in '%s'", func.__name__)
+                raise
+
+        return wrapper
+
+    return decorator
 
 def task_factory(name, aips_cfg_file=None, **kwargs):
     """
@@ -114,8 +216,8 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         except AttributeError as e:
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
-                log.warn("Key '{}' is not valid for this "
-                         "task and will be ignored".format(k))
+                log.warn("Key '%s' is not valid for this "
+                         "task and will be ignored", k)
             else:
                 raise
 

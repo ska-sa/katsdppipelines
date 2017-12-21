@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os.path
 
 import numpy as np
@@ -11,27 +12,33 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         uv_factory, uv_export,
                         uv_history_obs_description,
                         uv_history_selection)
-from katsdpcontim.util import parse_python_assigns
+from katsdpcontim.util import parse_python_assigns, log_exception
+
+log = logging.getLogger('katsdpcontim')
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
 def create_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("katdata", help="hdf5 observation file")
-    parser.add_argument("-l", "--label", default="MeerKAT")
-    parser.add_argument("-n", "--name", help="AIPS name")
-    parser.add_argument("-c", "--class", default="raw", dest="aclass",
+    parser.add_argument("katdata", help="hdf5 observation file", type=str)
+    parser.add_argument("-l", "--label", default="MeerKAT", type=str)
+    parser.add_argument("-n", "--name", help="AIPS name", type=str)
+    parser.add_argument("-c", "--class", default="raw",
+                                        type=str,
+                                        dest="aclass",
                                         help="AIPS class")
     parser.add_argument("-d", "--disk", default=1,
+                                        type=int,
                                         help="AIPS disk")
-    parser.add_argument("-s", "--seq", default=1,
+    parser.add_argument("-s", "--seq", default=None,
+                                        type=int,
                                         help="AIPS sequence")
     parser.add_argument("--nvispio", default=1024,
-                                     type=int,
+                                        type=int,
                                         help="Number of visibilities "
                                              "read/written per IO call")
     parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=parse_python_assigns,
+                                        type=log_exception(log)(parse_python_assigns),
                                         help="katdal select statement "
                                              "Should only contain python "
                                              "assignment statements to python "
@@ -46,8 +53,8 @@ KA = KatdalAdapter(katdal.open(args.katdata))
 
 with obit_context():
     # Construct file object
-    aips_path = KA.aips_path(args.name, args.disk,
-                            args.aclass, args.seq, dtype="AIPS")
+    aips_path = KA.aips_path(name=args.name, disk=args.disk,
+                            aclass=args.aclass, seq=args.seq, dtype="AIPS")
 
     # Apply the katdal selection
     KA.select(**args.select)
