@@ -272,12 +272,7 @@ def aips_catalogue(katdata):
             # being useful for MeerKAT as they are never more than a few mas/yr.
             # There is a separate Planetary Ephemeris (PO) table for solar
             # system objects which may be needed for the Sun or planets
-            # (a whole different bucket of worms).PMRA, PMDEC are the proper
-            # motions of Galactic or extragalactic objects.
-            # These are a rather muddled implementation as they also need
-            # both equinox and epoch of the standard position, which for
-            # Hipparcos positions are different. In practice, these are
-            # usually included in the apparent position of date.
+            # (a whole different bucket of worms).
             # I can't see these ever being useful for MeerKAT as they are never
             # more than a few mas/yr. There is a separate
             # Planetary Ephemeris (PO) table for solar system objects which
@@ -768,7 +763,7 @@ class KatdalAdapter(object):
 
         return {
             'ARRNAM': MEERKAT,
-            'FREQ': self.channel_freqs[0],  # Reference frequency
+            'FREQ': self.reffreq,           # Reference frequency
             'FREQID': self.frqsel,          # Frequency setup id
             'RDATE': self.obsdat,           # Reference date
             'NO_IF': self.nif,              # Number of spectral windows
