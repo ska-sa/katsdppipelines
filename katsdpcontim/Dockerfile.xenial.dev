@@ -80,16 +80,16 @@ RUN sed -i -e '455,461d' install.pl
 RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
 
 # Replace /etc/services with those required by aips
-ADD katsdpcontim/services /etc/services
+ADD services /etc/services
 
 ENV OBIT_BASE_PATH /usr/local/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
 
 # Add the Obit source code
-ADD katsdpcontim/Obit/trunk $OBIT_BASE_PATH
+ADD Obit/trunk $OBIT_BASE_PATH
 
 # Add OBIT patch
-ADD katsdpcontim/obit.patch $OBIT_BASE_PATH/obit.patch
+ADD obit.patch $OBIT_BASE_PATH/obit.patch
 
 WORKDIR $OBIT_BASE_PATH
 
@@ -127,41 +127,37 @@ RUN cd ObitSystem/ObitTalk && \
 RUN pip install -U pkginfo katversion
 
 # Install master katpoint
-ADD katsdpcontim/katpoint /src/katpoint
+ADD katpoint /src/katpoint
 RUN pip install -e /src/katpoint
 
 # Install master katdal
-ADD katsdpcontim/katdal /src/katdal
+ADD katdal /src/katdal
 RUN pip install -e /src/katdal
 
-# Install katsdpcontim package
-ADD katsdpcontim/katsdptelstate /src/katsdptelstate
+# Install katsdptelstate package
+ADD katsdptelstate /src/katsdptelstate
 RUN pip install -e /src/katsdptelstate
 
-# Install katim
-ADD . /src/katsdppipelines
-RUN pip install -e /src/katsdppipelines/Obit-pipeline
-
-# Install katsdpcontim package
-ADD katsdpcontim/katacomb /src/katacomb
+# Install katacomb package
+ADD katacomb /src/katacomb
 RUN pip install -e /src/katacomb
 
-# Add katsdpcontim task configuration files
-ADD katsdpcontim/katacomb/katacomb/conf /obitconf
+# Add task configuration files
+ADD katacomb/katacomb/conf /obitconf
 
 # Add OBIT setup script
-ADD katsdpcontim/setup_obit.sh /bin/setup_obit.sh
+ADD setup_obit.sh /bin/setup_obit.sh
 
 # Add run script and make it executable
-ADD katsdpcontim/run.sh /run.sh
+ADD run.sh /run.sh
 
 RUN chmod a+x /run.sh
 
 # Add Xdefaults
-ADD katsdpcontim/Xdefaults /root/.Xdefaults
+ADD Xdefaults /root/.Xdefaults
 
 # Add tightvncserver startup script and set permissions
-ADD katsdpcontim/xstartup /root/.vnc/xstartup
+ADD xstartup /root/.vnc/xstartup
 
 RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
 
@@ -169,7 +165,7 @@ RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
 RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
     chmod og-rwx /root/.vnc/passwd
 
-ADD katsdpcontim/xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
 
 # Add obit setup and aips login to bashrc
 RUN touch /root/.bashrc && \

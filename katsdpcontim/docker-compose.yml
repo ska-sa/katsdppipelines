@@ -2,8 +2,8 @@ version: "2.0"
 services:
   xenial-obit-dev:
     build:
-      context: ..
-      dockerfile: katsdpcontim/Dockerfile.xenial.dev
+      context: .
+      dockerfile: Dockerfile.xenial.dev
 
     container_name: xenial-obit-dev
     image: obit/xenial:dev
