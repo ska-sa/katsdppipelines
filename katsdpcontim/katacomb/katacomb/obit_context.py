@@ -8,7 +8,7 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 # Single obit context class
 __obit_context = None

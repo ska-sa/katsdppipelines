@@ -3,10 +3,10 @@ import logging
 import InfoList
 import ParserUtil
 
-from katsdpcontim import obit_err, handle_obit_err
-from katsdpcontim.obit_types import OBIT_TYPE_ENUM
+from katacomb import obit_err, handle_obit_err
+from katacomb.obit_types import OBIT_TYPE_ENUM
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 
 def parse_aips_config(aips_cfg_file):

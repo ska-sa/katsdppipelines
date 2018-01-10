@@ -1,10 +1,10 @@
 """
 This is a stripped down version of h5touvfits.py from
 the original Obit pipeline, ``katim`` and upgraded to
-use ``katsdpcontim's`` Obit environment handling.
+use ``katacomb's`` Obit environment handling.
 
 It exists to test correctness of export against the
-newer export in katsdpcontim.
+newer export in katacomb.
 Just like ``h5touvfits``, it uses a FITS template file
 as a basis for creating a file on an AIPS disk.
 Aside from this, most of the export logic exists in
@@ -26,8 +26,8 @@ import AIPS, UV
 from katim import KATH5toAIPS
 from katim import KATCal
 
-from katsdpcontim import obit_context, obit_err, handle_obit_err
-from katsdpcontim.util import parse_python_assigns
+from katacomb import obit_context, obit_err, handle_obit_err
+from katacomb.util import parse_python_assigns
 
 import warnings
 warnings.simplefilter('ignore')

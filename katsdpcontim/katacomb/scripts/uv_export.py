@@ -7,14 +7,14 @@ from pretty import pretty
 
 import katdal
 
-import katsdpcontim
-from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
+import katacomb
+from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         uv_factory, uv_export,
                         uv_history_obs_description,
                         uv_history_selection)
-from katsdpcontim.util import parse_python_assigns, log_exception
+from katacomb.util import parse_python_assigns, log_exception
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 

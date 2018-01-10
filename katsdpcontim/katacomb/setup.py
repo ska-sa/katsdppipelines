@@ -6,7 +6,7 @@ import re
 
 from setuptools import setup, find_packages
 
-PKG = 'katsdpcontim'
+PKG = 'katacomb'
 
 def find_version():
     """ Extract version from version.py """

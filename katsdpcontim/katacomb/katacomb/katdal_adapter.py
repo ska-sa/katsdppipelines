@@ -10,9 +10,9 @@ import numpy as np
 
 import UVDesc
 
-from katsdpcontim import AIPSPath
+from katacomb import AIPSPath
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
 

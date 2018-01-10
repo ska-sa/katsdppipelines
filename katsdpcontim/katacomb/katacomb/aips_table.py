@@ -8,8 +8,8 @@ import History
 import InfoList
 import Table
 
-from katsdpcontim import handle_obit_err
-from katsdpcontim.obit_types import (OBIT_TYPE_ENUM,
+from katacomb import handle_obit_err
+from katacomb.obit_types import (OBIT_TYPE_ENUM,
                                      OBIT_TYPE,
                                      OBIT_INTS,
                                      OBIT_FLOATS,
@@ -17,7 +17,7 @@ from katsdpcontim.obit_types import (OBIT_TYPE_ENUM,
                                      OBIT_BOOLS,
                                      OBIT_BITS)
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 
 def _scalarise(value):
