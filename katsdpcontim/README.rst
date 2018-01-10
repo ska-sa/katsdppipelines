@@ -24,11 +24,11 @@ Clone the following repositories:
     # git clone git@github.com:ska-sa/katdal.git
     # git clone git@github.com:ska-sa/katsdptelstate.git
 
-Also, checkout the Obit source code @ revision ``574``.
+Also, checkout the Obit source code @ revision ``576``.
 
 .. code-block::
 
-    # svn checkout -r 574 https://github.com/bill-cotton/Obit
+    # svn checkout -r 576 https://github.com/bill-cotton/Obit
 
 ~~~~~
 Build
