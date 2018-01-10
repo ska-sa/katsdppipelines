@@ -8,12 +8,12 @@ import six
 import UVDesc
 import OTObit
 
-from katsdpcontim import uv_factory
-from katsdpcontim.katdal_adapter import (aips_source_name,
+from katacomb import uv_factory
+from katacomb.katdal_adapter import (aips_source_name,
                                         time_chunked_scans)
-from katsdpcontim.util import fmt_bytes
+from katacomb.util import fmt_bytes
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     """
@@ -61,9 +61,9 @@ def uv_history_obs_description(kat_adapter, uvf):
 
     Parameters
     ----------
-    katdal_adapter : :class:`katsdpcontim.KatdalAdapter`
+    katdal_adapter : :class:`katacomb.KatdalAdapter`
         Katdal Adapter
-    uvf : :class:`katsdpcontim.UVFacade`
+    uvf : :class:`katacomb.UVFacade`
         UV file
     """
 
@@ -86,7 +86,7 @@ def uv_history_selection(selection, uvf):
     ----------
     selection : dict
         katdal selection parameters
-    uvf : :class:`katsdpcontim.UVFacade`
+    uvf : :class:`katacomb.UVFacade`
         UV file
     """
 
@@ -103,9 +103,9 @@ def uv_export(kat_adapter, uvf):
 
     Parameters
     ----------
-    katdal_adapter : :class:`katsdpcontim.KatdalAdapter`
+    katdal_adapter : :class:`katacomb.KatdalAdapter`
         Katdal Adapter
-    uvf : :class:`katsdpcontim.UVFacade`
+    uvf : :class:`katacomb.UVFacade`
         UV file
     """
     firstVis = 1            # FORTRAN indexing

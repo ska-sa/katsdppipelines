@@ -5,12 +5,12 @@ import logging
 from pretty import pretty
 import six
 
-from katsdpcontim.aips_parser import obit_config_from_aips
-from katsdpcontim.configuration import get_config
+from katacomb.aips_parser import obit_config_from_aips
+from katacomb.configuration import get_config
 
 import ObitTask
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 def post_process_args(args, kat_adapter):
     """
@@ -22,7 +22,7 @@ def post_process_args(args, kat_adapter):
     ----------
     args : object
         Arguments created by :meth:`argparse.ArgumentParser.parse_args()`
-    kat_adapter : :class:`katsdpcontim.KatdalAdapter`
+    kat_adapter : :class:`katacomb.KatdalAdapter`
         Katdal Adapter
 
     Returns

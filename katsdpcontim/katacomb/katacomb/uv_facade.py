@@ -8,13 +8,13 @@ import numpy as np
 import TableList
 import UV
 
-from katsdpcontim import (AIPSTable,
+from katacomb import (AIPSTable,
                           AIPSHistory,
                           AIPSPath,
                           obit_err,
                           handle_obit_err)
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 """ TextWrapper for wrapping AIPS history text to 70 chars """
 _history_wrapper = TextWrapper(width=70, initial_indent='',

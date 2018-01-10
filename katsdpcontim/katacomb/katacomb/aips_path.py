@@ -1,6 +1,6 @@
 import os
 
-from katsdpcontim import obit_err
+from katacomb import obit_err
 
 from AIPSDir import PHiSeq, PTestCNO
 from OSystem import PGetAIPSuser

@@ -4,8 +4,8 @@ import os
 from os.path import join as pjoin
 import shutil
 
-import katsdpcontim
-from katsdpcontim.configuration import get_config
+import katacomb
+from katacomb.configuration import get_config
 
 logging.getLogger('').handlers = [] # Remove handlers on the root logger
 

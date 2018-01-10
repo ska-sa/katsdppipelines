@@ -3,10 +3,10 @@
 import argparse
 import logging
 
-from katsdpcontim.obit_context import obit_context
-from katsdpcontim.util import task_factory, parse_python_assigns
+from katacomb.obit_context import obit_context
+from katacomb.util import task_factory, parse_python_assigns
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 def create_parser():
     """ Argument Parser """

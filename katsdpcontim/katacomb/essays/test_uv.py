@@ -1,8 +1,8 @@
 import argparse
 from pretty import pprint
 
-from katsdpcontim import obit_context
-import katsdpcontim.uv_facade as uvf
+from katacomb import obit_context
+import katacomb.uv_facade as uvf
 
 def create_parser():
     parser = argparse.ArgumentParser()

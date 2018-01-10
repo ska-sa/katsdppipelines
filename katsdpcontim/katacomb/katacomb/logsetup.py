@@ -11,7 +11,7 @@ def get_logger():
     ch.setLevel(logging.INFO)
     ch.setFormatter(cfmt)
 
-    logger = logging.getLogger('katsdpcontim')
+    logger = logging.getLogger('katacomb')
     logger.handlers = []
     logger.setLevel(logging.DEBUG)
     logger.addHandler(ch)

@@ -28,8 +28,8 @@ import six
 import katdal
 from katsdptelstate import TelescopeState
 
-import katsdpcontim
-from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
+import katacomb
+from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         task_factory,
                         img_factory,
                         uv_export,
@@ -38,12 +38,12 @@ from katsdpcontim import (KatdalAdapter, obit_context, AIPSPath,
                         uv_factory,
                         katdal_timestamps,
                         katdal_ant_name)
-from katsdpcontim.util import (parse_python_assigns,
+from katacomb.util import (parse_python_assigns,
                         log_exception,
                         post_process_args,
                         fractional_bandwidth)
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 def create_parser():
     parser = argparse.ArgumentParser()
@@ -77,7 +77,7 @@ UV_CLASS = "MFImag"
 IMG_CLASS = "IClean"
 
 with obit_context():
-    KA = katsdpcontim.KatdalAdapter(katdal.open(args.katdata))
+    KA = katacomb.KatdalAdapter(katdal.open(args.katdata))
     uv_merge_path = KA.aips_path(aclass='merge', seq=None)
     log.info("Exporting to '%s'", uv_merge_path)
 
@@ -312,7 +312,7 @@ with obit_context():
     mfimage_kwargs = uv_merge_path.task_input_kwargs()
     mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name='', aclass=IMG_CLASS, seq=clean_seq))
     mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name='', aclass=UV_CLASS, seq=uv_seq))
-    mfimage_cfg = pkg_resources.resource_filename('katsdpcontim', pjoin('conf', 'mfimage_nosc.in'))
+    mfimage_cfg = pkg_resources.resource_filename('katacomb', pjoin('conf', 'mfimage_nosc.in'))
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
                           nThreads=multiprocessing.cpu_count())
 

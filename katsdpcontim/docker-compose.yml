@@ -13,6 +13,8 @@ services:
     environment:
       - DISPLAY
       - QT_X11_NO_MITSHM=1
+    # tmpfs:
+    #   - /usr/local/AIPS/DATA/LOCALHOST_2:size=4g
     volumes:
-      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
-      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
+      - $HOME/.local/katacomb/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katacomb/aipsmounts/FITS:/usr/local/AIPS/FITS:rw

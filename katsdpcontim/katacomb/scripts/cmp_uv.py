@@ -9,14 +9,14 @@ from pprint import pprint, pformat
 
 import numpy as np
 
-from katsdpcontim import (KatdalAdapter, UVFacade,
+from katacomb import (KatdalAdapter, UVFacade,
                             handle_obit_err,
                             obit_context,
                             obit_err)
 
 import UV
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
 def create_parser():
     parser = argparse.ArgumentParser(description="Good for comparing "

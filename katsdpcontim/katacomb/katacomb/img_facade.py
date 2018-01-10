@@ -8,15 +8,15 @@ import FArray
 import Image
 import TableList
 
-from katsdpcontim import (AIPSTable,
+from katacomb import (AIPSTable,
                           AIPSHistory,
                           AIPSPath,
                           obit_err,
                           handle_obit_err)
 
-log = logging.getLogger('katsdpcontim')
+log = logging.getLogger('katacomb')
 
-from katsdpcontim.uv_facade import _history_wrapper
+from katacomb.uv_facade import _history_wrapper
 
 def img_file_mode(mode):
     """ Returns UV file mode given string mode """
