@@ -71,7 +71,7 @@ RUN pip install -U scipy pyfits matplotlib
 
 WORKDIR /usr/local/AIPS
 
-RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC16/install.pl
+RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl
 
 # Remove root user check:
 RUN sed -i -e '455,461d' install.pl
