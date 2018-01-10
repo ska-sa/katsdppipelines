@@ -54,8 +54,8 @@ specification in ``docker-compose.yml``:
 .. code-block:: yaml
 
     volumes:
-      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/usr/local/AIPS/DATA/LOCALHOST_1:rw
-      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/usr/local/AIPS/FITS:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/home/kat/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/home/kat/AIPS/FITS:rw
 
 Two important points to note:
 
@@ -160,9 +160,9 @@ to enter your user number. You should see something like the following:
 
     START_AIPS: User data area assignments:
     DADEVS.PL: This program is untested under Perl version 5.022
-      (Using global default file /usr/local/AIPS/DA00/DADEVS.LIST for DADEVS.PL)
-       Disk 1 (1) is /usr/local/AIPS/DATA/LOCALHOST_1
-       Disk 2 (2) is /usr/local/AIPS/DATA/LOCALHOST_2
+      (Using global default file /home/kat/AIPS/DA00/DADEVS.LIST for DADEVS.PL)
+       Disk 1 (1) is /home/kat/AIPS/DATA/LOCALHOST_1
+       Disk 2 (2) is /home/kat/AIPS/DATA/LOCALHOST_2
 
     Tape assignments:
        Tape 1 is REMOTE
@@ -254,27 +254,27 @@ in "docker-compose.yml" should also be based on this configuration**.
 AIPS Disks
 ~~~~~~~~~~
 
-The Dockerfile installs AIPS into ``/usr/local/AIPS``.
+The Dockerfile installs AIPS into ``/home/kat/AIPS``.
 AIPS disks are usually present in the ``DATA`` sub-directory of the AIPS installation
-and ``/usr/local/AIPS/DATA/LOCALHOST_1`` is the first AIPS disk by default.
+and ``/home/kat/AIPS/DATA/LOCALHOST_1`` is the first AIPS disk by default.
 
 However, AIPS disks can live in any subdirectory and can be configured
 by editing:
 
-- ``/usr/local/AIPS/DA00/DADEVS.LIST``
-- ``/usr/local/AIPS/DA00/NETSP``
+- ``/home/kat/AIPS/DA00/DADEVS.LIST``
+- ``/home/kat/AIPS/DA00/NETSP``
 
 AIPS also has a separate FITS area in which *normal* FITS files are stored,
-and ``/usr/local/AIPS/FITS`` is this area by default.
+and ``/home/kat/AIPS/FITS`` is this area by default.
 
 
 Obit Disks
 ~~~~~~~~~~
 
-The Dockerfile installs Obit into ``/usr/local/Obit``.
+The Dockerfile installs Obit into ``/home/kat/Obit``.
 Obit *fakes* AIPS disks and FITS areas by calls to :code:`OSystem.OSystem`.
 It should also be noted that Obit requires files in the
-``/usr/local/Obit/ObitSystem/Obit/share/data/`` directory to be present in a FITS area,
+``/home/kat/Obit/ObitSystem/Obit/share/data/`` directory to be present in a FITS area,
 source catalogues being the most obvious example.
 
 In order to run AIPS tasks on Obit output it is useful make these

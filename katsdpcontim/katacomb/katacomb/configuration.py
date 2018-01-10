@@ -15,7 +15,7 @@ def config_validator():
     from cerberus import Validator
 
     # Create the aips schema and defaults
-    aipsroot = pjoin(os.sep, 'usr', 'local', 'AIPS')
+    aipsroot = pjoin(os.sep, 'home', 'kat', 'AIPS')
 
     aips_schema = {
         'aipsroot': {'type': 'string', 'default': aipsroot},
@@ -25,7 +25,7 @@ def config_validator():
     }
 
     # Create the obit schema and defaults
-    obitroot = pjoin(os.sep, 'usr', 'local', 'Obit')
+    obitroot = pjoin(os.sep, 'home', 'kat', 'Obit')
     obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
     # (url, dir) tuples, where None means localhost
     fitsdirs = [(None, pjoin(aipsroot, 'FITS'))]

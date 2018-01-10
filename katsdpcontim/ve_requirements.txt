@@ -1,0 +1,7 @@
+numpy >= 1.14.0
+pkginfo
+git+ssh://git@github.com/ska-sa/katversion@master#egg=katversion
+git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
+git+ssh://git@github.com/ska-sa/katdal@f4b9ff291a4e7103734dc87f4b1475e9f0915a05#egg=katdal
+git+ssh://git@github.com/ska-sa/katsdptelstate@master#egg=katsdptelstate
+#git+ssh://git@github.com/ska-sa/katsdppipelines@master#egg=katacomb&subdirectory=katsdpcontim/katacomb

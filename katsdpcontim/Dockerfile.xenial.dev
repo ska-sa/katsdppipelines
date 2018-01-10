@@ -1,5 +1,8 @@
-FROM ubuntu:xenial-20170802
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base:latest
 MAINTAINER sperkins@ska.ac.za
+
+# Switch to root for package install
+USER root
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -51,13 +54,14 @@ ENV PACKAGES \
     libnss3-dev \
     libssh2-1-dev
 
-# enable universe, multiverse, restricted with world wide mirrors
+# Update, upgrade and install packages
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y $PACKAGES && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Install gsl 1.16
 RUN mkdir -p /src && \
     cd /src && \
     curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
@@ -66,24 +70,19 @@ RUN mkdir -p /src && \
     make -j 8 all && \
     make -j 8 install
 
-RUN pip install -U pip setuptools wheel
-RUN pip install -U scipy pyfits matplotlib
-
-WORKDIR /usr/local/AIPS
-
-RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl
-
-# Remove root user check:
-RUN sed -i -e '455,461d' install.pl
-
-## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
-RUN ["/bin/bash","-c","aipscmd=$'\nroot\n\nSKACOMM\nY\n\n\n/usr/local/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
-
-# Replace /etc/services with those required by aips
-ADD services /etc/services
-
-ENV OBIT_BASE_PATH /usr/local/Obit
+ENV AIPS_BASE_PATH /home/kat/AIPS
+ENV AIPS_DATA_PATH /home/kat/AIPS/DATA
+ENV OBIT_BASE_PATH /home/kat/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
+
+# Add services required by AIPS
+# This is based on 16.04 /etc/services
+ADD services.append /tmp/services.append
+RUN cat /tmp/services.append >> /etc/services && \
+    rm -f /tmp/services.append
+
+# Add task configuration files
+ADD katacomb/katacomb/conf /obitconf
 
 # Add the Obit source code
 ADD Obit/trunk $OBIT_BASE_PATH
@@ -91,25 +90,91 @@ ADD Obit/trunk $OBIT_BASE_PATH
 # Add OBIT patch
 ADD obit.patch $OBIT_BASE_PATH/obit.patch
 
+# Add OBIT setup script
+ADD setup_obit.sh /bin/setup_obit.sh
+
+# Add run script and make it executable
+ADD run.sh /run.sh
+
+# Add Xdefaults
+ADD Xdefaults /home/kat/.Xdefaults
+
+# Add tightvncserver startup script
+ADD xstartup /home/kat/.vnc/xstartup
+RUN chmod og-rwx,u+rwx /home/kat/.vnc/xstartup
+
+# Saner xfce4 keyboard settings
+ADD xfce4-keyboard-shortcuts.xml /home/kat/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+
+ADD obit_requirements.txt /tmp/obit_requirements.txt
+ADD ve_requirements.txt /tmp/ve_requirements.txt
+
+ADD katacomb /home/kat/src/katacomb
+
+# Ensure everything under /home/kat belongs to kat
+RUN chown -R kat:kat /home/kat
+
+# Install obit requirements as root so that packages
+# like ObitTalk and ObitView have access to them
+RUN pip install -r /tmp/obit_requirements.txt
+
+# Now downgrade to kat
+USER kat
+
+# Set tightvncserver password
+RUN echo 'obitsky' | vncpasswd -f > /home/kat/.vnc/passwd && \
+    chmod og-rwx /home/kat/.vnc/passwd
+
+# Add obit setup and aips login to bashrc
+RUN touch /home/kat/.bashrc && \
+    cat /bin/setup_obit.sh >> /home/kat/.bashrc && \
+    echo ". $AIPS_BASE_PATH/LOGIN.SH" >> /home/kat/.bashrc
+
+RUN mkdir -p $AIPS_BASE_PATH
+RUN mkdir -p $AIPS_DATA_PATH
+WORKDIR $AIPS_BASE_PATH
+
+#RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl
+
+## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
+#RUN ["/bin/bash","-c","aipscmd=$'\nkat\n\nSKACOMM\nY\n\n\n$AIPS_BASE_PATH/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
+
+RUN . ~/ve/bin/activate && \
+    pip install -U pip setuptools wheel
+
+RUN . ~/ve/bin/activate && \
+    pip install -r /tmp/obit_requirements.txt -r /tmp/ve_requirements.txt
+
+RUN . ~/ve/bin/activate && \
+    pip install -e /home/kat/src/katacomb
+
+RUN mkdir -p $OBIT_BASE_PATH
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
 RUN patch -p1 -N -s < obit.patch
 
-# Compile and install Obit
+# Compile Obit
 RUN cd ObitSystem/Obit && \
     ./configure --prefix=/usr --without-plplot --without-wvr && \
     make clean && \
     make -j 8
 
-# Compile and install ObitView
+# Compile ObitView
+# Useful, but not critical image viewing utility
+# that can interact with Obit MFImage while it is running, or with ObitTalk.
+# This could be removed from Dockerfile but is useful for
+# debugging in the container in conjunction with the VNC server
 RUN cd ObitSystem/ObitView && \
     ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
     make clean && \
-    make && \
-    make install
+    make
 
-# Compile and install ObitTalk
+# Compile ObitTalk
+# Useful, but not critical tool for interacting with the AIPS filesystem
+# and ObitView
+# This could be removed from the Dockerfile but is useful for
+# debugging in the container in conjunction with the VNC server
 RUN cd ObitSystem/ObitTalk && \
     # --with-obit doesn'tt pick up the PYTHONPATH and libObit.so correctly
     export PYTHONPATH=$OBIT/python && \
@@ -117,60 +182,28 @@ RUN cd ObitSystem/ObitTalk && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
-    make ||true && make install || true && \
+    make ||true
+
+# Go back to root priviledges to install
+# ObitView and ObitTalk in the /usr filesystem
+USER root
+
+# Install ObitView
+RUN cd ObitSystem/ObitView && \
+    make install
+
+# Install ObitTalk
+RUN cd ObitSystem/ObitTalk && \
+    # Run the main makefile. This gets some of the way but falls over
+    # due to lack of latex
+    make install || true && \
     # Just install ObitTalk and ObitTalkServer
     cd bin && \
     make clean && \
     make && \
     make install
 
-RUN pip install -U pkginfo katversion
-
-# Install master katpoint
-ADD katpoint /src/katpoint
-RUN pip install -e /src/katpoint
-
-# Install master katdal
-ADD katdal /src/katdal
-RUN pip install -e /src/katdal
-
-# Install katsdptelstate package
-ADD katsdptelstate /src/katsdptelstate
-RUN pip install -e /src/katsdptelstate
-
-# Install katacomb package
-ADD katacomb /src/katacomb
-RUN pip install -e /src/katacomb
-
-# Add task configuration files
-ADD katacomb/katacomb/conf /obitconf
-
-# Add OBIT setup script
-ADD setup_obit.sh /bin/setup_obit.sh
-
-# Add run script and make it executable
-ADD run.sh /run.sh
-
-RUN chmod a+x /run.sh
-
-# Add Xdefaults
-ADD Xdefaults /root/.Xdefaults
-
-# Add tightvncserver startup script and set permissions
-ADD xstartup /root/.vnc/xstartup
-
-RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
-
-# Set tightvncserver password
-RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
-    chmod og-rwx /root/.vnc/passwd
-
-ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
-
-# Add obit setup and aips login to bashrc
-RUN touch /root/.bashrc && \
-    cat /bin/setup_obit.sh >> /root/.bashrc && \
-    echo ". /usr/local/AIPS/LOGIN.SH" >> /root/.bashrc
+USER kat
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
