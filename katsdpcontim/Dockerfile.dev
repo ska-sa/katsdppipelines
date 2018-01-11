@@ -1,0 +1,73 @@
+FROM obit/xenial:latest
+MAINTAINER sperkins@ska.ac.za
+
+# Switch to root for package install
+USER root
+
+ENV DEBIAN_FRONTEND noninteractive
+
+ENV PACKAGES \
+    xfce4 \
+    tightvncserver
+
+# Update, upgrade and install packages
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y $PACKAGES && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+ENV AIPS_BASE_PATH /home/kat/AIPS
+ENV AIPS_DATA_PATH /home/kat/AIPS/DATA
+
+# Add services required by AIPS
+# This is based on 16.04 /etc/services
+ADD services.append /tmp/services.append
+RUN cat /tmp/services.append >> /etc/services && \
+    rm -f /tmp/services.append
+
+# Add run script and make it executable
+ADD run.sh /run.sh
+RUN chmod uog+x /run.sh
+
+# Add Xdefaults
+ADD Xdefaults /home/kat/.Xdefaults
+
+# Add tightvncserver startup script
+ADD xstartup /home/kat/.vnc/xstartup
+RUN chmod og-rwx,u+rwx /home/kat/.vnc/xstartup
+
+# Set tightvncserver password
+RUN echo 'obitsky' | vncpasswd -f > /home/kat/.vnc/passwd && \
+    chmod og-rwx /home/kat/.vnc/passwd
+
+# Saner xfce4 keyboard settings
+ADD xfce4-keyboard-shortcuts.xml /home/kat/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+
+# Ensure everything under /home/kat belongs to kat
+RUN chown -R kat:kat /home/kat
+
+# Now downgrade to kat
+USER kat
+
+RUN mkdir -p $AIPS_BASE_PATH
+RUN mkdir -p $AIPS_DATA_PATH
+WORKDIR $AIPS_BASE_PATH
+
+RUN curl ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl -O
+
+## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
+RUN ["/bin/bash","-c","aipscmd=$'\nkat\n\nSKACOMM\nY\n\n\n/home/kat/AIPS/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
+
+USER kat
+
+# Add obit setup and aips login to bashrc
+RUN touch /home/kat/.bashrc && \
+    cat /bin/setup_obit.sh >> /home/kat/.bashrc && \
+    echo ". $AIPS_BASE_PATH/LOGIN.SH" >> /home/kat/.bashrc
+
+# Set the work directory to /obitconf
+WORKDIR /obitconf
+
+# Run run.sh and then go to interactive shell
+CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]

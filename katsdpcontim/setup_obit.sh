@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash/env
 
 # For future reference, the following are the environment variables
 # created by setup.sh, in turn created by calling InstallObit.sh

@@ -48,11 +48,7 @@ ENV PACKAGES \
     zlib1g-dev \
     libpython3.5-dev \
     libpython2.7-dev \
-    python-tk \
-    xfce4 \
-    tightvncserver \
-    libnss3-dev \
-    libssh2-1-dev
+    python-tk
 
 # Update, upgrade and install packages
 RUN apt-get update && \
@@ -70,16 +66,8 @@ RUN mkdir -p /src && \
     make -j 8 all && \
     make -j 8 install
 
-ENV AIPS_BASE_PATH /home/kat/AIPS
-ENV AIPS_DATA_PATH /home/kat/AIPS/DATA
 ENV OBIT_BASE_PATH /home/kat/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
-
-# Add services required by AIPS
-# This is based on 16.04 /etc/services
-ADD services.append /tmp/services.append
-RUN cat /tmp/services.append >> /etc/services && \
-    rm -f /tmp/services.append
 
 # Add task configuration files
 ADD katacomb/katacomb/conf /obitconf
@@ -92,19 +80,6 @@ ADD obit.patch $OBIT_BASE_PATH/obit.patch
 
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
-
-# Add run script and make it executable
-ADD run.sh /run.sh
-
-# Add Xdefaults
-ADD Xdefaults /home/kat/.Xdefaults
-
-# Add tightvncserver startup script
-ADD xstartup /home/kat/.vnc/xstartup
-RUN chmod og-rwx,u+rwx /home/kat/.vnc/xstartup
-
-# Saner xfce4 keyboard settings
-ADD xfce4-keyboard-shortcuts.xml /home/kat/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
 
 ADD obit_requirements.txt /tmp/obit_requirements.txt
 ADD ve_requirements.txt /tmp/ve_requirements.txt
@@ -121,23 +96,9 @@ RUN pip install -r /tmp/obit_requirements.txt
 # Now downgrade to kat
 USER kat
 
-# Set tightvncserver password
-RUN echo 'obitsky' | vncpasswd -f > /home/kat/.vnc/passwd && \
-    chmod og-rwx /home/kat/.vnc/passwd
-
-# Add obit setup and aips login to bashrc
+# Add obit setup to bashrc
 RUN touch /home/kat/.bashrc && \
-    cat /bin/setup_obit.sh >> /home/kat/.bashrc && \
-    echo ". $AIPS_BASE_PATH/LOGIN.SH" >> /home/kat/.bashrc
-
-RUN mkdir -p $AIPS_BASE_PATH
-RUN mkdir -p $AIPS_DATA_PATH
-WORKDIR $AIPS_BASE_PATH
-
-#RUN wget ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl
-
-## INSTALL AIPS - the here string just cycles through the aips install menu with (mostly) defaults.
-#RUN ["/bin/bash","-c","aipscmd=$'\nkat\n\nSKACOMM\nY\n\n\n$AIPS_BASE_PATH/DATA/LOCALHOST_1\n\n\n\n\n\n\n\n\n\n\n' && perl install.pl -n <<< \"$aipscmd\""]
+    cat /bin/setup_obit.sh >> /home/kat/.bashrc
 
 RUN . ~/ve/bin/activate && \
     pip install -U pip setuptools wheel
@@ -163,8 +124,7 @@ RUN cd ObitSystem/Obit && \
 # Compile ObitView
 # Useful, but not critical image viewing utility
 # that can interact with Obit MFImage while it is running, or with ObitTalk.
-# This could be removed from Dockerfile but is useful for
-# debugging in the container in conjunction with the VNC server
+# This could be removed from Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitView && \
     ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
     make clean && \
@@ -173,8 +133,7 @@ RUN cd ObitSystem/ObitView && \
 # Compile ObitTalk
 # Useful, but not critical tool for interacting with the AIPS filesystem
 # and ObitView
-# This could be removed from the Dockerfile but is useful for
-# debugging in the container in conjunction with the VNC server
+# This could be removed from the Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitTalk && \
     # --with-obit doesn'tt pick up the PYTHONPATH and libObit.so correctly
     export PYTHONPATH=$OBIT/python && \
@@ -208,5 +167,5 @@ USER kat
 # Set the work directory to /obitconf
 WORKDIR /obitconf
 
-# Run run.sh and then go to interactive shell
-CMD ["/bin/bash", "--rcfile", "/run.sh", "-i"]
+# Configure Obit/AIPS disks
+RUN /bin/bash -c ". /bin/setup_obit.sh && cfg_aips_disks.py"
