@@ -5,11 +5,14 @@ Docker files for building ``AIPS`` and ``Obit`` on Ubuntu ``xenial``.
 Both production (Dockerfile) and development (Dockerfile.dev) containers
 are available.
 The production container contains Obit installed under the
-kat user's directory.
+kat user's directory and runs python code and Obit executables
+as the ``kat`` user.
 
 The development container extends the production container by
 installing AIPS under the kat user's directory,
-in addition to a VNC server.
+in addition to a VNC server. In contrast to the production
+container, it runs code as ``root``. This allows developers
+to (easily) mount read/write docker volumes.
 
 ~~~~~~~~~~~~
 Requirements
@@ -57,13 +60,17 @@ specification in ``docker-compose.yml``:
 .. code-block:: yaml
 
     volumes:
-      - $HOME/.local/katsdpcontim/aipsmounts/AIPS:/home/kat/AIPS/DATA/LOCALHOST_1:rw
-      - $HOME/.local/katsdpcontim/aipsmounts/FITS:/home/kat/AIPS/FITS:rw
+      - $HOME/.local/katacomb/aipsmounts/AIPS:/home/kat/AIPS/DATA/LOCALHOST_1:rw
+      - $HOME/.local/katacomb/aipsmounts/FITS:/home/kat/AIPS/FITS:rw
 
-Two important points to note:
+Important points to note:
 
-- These will be **mounted as the root** and **consume large quantities of disk space**.
-- The mount points inside the container should match the configuration discussed in `AIPS Disk Setup`_.
+- Production container mounts will need to have the same permission as the kat user.
+- The development container runs as root, so developers can aggressively
+  mount writeable volumes, with all the security implications thereof.
+- AIPS/Obit observation files **consume large quantities of disk space**.
+- The mount points inside the container should match the configuration
+  discussed in `AIPS Disk Setup`_.
 
 It's useful to mount the KAT archives and other volumes within these containers.
 Edit ``docker-compose.yml`` to mount KAT NFS ``archive2`` within the container,
