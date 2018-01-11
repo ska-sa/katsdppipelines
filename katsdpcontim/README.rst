@@ -2,6 +2,14 @@ Obit Docker build
 =================
 
 Docker files for building ``AIPS`` and ``Obit`` on Ubuntu ``xenial``.
+Both production (Dockerfile) and development (Dockerfile.dev) containers
+are available.
+The production container contains Obit installed under the
+kat user's directory.
+
+The development container extends the production container by
+installing AIPS under the kat user's directory,
+in addition to a VNC server.
 
 ~~~~~~~~~~~~
 Requirements
@@ -18,28 +26,23 @@ Setup
 
 Clone the following repositories:
 
-.. code-block::
-
-    # git clone git@github.com:ska-sa/katpoint.git
-    # git clone git@github.com:ska-sa/katdal.git
-    # git clone git@github.com:ska-sa/katsdptelstate.git
-
-Also, checkout the Obit source code @ revision ``574``.
+Also, checkout the Obit source code @ revision ``576``.
 
 .. code-block::
 
-    # svn checkout -r 574 https://github.com/bill-cotton/Obit
+    # svn checkout -r 576 https://github.com/bill-cotton/Obit
 
 ~~~~~
 Build
 ~~~~~
 
-The following builds the docker containers.
+The following builds the production and development docker containers.
 Inspect the ``docker-compose.yml`` and ``Dockerfile's``
 for further insight.
 
 .. code-block::
 
+    # docker-compose build xenial-obit
     # docker-compose build xenial-obit-dev
 
 
