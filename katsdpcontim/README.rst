@@ -24,18 +24,6 @@ You'll need some docker infrastructure:
 - docker-compose. ``pip install docker-compose``.
 
 ~~~~~
-Setup
-~~~~~
-
-Clone the following repositories:
-
-Also, checkout the Obit source code @ revision ``576``.
-
-.. code-block::
-
-    # svn checkout -r 576 https://github.com/bill-cotton/Obit
-
-~~~~~
 Build
 ~~~~~
 

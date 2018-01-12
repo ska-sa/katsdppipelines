@@ -72,11 +72,6 @@ ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
 # Add task configuration files
 ADD katacomb/katacomb/conf /obitconf
 
-# Add the Obit source code
-ADD Obit/trunk $OBIT_BASE_PATH
-
-# Add OBIT patch
-ADD obit.patch $OBIT_BASE_PATH/obit.patch
 
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
@@ -85,6 +80,9 @@ ADD obit_requirements.txt /tmp/obit_requirements.txt
 ADD ve_requirements.txt /tmp/ve_requirements.txt
 
 ADD katacomb /home/kat/src/katacomb
+
+# Add OBIT patch
+ADD obit.patch /home/kat/tmp/obit.patch
 
 # Ensure everything under /home/kat belongs to kat
 RUN chown -R kat:kat /home/kat
@@ -109,11 +107,17 @@ RUN . ~/ve/bin/activate && \
 RUN . ~/ve/bin/activate && \
     pip install -e /home/kat/src/katacomb
 
-RUN mkdir -p $OBIT_BASE_PATH
+
+WORKDIR /home/kat
+
+RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk
+
+RUN mv trunk Obit
+
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
-RUN patch -p1 -N -s < obit.patch
+RUN patch -p1 -N -s < /home/kat/tmp/obit.patch && rm -f /home/kat/tmp/obit.patch
 
 # Compile Obit
 RUN cd ObitSystem/Obit && \
