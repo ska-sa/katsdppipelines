@@ -12,6 +12,7 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer ruby@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
+    katsdp.standardBuild(subdir: 'katsdpcontim')
 }
 else {
     katsdp.setDependencies(['tegra_ska-sa/katsdpdockerbase/master'])
@@ -22,5 +23,4 @@ katsdp.standardBuild(
     python3: true,
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
-katsdp.standardBuild(subdir: 'katsdpcontim')
 katsdp.mail(maintainer)
