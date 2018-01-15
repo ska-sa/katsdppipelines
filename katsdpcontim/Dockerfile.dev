@@ -66,7 +66,7 @@ ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/
 RUN chown -R root:root /home/kat
 
 # Configure Obit/AIPS disks
-RUN /bin/bash -c ". /bin/setup_obit.sh && cfg_aips_disks.py"
+RUN . /bin/setup_obit.sh && cfg_aips_disks.py
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf

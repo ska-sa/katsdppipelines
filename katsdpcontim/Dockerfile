@@ -161,4 +161,4 @@ USER kat
 WORKDIR /obitconf
 
 # Configure Obit/AIPS disks
-RUN /bin/bash -c ". /bin/setup_obit.sh && cfg_aips_disks.py"
+RUN . /bin/setup_obit.sh && cfg_aips_disks.py
