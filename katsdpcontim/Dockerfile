@@ -100,9 +100,6 @@ RUN touch $KATHOME/.bashrc && \
     cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
 RUN . ~/ve/bin/activate && \
-    pip install -U pip setuptools wheel
-
-RUN . ~/ve/bin/activate && \
     pip install -r /tmp/obit_requirements.txt -r /tmp/ve_requirements.txt
 
 RUN . ~/ve/bin/activate && \
