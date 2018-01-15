@@ -157,6 +157,8 @@ RUN cd ObitSystem/ObitTalk && \
 
 USER kat
 
+RUN pip install -e $KATHOME/src/katacomb
+
 # Set the work directory to /obitconf
 WORKDIR /obitconf
 
