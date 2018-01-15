@@ -46,28 +46,71 @@ from katacomb.util import (parse_python_assigns,
 log = logging.getLogger('katacomb')
 
 def create_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("katdata", help="Katdal observation file")
-    parser.add_argument("-d", "--disk", default=1, type=int,
-                                        help="AIPS disk")
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(formatter_class=formatter_class)
+
+    parser.add_argument("katdata",
+                        help="Katdal observation file")
+
+    parser.add_argument("-d", "--disk",
+                        default=1, type=int,
+                        help="AIPS disk")
+
     parser.add_argument("--nvispio", default=1024, type=int)
-    parser.add_argument("-cbid", "--capture-block-id", default=None, type=str,
-                                        help="Capture Block ID. Unique identifier "
-                                             "for the observation on which the "
-                                             "continuum pipeline is run.")
-    parser.add_argument("-ts", "--telstate", default='', type=str,
-                                        help="Address of the telstate server")
-    parser.add_argument("-sbid", "--sub-band-id", default=0, type=int,
-                                        help="Sub-band ID. Unique integer "
-                                             "identifier for the sub-band "
-                                             "on which the continuum pipeline "
-                                             "is run.")
-    parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=log_exception(log)(parse_python_assigns),
-                                        help="katdal select statement "
-                                             "Should only contain python "
-                                             "assignment statements to python "
-                                             "literals, separated by semi-colons")
+
+    parser.add_argument("-cbid", "--capture-block-id",
+                        default=None, type=str,
+                        help="Capture Block ID. Unique identifier "
+                             "for the observation on which the "
+                             "continuum pipeline is run.")
+
+    parser.add_argument("-ts", "--telstate",
+                        default='', type=str,
+                        help="Address of the telstate server")
+
+    parser.add_argument("-sbid", "--sub-band-id",
+                        default=0, type=int,
+                        help="Sub-band ID. Unique integer identifier for the sub-band "
+                             "on which the continuum pipeline is run.")
+
+    parser.add_argument("-ks", "--select",
+                        default="scans='track';spw=0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="katdal select statement "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons")
+
+    TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
+
+
+    parser.add_argument("-ba", "--uvblavg",
+                        # Averaging FOV is 1.0, turn on frequency averaging,
+                        # average eight channels together. Average a maximum
+                        # integration time of 2 minutes
+                        default="FOV=1.0; avgFreq=1; chAvg=8; maxInt=2.0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="UVBLAVG task parameter assignment statement. "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons. "
+                             "See %s/UVBlAvg.TDF for valid parameters. " % TDF_URL)
+
+
+    parser.add_argument("-mf", "--mfimage",
+                        # FOV of 1.2 degrees, 5000 Clean cycles,
+                        # 3 phase self-cal loops with a solution interval
+                        # of four minutes
+                        default="FOV=1.2; Niter=5000; "
+                                "maxPSCLoop=3; minFluxPSC=0.0; solPInt=4.0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="MFIMAGE task parameter assignment statement. "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons. "
+                             "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
+
+
     return parser
 
 args = create_parser().parse_args()
@@ -168,8 +211,7 @@ with obit_context():
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
 
-        blavg_params = dict()
-        blavg_kwargs.update(blavg_params)
+        blavg_kwargs.update(args.uvblavg)
 
         log.info("Time-dependent baseline averaging "
                 "'%s' to '%s'", scan_path, blavg_path)
@@ -199,7 +241,7 @@ with obit_context():
         blavg_nvis = blavg_desc['nvis']
 
         # Record something about the baseline averaging process
-        param_str = ', '.join("%s=%s" % (k,v) for k,v in blavg_params.items())
+        param_str = ', '.join("%s=%s" % (k,v) for k,v in args.uvblavg.items())
         blavg_history = ("Scan %d '%s' averaged %s to %s visiblities. UVBlAvg(%s)" %
                 (si, aips_source_name, scan_nvis, blavg_nvis, param_str))
         log.info(blavg_history)
@@ -315,6 +357,8 @@ with obit_context():
     mfimage_cfg = pkg_resources.resource_filename('katacomb', pjoin('conf', 'mfimage_nosc.in'))
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
                           nThreads=multiprocessing.cpu_count())
+
+    mfimage_kwargs.update(args.mfimage)
 
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
