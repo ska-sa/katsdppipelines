@@ -4,8 +4,6 @@ MAINTAINER sperkins@ska.ac.za
 # Switch to root for package install
 USER root
 
-ENV DEBIAN_FRONTEND noninteractive
-
 ENV PACKAGES \
     software-properties-common \
     python-software-properties \
