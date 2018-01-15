@@ -21,4 +21,3 @@ six
 git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
 git+ssh://git@github.com/ska-sa/katdal@258629e95cf46d41840fbfc62b16d86345894018#egg=katdal
 git+ssh://git@github.com/ska-sa/katsdptelstate@master#egg=katsdptelstate
-git+ssh://git@github.com/ska-sa/katsdppipelines@master#egg=katacomb&subdirectory=katsdpcontim/katacomb
