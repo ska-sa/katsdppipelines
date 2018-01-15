@@ -56,13 +56,14 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install gsl 1.16
-RUN mkdir -p /src && \
-    cd /src && \
+RUN mkdir -p /home/kat/src && \
+    cd /home/kat/src && \
     curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
     cd gsl-1.16 && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
-    make -j 8 install
+    make -j 8 install && \
+    rm -rf /home/kat/gsl-1.16
 
 ENV OBIT_BASE_PATH /home/kat/Obit
 ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
