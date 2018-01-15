@@ -29,9 +29,11 @@ def rewrite_dadevs(cfg):
     backup = pjoin(cfg.aips.da00, '.DADEVS.LIST.BAK')
 
     if not os.path.exists(dadevs_list):
-        raise ValueError("Could not find '{}' for modification. "
-                         "Check your AIPS directory root '{}'."
-                            .format(dadevs_list, cfg.aips.aipsroot))
+        log.warn("Could not find '%s' for modification. "
+                         "Check your AIPS directory root '%s'.",
+                                dadevs_list, cfg.aips.aipsroot)
+
+        return
 
     # Make a copy of the original
     shutil.copy(dadevs_list, backup)
@@ -60,9 +62,10 @@ def rewrite_netsp(cfg):
     backup = pjoin(cfg.aips.da00, '.NETSP.BAK')
 
     if not os.path.exists(netsp):
-        raise ValueError("Could not find '{}' for modification. "
-                         "Check your AIPS directory root '{}'."
-                            .format(netsp, cfg.aips.aipsroot))
+        log.warn("Could not find '%s' for modification. "
+                 "Check your AIPS directory root '%s'.",
+                            netsp, cfg.aips.aipsroot)
+        return
 
     # Make a copy of the original
     shutil.copy(netsp, backup)
@@ -88,11 +91,10 @@ def setup_aips_disks(cfg):
     Creates a SPACE file within the disk.
     """
 
-    for url, aipsdir in cfg.obit.aipsdirs:
+    for url, aipsdir in cfg.obit.aipsdirs + cfg.obit.fitsdirs:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
-            log.warn("AIPS Disk '%s' does not exist "
-                     "and will be created", aipsdir)
+            log.info("Creating AIPS Disk '%s'", aipsdir)
             os.makedirs(aipsdir)
 
         # Create SPACE file
@@ -125,7 +127,11 @@ def link_obit_data(cfg):
             if os.path.exists(link_name):
                 os.remove(link_name)
 
-            os.symlink(data_file, link_name)
+            try:
+                os.symlink(data_file, link_name)
+            except OSError as e:
+                log.warn("Unable to link '{}' to '{}'\n"
+                         "{}".format(link_name, data_file, e))
 
 if __name__ == "__main__":
     cfg = get_config()

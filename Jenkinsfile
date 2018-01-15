@@ -2,7 +2,7 @@
 
 @Library('katsdpjenkins') _
 
-def maintainer = 'bmerry@ska.ac.za'
+def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za'
 if (!katsdp.isTegra()) {
     katsdp.setDependencies([
         'ska-sa/katsdpdockerbase/master',
@@ -12,6 +12,7 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer ruby@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
+    katsdp.standardBuild(subdir: 'katsdpcontim')
 }
 else {
     katsdp.setDependencies(['tegra_ska-sa/katsdpdockerbase/master'])

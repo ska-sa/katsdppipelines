@@ -1,8 +1,8 @@
 ---
 obit:
     fitsdirs:
-        - "/usr/local/AIPS/FITS"
-        - "/usr/local/Obit/ObitSystem/Obit/share/data"
+        - "/home/kat/AIPS/FITS"
+        - "/home/kat/Obit/ObitSystem/Obit/share/data"
     aipsdirs:
-        - "/usr/local/AIPS/DATA/LOCALHOST_1"
-        - "/usr/local/AIPS/DATA/LOCALHOST_2"
+        - "/home/kat/AIPS/DATA/LOCALHOST_1"
+        - "/home/kat/AIPS/DATA/LOCALHOST_2"
