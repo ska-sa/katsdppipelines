@@ -282,3 +282,13 @@ This is achieved by running the ``cfg_aips_disks.py`` script which:
 - modifies ``DADEVS.LIST`` and ``NETSP`` in the AIPS installation.
 - Creates soft links in the Obit data directory into the FITS area.
 
+
+~~~~~~~
+Testing
+~~~~~~~
+
+A test suite exists, but must be executed inside the container:
+
+.. code-block::
+
+  $ python -c 'import katacomb; katacomb.test()'
