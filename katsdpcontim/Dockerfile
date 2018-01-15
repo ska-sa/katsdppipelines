@@ -55,18 +55,20 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+ENV KATHOME=/home/kat \
+    OBIT_BASE_PATH=/home/kat/Obit \
+    OBIT=/home/kat/Obit/ObitSystem/Obit
+
 # Install gsl 1.16
-RUN mkdir -p /home/kat/src && \
-    cd /home/kat/src && \
+RUN mkdir -p $KATHOME/src && \
+    cd $KATHOME/src && \
     curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
     cd gsl-1.16 && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
     make -j 8 install && \
-    rm -rf /home/kat/gsl-1.16
+    rm -rf $KATHOME/gsl-1.16
 
-ENV OBIT_BASE_PATH /home/kat/Obit
-ENV OBIT $OBIT_BASE_PATH/ObitSystem/Obit
 
 # Add task configuration files
 ADD katacomb/katacomb/conf /obitconf
@@ -78,13 +80,13 @@ ADD setup_obit.sh /bin/setup_obit.sh
 ADD obit_requirements.txt /tmp/obit_requirements.txt
 ADD ve_requirements.txt /tmp/ve_requirements.txt
 
-ADD katacomb /home/kat/src/katacomb
+ADD katacomb $KATHOME/src/katacomb
 
 # Add OBIT patch
-ADD obit.patch /home/kat/tmp/obit.patch
+ADD obit.patch $KATHOME/tmp/obit.patch
 
-# Ensure everything under /home/kat belongs to kat
-RUN chown -R kat:kat /home/kat
+# Ensure everything under $KATHOME belongs to kat
+RUN chown -R kat:kat $KATHOME
 
 # Install obit requirements as root so that packages
 # like ObitTalk and ObitView have access to them
@@ -94,8 +96,8 @@ RUN pip install -r /tmp/obit_requirements.txt
 USER kat
 
 # Add obit setup to bashrc
-RUN touch /home/kat/.bashrc && \
-    cat /bin/setup_obit.sh >> /home/kat/.bashrc
+RUN touch $KATHOME/.bashrc && \
+    cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
 RUN . ~/ve/bin/activate && \
     pip install -U pip setuptools wheel
@@ -104,10 +106,10 @@ RUN . ~/ve/bin/activate && \
     pip install -r /tmp/obit_requirements.txt -r /tmp/ve_requirements.txt
 
 RUN . ~/ve/bin/activate && \
-    pip install -e /home/kat/src/katacomb
+    pip install -e $KATHOME/src/katacomb
 
 
-WORKDIR /home/kat
+WORKDIR $KATHOME
 
 RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk
 
@@ -116,7 +118,7 @@ RUN mv trunk Obit
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
-RUN patch -p1 -N -s < /home/kat/tmp/obit.patch && rm -f /home/kat/tmp/obit.patch
+RUN patch -p1 -N -s < $KATHOME/tmp/obit.patch && rm -f $KATHOME/tmp/obit.patch
 
 # Compile Obit
 RUN cd ObitSystem/Obit && \
