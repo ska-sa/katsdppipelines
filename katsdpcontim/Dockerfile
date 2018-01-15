@@ -108,9 +108,7 @@ RUN . ~/ve/bin/activate && \
 
 WORKDIR $KATHOME
 
-RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk
-
-RUN mv trunk Obit
+RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk Obit
 
 WORKDIR $OBIT_BASE_PATH
 
