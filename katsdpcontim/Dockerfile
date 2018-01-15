@@ -77,8 +77,8 @@ ADD katacomb/katacomb/conf /obitconf
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
 
-ADD obit_requirements.txt /tmp/obit_requirements.txt
-ADD ve_requirements.txt /tmp/ve_requirements.txt
+ADD requirements.txt /tmp/requirements.txt
+ADD default-requirements.txt /tmp/default-requirements.txt
 
 ADD katacomb $KATHOME/src/katacomb
 
@@ -88,10 +88,6 @@ ADD obit.patch $KATHOME/tmp/obit.patch
 # Ensure everything under $KATHOME belongs to kat
 RUN chown -R kat:kat $KATHOME
 
-# Install obit requirements as root so that packages
-# like ObitTalk and ObitView have access to them
-RUN pip install -r /tmp/obit_requirements.txt
-
 # Now downgrade to kat
 USER kat
 
@@ -99,11 +95,9 @@ USER kat
 RUN touch $KATHOME/.bashrc && \
     cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
-RUN . ~/ve/bin/activate && \
-    pip install -r /tmp/obit_requirements.txt -r /tmp/ve_requirements.txt
-
-RUN . ~/ve/bin/activate && \
-    pip install -e $KATHOME/src/katacomb
+# Install obit requirements as root so that packages
+# like ObitTalk and ObitView have access to them
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -d /tmp/default-requirements.txt -r /tmp/requirements.txt
 
 
 WORKDIR $KATHOME
