@@ -141,7 +141,7 @@ RUN cd ObitSystem/ObitTalk && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
-    make ||true
+    { make || true; }
 
 # Go back to root priviledges to install
 # ObitView and ObitTalk in the /usr filesystem
@@ -155,7 +155,7 @@ RUN cd ObitSystem/ObitView && \
 RUN cd ObitSystem/ObitTalk && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
-    make install || true && \
+    { make install || true; } && \
     # Just install ObitTalk and ObitTalkServer
     cd bin && \
     make clean && \
