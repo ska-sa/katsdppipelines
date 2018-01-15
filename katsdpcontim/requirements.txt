@@ -1,22 +1,22 @@
-astropy
-attrs
-cerberus
+attrs == 17.4.0
+astropy == 2.0.3
+cerberus == 1.1
 fakenewsredis
-funcsigs
+funcsigs == 0.4
 future
 ipaddress
 h5py
 katversion == 0.8
 netifaces
 numpy
-pluggy
-pretty
-py
+pluggy == 0.6.0
+pretty == 0.1
+py == 1.5.2
 pyephem
-pytest
+pytest == 3.3.2
 redis
-ruamel.yaml
-ruamel.ordereddict
+ruamel.yaml == 0.15.35
+ruamel.ordereddict == 0.4.13
 six
 git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
 git+ssh://git@github.com/ska-sa/katdal@258629e95cf46d41840fbfc62b16d86345894018#egg=katdal

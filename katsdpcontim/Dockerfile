@@ -76,8 +76,8 @@ ADD katacomb/katacomb/conf /obitconf
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
 
+# Add python package requirements
 ADD requirements.txt /tmp/requirements.txt
-ADD default-requirements.txt /tmp/default-requirements.txt
 
 ADD katacomb $KATHOME/src/katacomb
 
@@ -96,7 +96,7 @@ RUN touch $KATHOME/.bashrc && \
 
 # Install obit requirements as root so that packages
 # like ObitTalk and ObitView have access to them
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -d /tmp/default-requirements.txt -r /tmp/requirements.txt
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/requirements.txt
 
 
 WORKDIR $KATHOME
