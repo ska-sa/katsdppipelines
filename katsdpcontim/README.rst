@@ -291,4 +291,4 @@ A test suite exists, but must be executed inside the container:
 
 .. code-block::
 
-  $ python -c 'import katacomb; katacomb.test()'
+  $ nosetest /home/kat/src/katacomb
