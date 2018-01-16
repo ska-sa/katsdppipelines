@@ -6,6 +6,9 @@ from katacomb.aips_path import parse_aips_path, next_seq_nr
 
 @contextmanager
 def file_cleaner(paths):
+    """
+    Delete a list of AIPS files at both the context start and stop
+    """
     try:
         for path in paths:
             with uv_factory(aips_path=path, mode="w") as f:
@@ -47,6 +50,7 @@ class TestAipsPath(unittest.TestCase):
         default_label = "katuv"
         default_dtype = "AIPS"
 
+        attrs = ["name", "disk", "aclass", "seq", "atype", "label", "dtype"]
         test_values = ["plort",10,"klass",2,"UV","alabel","AIPS"]
         defaults = ["plort",1,"aips",1,"UV","katuv", "AIPS"]
 
@@ -60,20 +64,16 @@ class TestAipsPath(unittest.TestCase):
             path = parse_aips_path(path_str)
             expected = elements + defaults[len(elements):]
 
-            flat_path = [getattr(path, a) for a in ("name", "disk", "aclass",
-                                                    "seq", "atype",  "label",
-                                                                    "dtype")]
+            self.assertEquals([getattr(path, a) for a in attrs], expected)
 
-            self.assertEquals(flat_path, expected)
-
-        # Iterate through available tuples
+        # Iterate through available tuple permutations
         for i in range(1,len(test_values)):
             _test_wrapper(test_values[0:i])
 
 
     def test_parse_aips_path_fail(self):
+        """ Test for an invalid tuple """
         with self.assertRaises(ValueError) as cm:
-            #print cm.exception.message
             parse_aips_path("([1,2],4)")
 
         ex_fragment = "AIPS path should be a tuple"
