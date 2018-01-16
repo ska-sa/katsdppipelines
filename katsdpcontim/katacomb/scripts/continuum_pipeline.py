@@ -38,6 +38,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         uv_factory,
                         katdal_timestamps,
                         katdal_ant_name)
+from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
                         log_exception,
                         post_process_args,
@@ -132,7 +133,8 @@ IMG_CLASS = "IClean"
 
 with obit_context():
     KA = katacomb.KatdalAdapter(katdal.open(args.katdata))
-    uv_merge_path = KA.aips_path(aclass='merge', seq=None)
+    uv_merge_path = KA.aips_path(aclass='merge')
+    uv_merge_path = uv_merge_path.copy(seq=next_seq_nr(uv_merge_path))
     log.info("Exporting to '%s'", uv_merge_path)
 
     # Perform argument postprocessing
@@ -172,13 +174,17 @@ with obit_context():
         # Source names
         uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
 
-        uv_files = [AIPSPath(name=s, disk=args.disk, aclass=UV_CLASS,
-                                                seq=None, atype="UV")
-                                                    for s in uv_sources]
+        uv_files = [AIPSPath(name=s, disk=args.disk,
+                             aclass=UV_CLASS, atype="UV")
+                                        for s in uv_sources]
 
-        clean_files = [AIPSPath(name=s, disk=args.disk, aclass=IMG_CLASS,
-                                                seq=None, atype="MA")
-                                                    for s in uv_sources]
+        clean_files = [AIPSPath(name=s, disk=args.disk,
+                                aclass=IMG_CLASS, atype="MA")
+                                        for s in uv_sources]
+
+        # Find sequence number which reference an unassigned catalogue number
+        uv_files = [f.copy(seq=next_seq_nr(f)) for f in uv_files]
+        clean_files = [f.copy(seq=next_seq_nr(f)) for f in clean_files]
 
         return uv_sources, uv_files, clean_files
 
