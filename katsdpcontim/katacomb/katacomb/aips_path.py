@@ -1,8 +1,48 @@
+import ast
+import inspect
 import os
 
 from katacomb import obit_err, handle_obit_err
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
+
+def parse_aips_path(aips_path_str):
+
+    args = inspect.getargspec(AIPSPath.__init__).args
+
+    try:
+        args.remove('self')
+    except ValueError:
+        pass
+
+    HELP = ("AIPS path should be a tuple of "
+            "names or numbers of the form "
+            "(%s)" % ",".join(a for a in args))
+
+    stmts = ast.parse(aips_path_str, mode='single').body
+
+    if not isinstance(stmts[0], ast.Expr):
+        raise ValueError(HELP)
+
+    sequence = stmts[0].value
+
+    if not isinstance(sequence, (ast.Tuple, ast.List)):
+        raise ValueError(HELP)
+
+    xformed = []
+
+    for value in sequence.elts:
+        if isinstance(value, ast.Name):
+            xformed.append(value.id)
+        elif isinstance(value, ast.Num):
+            xformed.append(value.n)
+        else:
+            raise ValueError(HELP)
+
+
+    kwargs = {arg: value for arg, value in zip(args, xformed)}
+
+    return AIPSPath(**kwargs)
 
 def next_seq_nr(aips_path):
     """

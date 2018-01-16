@@ -24,8 +24,9 @@ class TestUtils(unittest.TestCase):
         """ Test that trying to use the builtin eval function fails """
         with self.assertRaises(ValueError) as cm:
             parse_python_assigns("a=eval('import sys; sys.exit=DR EVIL')")
-            self.assertTrue("Function 'eval'" in cm.exception.message)
-            self.assertTrue("is not builtin" in cm.exception.message)
+
+        self.assertTrue("Function 'eval'" in cm.exception.message)
+        self.assertTrue("is not builtin" in cm.exception.message)
 
 
     def test_basic_syntax_error(self):
@@ -55,10 +56,11 @@ class TestUtils(unittest.TestCase):
         """ Test failure of unpacking when number of targets/values mismatch """
         with self.assertRaises(ValueError) as cm:
             parse_python_assigns("a, b = [1,2,3]")
-            ex_fragment = ("The number of tuple elements did not "
-                            "match the number of values")
 
-            self.assertTrue(ex_fragment in cm.exception.message)
+        ex_fragment = ("The number of tuple elements did not "
+                        "match the number of values")
+
+        self.assertTrue(ex_fragment in cm.exception.message)
 
 if __name__ == "__main__":
     unittest.main()
