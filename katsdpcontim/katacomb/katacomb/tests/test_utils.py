@@ -29,6 +29,8 @@ class TestUtils(unittest.TestCase):
 
 
     def test_basic_syntax_error(self):
+        """ Test failure on basic incorrect syntax """
+
         # Python parser fails here anyway
         with self.assertRaises(SyntaxError) as cm:
             parse_python_assigns("1 = 'a'")
@@ -50,6 +52,7 @@ class TestUtils(unittest.TestCase):
 
 
     def test_parse_python_assigns_unpack_fail(self):
+        """ Test failure of unpacking when number of targets/values mismatch """
         with self.assertRaises(ValueError) as cm:
             parse_python_assigns("a, b = [1,2,3]")
             ex_fragment = ("The number of tuple elements did not "
