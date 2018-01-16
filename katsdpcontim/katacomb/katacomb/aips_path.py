@@ -266,10 +266,7 @@ def parse_aips_path(aips_path_str):
         else:
             raise ValueError(_AIPS_PATH_HELP)
 
-
-    kwargs = {arg: value for arg, value in zip(_AIPS_PATH_TUPLE_ARGS, xformed)}
-
-    return AIPSPath(**kwargs)
+    return AIPSPath(**dict(zip(_AIPS_PATH_TUPLE_ARGS, xformed)))
 
 try:
     parse_aips_path.__doc__ %= {'fmt' : _AIPS_PATH_TUPLE_FORMAT}
