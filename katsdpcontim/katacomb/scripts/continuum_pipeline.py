@@ -110,6 +110,17 @@ def create_parser():
                              "literals, separated by semi-colons. "
                              "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
 
+    parser.add_argument("--clobber",
+                        default="scans, avgscans",
+                        type=lambda s: tuple(v.strip() for v in s.split(',')),
+                        help="Class of AIPS/Obit output files to clobber. "
+                             "'scans' => Individual scans. "
+                             "'avgscans' => Averaged individual scans. "
+                             "'merge' => Observation file containing merged, "
+                                                            "averaged scans. "
+                             "'clean' => Output CLEAN files. "
+                             "'mfimage' => Output MFImage files. ")
+
 
     return parser
 
@@ -332,10 +343,13 @@ with obit_context():
         merge_uvf.tables["AIPS NX"].rows.append(nx_row)
 
         # Remove scan and baseline averaged files once merged
-        log.info("Zapping '%s'", scan_uvf.aips_path)
-        scan_uvf.Zap()
-        log.info("Zapping '%s'", blavg_uvf.aips_path)
-        blavg_uvf.Zap()
+        if 'scans' in args.clobber:
+            log.info("Zapping '%s'", scan_uvf.aips_path)
+            scan_uvf.Zap()
+
+        if 'avgscans' in args.clobber:
+            log.info("Zapping '%s'", blavg_uvf.aips_path)
+            blavg_uvf.Zap()
 
     # Write the index table
     merge_uvf.tables["AIPS NX"].write()
@@ -413,7 +427,9 @@ with obit_context():
                     # in telstate at this timestamp
                     ts_view.add(ant, _extract_gains(row), ts=time)
 
-        uvf.Zap()
+
+        if 'mfimage' in args.clobber:
+            uvf.Zap()
 
     # MFImage outputs a CLEAN image per source.  Iterate through each source:
     # (1) Extract clean components from attached "AIPS CC" table
@@ -439,7 +455,10 @@ with obit_context():
                 key = ts_view.SEPARATOR.join((target, "clean_components"))
                 ts_view.add(key, data, immutable=True)
 
-        cf.Zap()
-
+        if 'clean' in args.clobber:
+            cf.Zap()
 
     merge_uvf.close()
+
+    if 'merge' in args.clobber:
+        merge_uvf.Zap()
