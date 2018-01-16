@@ -6,44 +6,6 @@ from katacomb import obit_err, handle_obit_err
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
-def parse_aips_path(aips_path_str):
-
-    args = inspect.getargspec(AIPSPath.__init__).args
-
-    try:
-        args.remove('self')
-    except ValueError:
-        pass
-
-    HELP = ("AIPS path should be a tuple of "
-            "names or numbers of the form "
-            "(%s)" % ",".join(a for a in args))
-
-    stmts = ast.parse(aips_path_str, mode='single').body
-
-    if not isinstance(stmts[0], ast.Expr):
-        raise ValueError(HELP)
-
-    sequence = stmts[0].value
-
-    if not isinstance(sequence, (ast.Tuple, ast.List)):
-        raise ValueError(HELP)
-
-    xformed = []
-
-    for value in sequence.elts:
-        if isinstance(value, ast.Name):
-            xformed.append(value.id)
-        elif isinstance(value, ast.Num):
-            xformed.append(value.n)
-        else:
-            raise ValueError(HELP)
-
-
-    kwargs = {arg: value for arg, value in zip(args, xformed)}
-
-    return AIPSPath(**kwargs)
-
 def next_seq_nr(aips_path):
     """
     Returns the highest available sequence number for which
@@ -259,3 +221,58 @@ class AIPSPath(object):
             return {"out2File": self.name}
         else:
             _check_disk_type(dtype, False)
+
+
+_AIPS_PATH_TUPLE_ARGS = [a for a in inspect.getargspec(AIPSPath.__init__).args
+                                                            if not a == "self"]
+_AIPS_PATH_TUPLE_FORMAT = "(%s)" % ",".join(_AIPS_PATH_TUPLE_ARGS)
+_AIPS_PATH_HELP = ("AIPS path should be a tuple of "
+                    "names or numbers of the form "
+                    "%s" % _AIPS_PATH_TUPLE_FORMAT)
+
+
+def parse_aips_path(aips_path_str):
+    """
+    Parses a string describing an AIPS Path
+
+    Parameters
+    ----------
+    aips_path_str : string
+        String of the form
+        %(fmt)s
+
+    Returns
+    -------
+    :class:`AIPSPath`
+        An AIPS Path object
+    """
+    stmts = ast.parse(aips_path_str, mode='single').body
+
+    if not isinstance(stmts[0], ast.Expr):
+        raise ValueError(_AIPS_PATH_HELP)
+
+    sequence = stmts[0].value
+
+    if not isinstance(sequence, (ast.Tuple, ast.List)):
+        raise ValueError(_AIPS_PATH_HELP)
+
+    xformed = []
+
+    for value in sequence.elts:
+        if isinstance(value, ast.Name):
+            xformed.append(None if value.id == "None" else value.id)
+        elif isinstance(value, ast.Num):
+            xformed.append(value.n)
+        else:
+            raise ValueError(_AIPS_PATH_HELP)
+
+
+    kwargs = {arg: value for arg, value in zip(_AIPS_PATH_TUPLE_ARGS, xformed)}
+
+    return AIPSPath(**kwargs)
+
+try:
+    parse_aips_path.__doc__ %= {'fmt' : _AIPS_PATH_TUPLE_FORMAT}
+except KeyError:
+    # For python -OO
+    pass
