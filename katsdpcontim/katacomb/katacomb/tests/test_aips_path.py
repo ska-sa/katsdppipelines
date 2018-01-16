@@ -29,12 +29,12 @@ class TestAipsPath(unittest.TestCase):
         with obit_context(), file_cleaner([p1, p2]) as fc:
             # Create the first file and test highest sequence number
             with uv_factory(aips_path=p1, mode="w") as uvc1: pass
-            self.assertTrue(next_seq_nr(p1) == p1.seq+1)
+            self.assertEquals(next_seq_nr(p1), p1.seq+1)
 
             # Create the second file and test highest sequence number
             with uv_factory(aips_path=p2, mode="w") as uvc2: pass
-            self.assertTrue(next_seq_nr(p1) == p1.seq+2)
-            self.assertTrue(next_seq_nr(p2) == p2.seq+1)
+            self.assertEquals(next_seq_nr(p1), p1.seq+2)
+            self.assertEquals(next_seq_nr(p2), p2.seq+1)
 
 
 
@@ -60,13 +60,11 @@ class TestAipsPath(unittest.TestCase):
             path = parse_aips_path(path_str)
             expected = elements + defaults[len(elements):]
 
-            self.assertTrue(path.name == expected[0])
-            self.assertTrue(path.disk == expected[1])
-            self.assertTrue(path.aclass == expected[2])
-            self.assertTrue(path.seq == expected[3])
-            self.assertTrue(path.atype == expected[4])
-            self.assertTrue(path.label == expected[5])
-            self.assertTrue(path.dtype == expected[6])
+            flat_path = [getattr(path, a) for a in ("name", "disk", "aclass",
+                                                    "seq", "atype",  "label",
+                                                                    "dtype")]
+
+            self.assertEquals(flat_path, expected)
 
         # Iterate through available tuples
         for i in range(1,len(test_values)):
