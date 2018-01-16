@@ -66,12 +66,11 @@ RUN mkdir -p $KATHOME/src && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
     make -j 8 install && \
-    rm -rf $KATHOME/gsl-1.16
+    rm -rf $KATHOME/src/gsl-1.16
 
 
 # Add task configuration files
 ADD katacomb/katacomb/conf /obitconf
-
 
 # Add OBIT setup script
 ADD setup_obit.sh /bin/setup_obit.sh
@@ -79,13 +78,11 @@ ADD setup_obit.sh /bin/setup_obit.sh
 # Add python package requirements
 ADD install-requirements.txt /tmp/install-requirements.txt
 
-ADD katacomb $KATHOME/src/katacomb
-
 # Add OBIT patch
-ADD obit.patch $KATHOME/tmp/obit.patch
+ADD obit.patch /tmp/obit.patch
 
-# Ensure everything under $KATHOME belongs to kat
-RUN chown -R kat:kat $KATHOME
+# Change ownership of added files
+RUN chown -R kat:kat /tmp/obit.patch /tmp/install-requirements.txt /obitconf
 
 # Now downgrade to kat
 USER kat
@@ -94,11 +91,6 @@ USER kat
 RUN touch $KATHOME/.bashrc && \
     cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
-# Install obit requirements as root so that packages
-# like ObitTalk and ObitView have access to them
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt
-
-
 WORKDIR $KATHOME
 
 RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk Obit
@@ -106,7 +98,8 @@ RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk Obit
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
-RUN patch -p1 -N -s < $KATHOME/tmp/obit.patch && rm -f $KATHOME/tmp/obit.patch
+RUN patch -p1 -N -s < /tmp/obit.patch && \
+    rm -rf /tmp/obit.patch
 
 # Compile Obit
 RUN cd ObitSystem/Obit && \
@@ -155,8 +148,18 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make install
 
+ADD katacomb $KATHOME/src/katacomb
+
+# Ensure everything under $KATHOME/src belongs to kat
+RUN chown -R kat:kat $KATHOME/src
+
 USER kat
 
+# Install required python packages
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt && \
+    rm -rf /tmp/install-requirements.txt
+
+# Install katacomb
 RUN pip install -e $KATHOME/src/katacomb
 
 # Set the work directory to /obitconf
