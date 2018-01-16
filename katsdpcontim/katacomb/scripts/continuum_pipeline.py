@@ -31,13 +31,12 @@ from katsdptelstate import TelescopeState
 import katacomb
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         task_factory,
-                        img_factory,
+                        uv_factory,
                         uv_export,
                         uv_history_obs_description,
                         uv_history_selection,
-                        uv_factory,
-                        katdal_timestamps,
-                        katdal_ant_name)
+                        export_calibration_solutions,
+                        export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
                         log_exception,
@@ -140,8 +139,12 @@ with obit_context():
     # Perform argument postprocessing
     args = post_process_args(args, KA)
 
-    # Set up telstate link
+    # Set up telstate link then create
+    # a view based the capture block ID and sub-band ID
     telstate = TelescopeState(args.telstate)
+    sub_band_id_str = "sub_band%d" % args.sub_band_id
+    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
+    ts_view = telstate.view(view)
 
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
@@ -385,84 +388,19 @@ with obit_context():
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
     mfimage.go()
 
-    # AIPS Table entries follow this kind of schema where data
-    # is stored in singleton lists, while book-keeping entries
-    # are not.
-    # { 'DELTAX' : [1.4], 'NumFields' : 4, 'Table name' : 'AIPS CC' }
-    # Strip out book-keeping keys and flatten lists
-    DROP = { "Table name", "NumFields", "_status" }
-    def _condition(row):
-        """ Flatten singleton lists and drop book-keeping keys """
-        return { k: v[0] for k, v in row.items() if k not in DROP }
+    # Export calibration and clean solutions to telstate
+    export_calibration_solutions(uv_files, KA, ts_view)
+    export_clean_components(clean_files, target_indices, KA, ts_view)
 
-    # Create a view based the capture block ID and sub-band ID
-    sub_band_id_str = "sub_band%d" % args.sub_band_id
-    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
-    ts_view = telstate.view(view)
+    # Clobber any result files
+    for uv_file, clean_file in zip(uv_files, clean_files):
+        if "mfimage" in args.clobber:
+            with uv_factory(aips_path=uv_file, mode="r") as uvf:
+                uvf.Zap()
 
-    # MFImage outputs a UV file per source.  Iterate through each source:
-    # (1) Extract complex gains from attached "AIPS SN" table
-    # (2) Write them to telstate
-    for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
-        with uv_factory(aips_path=uv_file, mode='r') as uvf:
-            try:
-                sntab = uvf.tables["AIPS SN"]
-            except KeyError:
-                log.warn("No calibration solutions in '%s'", uv_file)
-            else:
-                # Handle cases for single/dual pol gains
-                if "REAL2" in sntab.rows[0]:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL2"] + 1j*row["IMAG2"]],
-                                            dtype=np.complex64)
-                else:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL1"] + 1j*row["IMAG1"]],
-                                            dtype=np.complex64)
-
-                # Write each complex gain out per antenna
-                for row in (_condition(r) for r in sntab.rows):
-                    # Convert time back from AIPS to katdal UTC
-                    time = katdal_timestamps(row["TIME"], KA.midnight)
-                    # Convert from AIPS FORTRAN indexing to katdal C indexing
-                    ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
-
-                    # Store complex gain for this antenna
-                    # in telstate at this timestamp
-                    ts_view.add(ant, _extract_gains(row), ts=time)
-
-
-        if 'mfimage' in args.clobber:
-            uvf.Zap()
-
-    # MFImage outputs a CLEAN image per source.  Iterate through each source:
-    # (1) Extract clean components from attached "AIPS CC" table
-    # (2) Write them to telstate
-    it = enumerate(zip(clean_files, uv_sources, target_indices))
-    for si, (clean_file, uv_source, ti) in it:
-        with img_factory(aips_path=clean_file, mode='r') as cf:
-            try:
-                cctab = cf.tables["AIPS CC"]
-            except KeyError:
-                log.warn("No clean components in '%s'", clean_file)
-            else:
-                target = "target%d" % si
-
-                # Condition all rows up front
-                rows = [_condition(r) for r in cctab.rows]
-
-                # Extract description
-                description = KA.katdal.catalogue.targets[ti].description
-                data = { 'description': description, 'components': rows }
-
-                # Store them in telstate
-                key = ts_view.SEPARATOR.join((target, "clean_components"))
-                ts_view.add(key, data, immutable=True)
-
-        if 'clean' in args.clobber:
-            cf.Zap()
+        if "clean" in args.clobber:
+            with uv_factory(aips_path=clean_file, mode="r") as cf:
+                cf.Zap()
 
     merge_uvf.close()
 
