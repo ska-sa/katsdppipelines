@@ -164,3 +164,6 @@ WORKDIR /obitconf
 
 # Configure Obit/AIPS disks
 RUN . /bin/setup_obit.sh && cfg_aips_disks.py
+
+# Execute test cases
+RUN . /bin/setup_obit.sh && nosetests $KATHOME/src/katacomb

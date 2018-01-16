@@ -8,6 +8,7 @@ ipaddress
 h5py
 katversion == 0.8
 netifaces
+nose
 numpy
 pluggy == 0.6.0
 pretty == 0.1
