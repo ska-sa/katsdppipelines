@@ -113,7 +113,7 @@ def create_parser():
 
     parser.add_argument("--clobber",
                         default="scans, avgscans",
-                        type=lambda s: tuple(v.strip() for v in s.split(',')),
+                        type=lambda s: set(v.strip() for v in s.split(',')),
                         help="Class of AIPS/Obit output files to clobber. "
                              "'scans' => Individual scans. "
                              "'avgscans' => Averaged individual scans. "
