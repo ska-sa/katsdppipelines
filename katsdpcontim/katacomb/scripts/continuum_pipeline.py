@@ -31,13 +31,13 @@ from katsdptelstate import TelescopeState
 import katacomb
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         task_factory,
-                        img_factory,
+                        uv_factory,
                         uv_export,
                         uv_history_obs_description,
                         uv_history_selection,
-                        uv_factory,
-                        katdal_timestamps,
-                        katdal_ant_name)
+                        export_calibration_solutions,
+                        export_clean_components)
+from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
                         log_exception,
                         post_process_args,
@@ -46,28 +46,82 @@ from katacomb.util import (parse_python_assigns,
 log = logging.getLogger('katacomb')
 
 def create_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("katdata", help="Katdal observation file")
-    parser.add_argument("-d", "--disk", default=1, type=int,
-                                        help="AIPS disk")
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(formatter_class=formatter_class)
+
+    parser.add_argument("katdata",
+                        help="Katdal observation file")
+
+    parser.add_argument("-d", "--disk",
+                        default=1, type=int,
+                        help="AIPS disk")
+
     parser.add_argument("--nvispio", default=1024, type=int)
-    parser.add_argument("-cbid", "--capture-block-id", default=None, type=str,
-                                        help="Capture Block ID. Unique identifier "
-                                             "for the observation on which the "
-                                             "continuum pipeline is run.")
-    parser.add_argument("-ts", "--telstate", default='', type=str,
-                                        help="Address of the telstate server")
-    parser.add_argument("-sbid", "--sub-band-id", default=0, type=int,
-                                        help="Sub-band ID. Unique integer "
-                                             "identifier for the sub-band "
-                                             "on which the continuum pipeline "
-                                             "is run.")
-    parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=log_exception(log)(parse_python_assigns),
-                                        help="katdal select statement "
-                                             "Should only contain python "
-                                             "assignment statements to python "
-                                             "literals, separated by semi-colons")
+
+    parser.add_argument("-cbid", "--capture-block-id",
+                        default=None, type=str,
+                        help="Capture Block ID. Unique identifier "
+                             "for the observation on which the "
+                             "continuum pipeline is run.")
+
+    parser.add_argument("-ts", "--telstate",
+                        default='', type=str,
+                        help="Address of the telstate server")
+
+    parser.add_argument("-sbid", "--sub-band-id",
+                        default=0, type=int,
+                        help="Sub-band ID. Unique integer identifier for the sub-band "
+                             "on which the continuum pipeline is run.")
+
+    parser.add_argument("-ks", "--select",
+                        default="scans='track';spw=0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="katdal select statement "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons")
+
+    TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
+
+
+    parser.add_argument("-ba", "--uvblavg",
+                        # Averaging FOV is 1.0, turn on frequency averaging,
+                        # average eight channels together. Average a maximum
+                        # integration time of 2 minutes
+                        default="FOV=1.0; avgFreq=1; chAvg=8; maxInt=2.0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="UVBLAVG task parameter assignment statement. "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons. "
+                             "See %s/UVBlAvg.TDF for valid parameters. " % TDF_URL)
+
+
+    parser.add_argument("-mf", "--mfimage",
+                        # FOV of 1.2 degrees, 5000 Clean cycles,
+                        # 3 phase self-cal loops with a solution interval
+                        # of four minutes
+                        default="FOV=1.2; Niter=5000; "
+                                "maxPSCLoop=3; minFluxPSC=0.0; solPInt=4.0",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="MFIMAGE task parameter assignment statement. "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons. "
+                             "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
+
+    parser.add_argument("--clobber",
+                        default="scans, avgscans",
+                        type=lambda s: set(v.strip() for v in s.split(',')),
+                        help="Class of AIPS/Obit output files to clobber. "
+                             "'scans' => Individual scans. "
+                             "'avgscans' => Averaged individual scans. "
+                             "'merge' => Observation file containing merged, "
+                                                            "averaged scans. "
+                             "'clean' => Output CLEAN files. "
+                             "'mfimage' => Output MFImage files. ")
+
+
     return parser
 
 args = create_parser().parse_args()
@@ -78,14 +132,19 @@ IMG_CLASS = "IClean"
 
 with obit_context():
     KA = katacomb.KatdalAdapter(katdal.open(args.katdata))
-    uv_merge_path = KA.aips_path(aclass='merge', seq=None)
+    uv_merge_path = KA.aips_path(aclass='merge')
+    uv_merge_path = uv_merge_path.copy(seq=next_seq_nr(uv_merge_path))
     log.info("Exporting to '%s'", uv_merge_path)
 
     # Perform argument postprocessing
     args = post_process_args(args, KA)
 
-    # Set up telstate link
+    # Set up telstate link then create
+    # a view based the capture block ID and sub-band ID
     telstate = TelescopeState(args.telstate)
+    sub_band_id_str = "sub_band%d" % args.sub_band_id
+    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
+    ts_view = telstate.view(view)
 
     # The merged UV observation file. We wait until
     # we have a baseline averaged file to condition it with
@@ -111,20 +170,24 @@ with obit_context():
 
     def _source_info(KA):
         """
-        Infer MFImage source names and file outputs for each sources.
+        Infer MFImage source names and file outputs.
         For each source, MFImage outputs UV data and a CLEAN file.
         """
 
         # Source names
         uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
 
-        uv_files = [AIPSPath(name=s, disk=args.disk, aclass=UV_CLASS,
-                                                seq=None, atype="UV")
-                                                    for s in uv_sources]
+        uv_files = [AIPSPath(name=s, disk=args.disk,
+                             aclass=UV_CLASS, atype="UV")
+                                        for s in uv_sources]
 
-        clean_files = [AIPSPath(name=s, disk=args.disk, aclass=IMG_CLASS,
-                                                seq=None, atype="MA")
-                                                    for s in uv_sources]
+        clean_files = [AIPSPath(name=s, disk=args.disk,
+                                aclass=IMG_CLASS, atype="MA")
+                                        for s in uv_sources]
+
+        # Find sequence number which references an unassigned catalogue number
+        uv_files = [f.copy(seq=next_seq_nr(f)) for f in uv_files]
+        clean_files = [f.copy(seq=next_seq_nr(f)) for f in clean_files]
 
         return uv_sources, uv_files, clean_files
 
@@ -168,8 +231,7 @@ with obit_context():
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
 
-        blavg_params = dict()
-        blavg_kwargs.update(blavg_params)
+        blavg_kwargs.update(args.uvblavg)
 
         log.info("Time-dependent baseline averaging "
                 "'%s' to '%s'", scan_path, blavg_path)
@@ -199,7 +261,7 @@ with obit_context():
         blavg_nvis = blavg_desc['nvis']
 
         # Record something about the baseline averaging process
-        param_str = ', '.join("%s=%s" % (k,v) for k,v in blavg_params.items())
+        param_str = ', '.join("%s=%s" % (k,v) for k,v in args.uvblavg.items())
         blavg_history = ("Scan %d '%s' averaged %s to %s visiblities. UVBlAvg(%s)" %
                 (si, aips_source_name, scan_nvis, blavg_nvis, param_str))
         log.info(blavg_history)
@@ -290,10 +352,13 @@ with obit_context():
         merge_uvf.tables["AIPS NX"].rows.append(nx_row)
 
         # Remove scan and baseline averaged files once merged
-        log.info("Zapping '%s'", scan_uvf.aips_path)
-        scan_uvf.Zap()
-        log.info("Zapping '%s'", blavg_uvf.aips_path)
-        blavg_uvf.Zap()
+        if 'scans' in args.clobber:
+            log.info("Zapping '%s'", scan_uvf.aips_path)
+            scan_uvf.Zap()
+
+        if 'avgscans' in args.clobber:
+            log.info("Zapping '%s'", blavg_uvf.aips_path)
+            blavg_uvf.Zap()
 
     # Write the index table
     merge_uvf.tables["AIPS NX"].write()
@@ -316,86 +381,28 @@ with obit_context():
     mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
                           nThreads=multiprocessing.cpu_count())
 
+    mfimage_kwargs.update(args.mfimage)
+
     log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
     mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
     mfimage.go()
 
-    # AIPS Table entries follow this kind of schema where data
-    # is stored in singleton lists, while book-keeping entries
-    # are not.
-    # { 'DELTAX' : [1.4], 'NumFields' : 4, 'Table name' : 'AIPS CC' }
-    # Strip out book-keeping keys and flatten lists
-    DROP = { "Table name", "NumFields", "_status" }
-    def _condition(row):
-        """ Flatten singleton lists and drop book-keeping keys """
-        return { k: v[0] for k, v in row.items() if k not in DROP }
+    # Export calibration and clean solutions to telstate
+    export_calibration_solutions(uv_files, KA, ts_view)
+    export_clean_components(clean_files, target_indices, KA, ts_view)
 
-    # Create a view based the capture block ID and sub-band ID
-    sub_band_id_str = "sub_band%d" % args.sub_band_id
-    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
-    ts_view = telstate.view(view)
+    # Clobber any result files
+    for uv_file, clean_file in zip(uv_files, clean_files):
+        if "mfimage" in args.clobber:
+            with uv_factory(aips_path=uv_file, mode="r") as uvf:
+                uvf.Zap()
 
-    # MFImage outputs a UV file per source.  Iterate through each source:
-    # (1) Extract complex gains from attached "AIPS SN" table
-    # (2) Write them to telstate
-    for si, (uv_file, uv_source) in enumerate(zip(uv_files, uv_sources)):
-        with uv_factory(aips_path=uv_file, mode='r') as uvf:
-            try:
-                sntab = uvf.tables["AIPS SN"]
-            except KeyError:
-                log.warn("No calibration solutions in '%s'", uv_file)
-            else:
-                # Handle cases for single/dual pol gains
-                if "REAL2" in sntab.rows[0]:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL2"] + 1j*row["IMAG2"]],
-                                            dtype=np.complex64)
-                else:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL1"] + 1j*row["IMAG1"]],
-                                            dtype=np.complex64)
-
-                # Write each complex gain out per antenna
-                for row in (_condition(r) for r in sntab.rows):
-                    # Convert time back from AIPS to katdal UTC
-                    time = katdal_timestamps(row["TIME"], KA.midnight)
-                    # Convert from AIPS FORTRAN indexing to katdal C indexing
-                    ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
-
-                    # Store complex gain for this antenna
-                    # in telstate at this timestamp
-                    ts_view.add(ant, _extract_gains(row), ts=time)
-
-        uvf.Zap()
-
-    # MFImage outputs a CLEAN image per source.  Iterate through each source:
-    # (1) Extract clean components from attached "AIPS CC" table
-    # (2) Write them to telstate
-    it = enumerate(zip(clean_files, uv_sources, target_indices))
-    for si, (clean_file, uv_source, ti) in it:
-        with img_factory(aips_path=clean_file, mode='r') as cf:
-            try:
-                cctab = cf.tables["AIPS CC"]
-            except KeyError:
-                log.warn("No clean components in '%s'", clean_file)
-            else:
-                target = "target%d" % si
-
-                # Condition all rows up front
-                rows = [_condition(r) for r in cctab.rows]
-
-                # Extract description
-                description = KA.katdal.catalogue.targets[ti].description
-                data = { 'description': description, 'components': rows }
-
-                # Store them in telstate
-                key = ts_view.SEPARATOR.join((target, "clean_components"))
-                ts_view.add(key, data, immutable=True)
-
-        cf.Zap()
-
+        if "clean" in args.clobber:
+            with uv_factory(aips_path=clean_file, mode="r") as cf:
+                cf.Zap()
 
     merge_uvf.close()
+
+    if 'merge' in args.clobber:
+        merge_uvf.Zap()

@@ -1,64 +1,52 @@
+import ast
+import inspect
 import os
 
-from katacomb import obit_err
-
-from AIPSDir import PHiSeq, PTestCNO
-from OSystem import PGetAIPSuser
+from katacomb import obit_err, handle_obit_err
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
 
-def _highest_seq_nr(name, disk, aclass, atype):
+def next_seq_nr(aips_path):
     """
-    Returns the highest sequence number
+    Returns the highest available sequence number for which
+    a catalogue entry does not exist
 
     Parameters
     ----------
-    name : str
-        AIPS name
-    disk : integer
-        AIPS disk
-    aclass : str
-        AIPS class
-    atype : str
-        AIPS type
+    aips_path : :class:`AIPSPath`
+        An AIPS path
 
     Returns
     -------
     integer
         Highest sequence number
     """
+    from AIPSDir import PHiSeq, PTestCNO
+    from OSystem import PGetAIPSuser
 
-    return PHiSeq(Aname=name, user=PGetAIPSuser(),
-                    disk=disk, Aclass=aclass,
-                    Atype=atype, err=obit_err())
 
-def _catalogue_entry(name, disk, aclass, seq, atype):
-    """
-    Returns catalogue entry if it exists for the supplied arguments,
-    otherwise -1
+    err = obit_err()
+    aips_user = PGetAIPSuser()
 
-    Parameters
-    ----------
-    name : str
-        AIPS name
-    disk : integer
-        AIPS disk
-    aclass : str
-        AIPS class
-    seq : integer
-        AIPS sequence number
-    atype : str
-        AIPS type
+    hi_seq = PHiSeq(Aname=aips_path.name, user=aips_user,
+                    disk=aips_path.disk, Aclass=aips_path.aclass,
+                    Atype=aips_path.atype, err=err)
 
-    Returns
-    -------
-    integer
-        catalogue entry, else -1 if it does not exist
+    handle_obit_err("Error finding highest sequence number", err)
 
-    """
-    return PTestCNO(disk=disk, user=PGetAIPSuser(),
-        Aname=name, Aclass=aclass, Atype=atype, seq=seq,
-        err=obit_err())
+    while True:
+        cno = PTestCNO(disk=aips_path.disk, user=aips_user,
+            Aname=aips_path.name, Aclass=aips_path.aclass,
+            Atype=aips_path.atype, seq=hi_seq,
+            err=err)
+
+        handle_obit_err("Error finding catalogue entry", err)
+
+        if cno == -1:
+            return hi_seq
+
+        hi_seq += 1
+
 
 def _check_disk_type(dtype, check=True):
     """
@@ -98,7 +86,7 @@ class AIPSPath(object):
     """
 
     def __init__(self, name, disk=1, aclass="aips",
-                 seq=None, atype="UV",
+                 seq=1, atype="UV",
                  label="katuv", dtype="AIPS"):
         """
         Constructs an :class:`AIPSPath`.
@@ -112,9 +100,7 @@ class AIPSPath(object):
         aclass (optional) : string
             AIPS file class.
         seq (optional) : integer
-            AIPS file sequence number. If None or less than 1,
-            the next available sequence number will be selected.
-            Defaults to None.
+            AIPS file sequence number. Defaults to 1.
         atype (optional) : str
             AIPS file type. Typically either 'UV' or 'MA' for
             UV or Image data, respectively. Defaults to 'UV'
@@ -128,21 +114,13 @@ class AIPSPath(object):
         self.name = name
         self.disk = disk
         self.aclass = aclass
+        self.seq = seq
         self.label = label
         self.atype = atype
         self.dtype = dtype
 
         if dtype == "AIPS":
-            # Provide sensible default  for missing sequence
-            if seq is None or seq < 1:
-                seq = _highest_seq_nr(name, disk, aclass, atype)
-                cno = _catalogue_entry(name, disk, aclass, seq, atype)
-
-                # Choose next highest seq nr if no catalogue entry exists
-                if not cno == -1:
-                    seq += 1
-
-            self.seq = seq
+            pass
         elif dtype == "FITS":
             # FITS file don't have class or sequences,
             # just provide something sensible
@@ -243,3 +221,55 @@ class AIPSPath(object):
             return {"out2File": self.name}
         else:
             _check_disk_type(dtype, False)
+
+
+_AIPS_PATH_TUPLE_ARGS = [a for a in inspect.getargspec(AIPSPath.__init__).args
+                                                            if not a == "self"]
+_AIPS_PATH_TUPLE_FORMAT = "(%s)" % ",".join(_AIPS_PATH_TUPLE_ARGS)
+_AIPS_PATH_HELP = ("AIPS path should be a tuple of "
+                    "names or numbers of the form "
+                    "%s" % _AIPS_PATH_TUPLE_FORMAT)
+
+
+def parse_aips_path(aips_path_str):
+    """
+    Parses a string describing an AIPS Path
+
+    Parameters
+    ----------
+    aips_path_str : string
+        String of the form
+        %(fmt)s
+
+    Returns
+    -------
+    :class:`AIPSPath`
+        An AIPS Path object
+    """
+    stmts = ast.parse(aips_path_str, mode='single').body
+
+    if not isinstance(stmts[0], ast.Expr):
+        raise ValueError(_AIPS_PATH_HELP)
+
+    sequence = stmts[0].value
+
+    if not isinstance(sequence, (ast.Tuple, ast.List)):
+        raise ValueError(_AIPS_PATH_HELP)
+
+    xformed = []
+
+    for value in sequence.elts:
+        if isinstance(value, ast.Name):
+            xformed.append(None if value.id == "None" else value.id)
+        elif isinstance(value, ast.Num):
+            xformed.append(value.n)
+        else:
+            raise ValueError(_AIPS_PATH_HELP)
+
+    return AIPSPath(**dict(zip(_AIPS_PATH_TUPLE_ARGS, xformed)))
+
+try:
+    parse_aips_path.__doc__ %= {'fmt' : _AIPS_PATH_TUPLE_FORMAT}
+except KeyError:
+    # For python -OO
+    pass

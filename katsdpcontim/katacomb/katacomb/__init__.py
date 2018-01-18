@@ -30,3 +30,5 @@ from uv_export import (uv_export,
                         uv_history_obs_description,
                         uv_history_selection)
 
+from aips_export import (export_calibration_solutions,
+                        export_clean_components)

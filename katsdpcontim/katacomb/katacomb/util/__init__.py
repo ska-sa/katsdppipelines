@@ -121,20 +121,42 @@ def parse_python_assigns(assign_str):
         # Evaluate assignment lhs
         values = _eval_value(stmt.value)
 
-        # Promote to tuple so that we can zip with multiple targets
-        # and handle possible tuple destructuring
-        if not isinstance(values, (tuple, list)):
-            values = (values,)
+        # "a = b = c" => targets 'a' and 'b' with 'c' as result
+        for target in stmt.targets:
+            # a = 2
+            if isinstance(target, ast.Name):
+                variables[target.id] = values
 
-        if not len(values) == len(stmt.targets):
-            raise ValueError("Number of targets '%d' in assigment %d "
-                             "of expression '%s' does not match "
-                             "the number of values '%s'" %
-                                (len(stmt.targets), i, assign_str, len(values)))
+            # Tuple/List unpacking case
+            # (a, b) = 2
+            elif isinstance(target, (ast.Tuple, ast.List)):
+                # Require all tuple/list elements to be variable names,
+                # although anything else is probably a syntax error
+                if not all(isinstance(e, ast.Name) for e in target.elts):
+                    raise ValueError("Tuple unpacking in assignment %d "
+                                     "in expression '%s' failed as not all "
+                                     "tuple contents are variable names.")
 
-        # Assign variables to values
-        for target, value in zip(stmt.targets, values):
-            variables[target.id] = value
+                # Promote for zip and length checking
+                if not isinstance(values, (tuple, list)):
+                    elements = (values,)
+                else:
+                    elements = values
+
+                if not len(target.elts) == len(elements):
+                    raise ValueError("Unpacking '%s' into a tuple/list in "
+                                     "assignment %d of expression '%s' failed. "
+                                     "The number of tuple elements did not match "
+                                     "the number of values."
+                                        % (values, i, assign_str))
+
+                # Unpack
+                for variable, value in zip(target.elts, elements):
+                    variables[variable.id] = value
+            else:
+                raise TypeError("'%s' types are not supported"
+                                "as assignment targets." % type(target))
+
 
     return variables
 
