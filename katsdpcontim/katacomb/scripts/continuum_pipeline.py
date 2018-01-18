@@ -185,7 +185,7 @@ with obit_context():
                                 aclass=IMG_CLASS, atype="MA")
                                         for s in uv_sources]
 
-        # Find sequence number which reference an unassigned catalogue number
+        # Find sequence number which references an unassigned catalogue number
         uv_files = [f.copy(seq=next_seq_nr(f)) for f in uv_files]
         clean_files = [f.copy(seq=next_seq_nr(f)) for f in clean_files]
 

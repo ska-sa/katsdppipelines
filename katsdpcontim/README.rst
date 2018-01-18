@@ -291,4 +291,4 @@ A test suite exists, but must be executed inside the container:
 
 .. code-block::
 
-  $ nosetest /home/kat/src/katacomb
+  $ nosetests /home/kat/src/katacomb
