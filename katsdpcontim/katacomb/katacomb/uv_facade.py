@@ -407,24 +407,26 @@ class UVFacade(object):
     def Read(self, firstVis=None):
         err_msg = "Error reading UV file '%s'" % self.name
 
-        _,_, nvispio = self.uv.List.Dict['nVisPIO']
+        # NOTE(bcotton)
+        # There is a quirk in the order things are done it
+        # that causes what you are trying to misbehave.
+        # If you want purely sequential access
+        # (probably all you will ever want), simply leave off
+        # the firstVis=firstVis.  Alternatively, in your script
+        # uv.Read(err, firstVis=firstVis-(nvispio-1)) will do
+        # what you want. The problem is that internally,
+        # the low level I/O routine is expecting that the value
+        # it gets for firstVis is from the last call and it
+        # updates it assuming sequential access before reading
+        # the file. If you want to use this option to specify
+        # where in the file to read, I'll need to find a safe way
+        # to make it more obvious without breaking something else.
+        if firstVis:
+            nvispio = self.uv.List.Dict['nVisPIO'][2][0]
+            firstVis = firstVis - (nvispio-1)
 
         try:
-            # NOTE(bcotton)
-            # There is a quirk in the order things are done it
-            # that causes what you are trying to misbehave.
-            # If you want purely sequential access
-            # (probably all you will ever want), simply leave off
-            # the firstVis=firstVis.  Alternatively, in your script
-            # uv.Read(err, firstVis=firstVis-(nvispio-1)) will do
-            # what you want. The problem is that internally,
-            # the low level I/O routine is expecting that the value
-            # it gets for firstVis is from the last call and it
-            # updates it assuming sequential access before reading
-            # the file. If you want to use this option to specify
-            # where in the file to read, I'll need to find a safe way
-            # to make it more obvious without breaking something else.
-            self.uv.Read(self._err, firstVis=firstVis-(nvispio[0]-1))
+            self.uv.Read(self._err, firstVis=firstVis)
         except Exception:
             raise (Exception(err_msg), None, sys.exc_info()[2])
 
