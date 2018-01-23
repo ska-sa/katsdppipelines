@@ -22,8 +22,6 @@ from katacomb import (AIPSPath,
 from katacomb.tests.test_aips_path import file_cleaner
 from katacomb.util import parse_python_assigns
 
-import UV
-
 class TestKatdalAdapter(unittest.TestCase):
 
     def test_katdal_adapter(self):
@@ -41,8 +39,6 @@ class TestKatdalAdapter(unittest.TestCase):
             'sideband' : 1,
             'band' : 'L',
         }]
-
-        subarrays = [{'antenna' : ANTENNA_DESCRIPTIONS[:4]}]
 
         target_names = random.sample(stars.keys(), 5)
 
@@ -121,7 +117,7 @@ class TestKatdalAdapter(unittest.TestCase):
                             nvispio=nvispio) as uvf:
 
                 uv_desc = uvf.Desc.Dict
-                inaxes = list(reversed(uv_desc['inaxes'][:6]))
+                inaxes = tuple(reversed(uv_desc['inaxes'][:6]))
                 naips_vis = uv_desc['nvis']
                 summed_vis = 0
 
@@ -165,14 +161,6 @@ class TestKatdalAdapter(unittest.TestCase):
 
                     kat_ndumps, kat_nchans, kat_ncorrprods = KA.shape
 
-                    # Get the expected data for this scan,
-                    # cast to float32, the precision supported
-                    # in an AIPS UV file
-                    timestamps = KA.uv_timestamps[:].astype(np.float32)
-                    uv_u = KA.uv_u[:].astype(np.float32)
-                    uv_v = KA.uv_v[:].astype(np.float32)
-                    uv_w = KA.uv_w[:].astype(np.float32)
-
                     # Was is the expected source ID?
                     expected_source = np.float32(target['ID. NO.'][0])
 
@@ -195,10 +183,14 @@ class TestKatdalAdapter(unittest.TestCase):
                         'Mismatch in number of visibilities in scan %d' % si)
 
                     # Accumulate UVW, time data from the AIPS UV file
+                    # By convention uv_export's data in (ntime, nbl)
+                    # ordering, so we assume that the AIPS UV data
+                    # is ordered the same way
                     u_data = []
                     v_data = []
                     w_data = []
                     time_data = []
+                    vis_data = []
 
                     # For each visibility in the scan, read data and
                     # compare with katdal observation data
@@ -220,6 +212,16 @@ class TestKatdalAdapter(unittest.TestCase):
                         w_data.append(buf[ilocw:lrec*numVisBuff:lrec].copy())
                         time_data.append(buf[iloct:lrec*numVisBuff:lrec].copy())
 
+                        # Introduce an extra dimension to inaxes
+                        # to make later stack work
+                        extra_inaxes = (1,) + inaxes
+
+                        for i in range(numVisBuff):
+                            base = nrparm + i*lrec
+                            data = buf[base:base+lrec-nrparm].copy()
+                            data = data.reshape(inaxes)
+                            vis_data.append(data)
+
                         # Check that we're dealing with the same source
                         # within the scan
                         sources = buf[ilocsu:lrec*numVisBuff:lrec].copy()
@@ -229,6 +231,7 @@ class TestKatdalAdapter(unittest.TestCase):
                     # and that there are exactly number of baseline counts
                     # for each one
                     times, time_counts = np.unique(time_data, return_counts=True)
+                    timestamps = KA.uv_timestamps[:].astype(np.float32)
                     self.assertTrue(np.all(times == timestamps))
                     self.assertTrue(np.all(time_counts == len(bl_argsort)))
 
@@ -239,14 +242,39 @@ class TestKatdalAdapter(unittest.TestCase):
 
                     # uv_u will have shape (ntime, ncorrprods)
                     # Select katdal stokes 0 UVW coordinates and flatten
-                    uv_u = uv_u[:,bl_argsort].ravel()
-                    uv_v = uv_v[:,bl_argsort].ravel()
-                    uv_w = uv_w[:,bl_argsort].ravel()
+                    uv_u = KA.uv_u[:,bl_argsort].astype(np.float32).ravel()
+                    uv_v = KA.uv_v[:,bl_argsort].astype(np.float32).ravel()
+                    uv_w = KA.uv_w[:,bl_argsort].astype(np.float32).ravel()
 
                     # Confirm UVW coordinate equality
                     self.assertTrue(np.all(uv_u == u_data))
                     self.assertTrue(np.all(uv_v == v_data))
                     self.assertTrue(np.all(uv_w == w_data))
+
+                    # Number of baselines
+                    nbl = len(bl_argsort)
+
+                    # Now compare visibility data
+
+                    # Stacking produces
+                    # (ntime*nbl, nra, ndec, nif, nchan, nstokes, 3)
+                    aips_vis = np.stack(vis_data, axis=0)
+                    kat_vis = KA.uv_vis[:]
+
+                    shape = (kat_ndumps, kat_nchans, nbl, nstokes, 3)
+                    # This produces (ntime, nchan, nbl, nstokes, 3)
+                    kat_vis = kat_vis[:, :, cp_argsort, :].reshape(shape)
+
+
+                    # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
+                    # (2) reshape to include the full inaxes shape,
+                    #     including singleton nif, ra and dec dimensions
+                    kat_vis = (kat_vis.transpose(0, 2, 1, 3, 4)
+                              .reshape((kat_ndumps, nbl,) + inaxes))
+
+                    aips_vis = aips_vis.reshape((kat_ndumps, nbl) + inaxes)
+
+                    self.assertTrue(np.all(aips_vis == kat_vis))
 
                 # Check that we read the expected number of visibilities
                 self.assertEqual(summed_vis, naips_vis)
