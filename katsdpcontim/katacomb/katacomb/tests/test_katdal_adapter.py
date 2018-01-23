@@ -50,10 +50,12 @@ class TestKatdalAdapter(unittest.TestCase):
         targets = [katpoint.Target("%s, star" % t) for t in
                                                 target_names]
 
-        # Slew for 1 dump and track for 4 on each target
-        slew_track_dumps = (('slew', 1), ('track', 4))
-        scans = [(e, nd, t) for t in targets
-                        for e, nd in slew_track_dumps]
+        # Set up varying scans
+        scans = [('slew', 1, targets[0]), ('track', 3, targets[0]),
+                 ('slew', 2, targets[1]), ('track', 5, targets[1]),
+                 ('slew', 1, targets[2]), ('track', 8, targets[2]),
+                 ('slew', 2, targets[3]), ('track', 9, targets[3]),
+                 ('slew', 1, targets[4]), ('track', 10, targets[4])]
 
         # Create Mock dataset and wrap it in a KatdalAdapter
         ds = MockDataSet(timestamps=DEFAULT_TIMESTAMPS,
@@ -170,8 +172,6 @@ class TestKatdalAdapter(unittest.TestCase):
                     uv_u = KA.uv_u[:].astype(np.float32)
                     uv_v = KA.uv_v[:].astype(np.float32)
                     uv_w = KA.uv_w[:].astype(np.float32)
-
-                    print timestamps.shape, uv_u.shape, uv_v.shape, uv_w.shape
 
                     # Was is the expected source ID?
                     expected_source = np.float32(target['ID. NO.'][0])
