@@ -26,9 +26,13 @@ class TestKatdalAdapter(unittest.TestCase):
 
     def test_katdal_adapter(self):
         """
-        Test export to katdal adapter
-        """
+        Tests writing data from a :class:`KatdalAdapter` object
+        to an AIPS UV file.
 
+        Then, the AIPS UV file is re-opened and visibility
+        data is read per scan and compared with the data
+        from each scan of the :class:`KatdalAdapter`
+        """
         nchan = 16
         nvispio = 1024
 

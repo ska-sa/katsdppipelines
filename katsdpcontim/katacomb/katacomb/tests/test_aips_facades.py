@@ -20,6 +20,9 @@ from katacomb import (AIPSPath,
 from katacomb.tests.test_aips_path import file_cleaner
 
 class TestAipsFacades(unittest.TestCase):
+    """
+    Test basic visibility reading and writing from a AIPS UV Facade object
+    """
 
     def test_uv_facade_read_write(self):
         """

@@ -25,6 +25,9 @@ def file_cleaner(paths):
                 f.Zap()
 
 class TestAipsPath(unittest.TestCase):
+    """
+    Test AIPS path functionalityy
+    """
 
     def test_next_seq_nr(self):
         """ Test finding the next highest disk sequence number of an AIPS Path """
