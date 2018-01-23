@@ -74,7 +74,7 @@ def create_parser():
                              "on which the continuum pipeline is run.")
 
     parser.add_argument("-ks", "--select",
-                        default="scans='track';spw=0",
+                        default="scans='track'; spw=0; corrprods='cross'",
                         type=log_exception(log)(parse_python_assigns),
                         help="katdal select statement "
                              "Should only contain python "

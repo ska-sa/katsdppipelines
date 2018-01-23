@@ -23,28 +23,34 @@ def create_parser():
     parser.add_argument("katdata", help="hdf5 observation file", type=str)
     parser.add_argument("-l", "--label", default="MeerKAT", type=str)
     parser.add_argument("-n", "--name", help="AIPS name", type=str)
-    parser.add_argument("-c", "--class", default="raw",
-                                        type=str,
-                                        dest="aclass",
-                                        help="AIPS class")
-    parser.add_argument("-d", "--disk", default=1,
-                                        type=int,
-                                        help="AIPS disk")
-    parser.add_argument("-s", "--seq", default=None,
-                                        type=int,
-                                        help="AIPS sequence")
-    parser.add_argument("--nvispio", default=1024,
-                                        type=int,
-                                        help="Number of visibilities "
-                                             "read/written per IO call")
-    parser.add_argument("-ks", "--select", default="scans='track';spw=0",
-                                        type=log_exception(log)(parse_python_assigns),
-                                        help="katdal select statement "
-                                             "Should only contain python "
-                                             "assignment statements to python "
-                                             "literals, separated by semi-colons")
-    parser.add_argument("--blavg", default=False, action="store_true",
-                                    help="Apply baseline dependent averaging")
+    parser.add_argument("-c", "--class",
+                        default="raw",
+                        type=str,
+                        dest="aclass",
+                        help="AIPS class")
+    parser.add_argument("-d", "--disk",
+                        default=1,
+                        type=int,
+                        help="AIPS disk")
+    parser.add_argument("-s", "--seq",
+                        default=None,
+                        type=int,
+                        help="AIPS sequence")
+    parser.add_argument("--nvispio",
+                        default=1024,
+                        type=int,
+                        help="Number of visibilities "
+                             "read/written per IO call")
+    parser.add_argument("-ks", "--select",
+                        default="scans='track'; spw=0; corrprods='cross'",
+                        type=log_exception(log)(parse_python_assigns),
+                        help="katdal select statement "
+                             "Should only contain python "
+                             "assignment statements to python "
+                             "literals, separated by semi-colons")
+    parser.add_argument("--blavg",
+                        default=False, action="store_true",
+                        help="Apply baseline dependent averaging")
     return parser
 
 args = create_parser().parse_args()

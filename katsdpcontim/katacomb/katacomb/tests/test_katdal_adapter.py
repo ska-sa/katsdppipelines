@@ -77,6 +77,7 @@ class TestKatdalAdapter(unittest.TestCase):
         # converts it back to a dict.
         select = {
             'scans': 'track',
+            'corrprods': 'cross',
             'targets': target_names,
             'pol': 'HH,VV',
             'channels': slice(0, nchan),}
