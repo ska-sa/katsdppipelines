@@ -84,6 +84,19 @@ class TestKatdalAdapter(unittest.TestCase):
         # Perform the katdal selection
         KA.select(**select)
 
+        # Obtain correlator products and produce argsorts that will
+        # order by (a1, a2, stokes)
+        cp = KA.correlator_products()
+        nstokes = KA.nstokes
+
+        # Lexicographically sort correlation products on (a1, a2, cid)
+        sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+        cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
+        corr_products = np.asarray([cp[i] for i in cp_argsort])
+
+        # Use first stokes parameter index of each baseline
+        bl_argsort = cp_argsort[::nstokes]
+
         # Get data shape after selection
         kat_ndumps, kat_nchans, kat_ncorrprods = KA.shape
 
@@ -150,8 +163,15 @@ class TestKatdalAdapter(unittest.TestCase):
 
                     kat_ndumps, kat_nchans, kat_ncorrprods = KA.shape
 
-                    # Get the expected timestamps for this scan
+                    # Get the expected data for this scan,
+                    # cast to float32, the precision supported
+                    # in an AIPS UV file
                     timestamps = KA.uv_timestamps[:].astype(np.float32)
+                    uv_u = KA.uv_u[:].astype(np.float32)
+                    uv_v = KA.uv_v[:].astype(np.float32)
+                    uv_w = KA.uv_w[:].astype(np.float32)
+
+                    print timestamps.shape, uv_u.shape, uv_v.shape, uv_w.shape
 
                     # Was is the expected source ID?
                     expected_source = np.float32(target['ID. NO.'][0])
@@ -174,9 +194,16 @@ class TestKatdalAdapter(unittest.TestCase):
                         kat_ndumps*kat_ncorrprods//uv_nstokes,
                         'Mismatch in number of visibilities in scan %d' % si)
 
-                    # Check each visibility in the scan, compare read data
-                    # with expected data
+                    # Accumulate UVW, time data from the AIPS UV file
+                    u_data = []
+                    v_data = []
+                    w_data = []
+                    time_data = []
+
+                    # For each visibility in the scan, read data and
+                    # compare with katdal observation data
                     for firstVis in range(start_vis, last_vis+1, nvispio):
+                        # Determine number of visibilities to read
                         numVisBuff = min(last_vis+1-firstVis, nvispio)
 
                         desc = uvf.Desc.Dict
@@ -187,15 +214,39 @@ class TestKatdalAdapter(unittest.TestCase):
                         uvf.Read(firstVis=firstVis)
                         buf = uvf.np_visbuf
 
-                        times = np.unique(buf[iloct:lrec*numVisBuff:lrec])
-                        sources = np.unique(buf[ilocsu:lrec*numVisBuff:lrec])
-
-                        # Check that times are in this scan's timestamps
-                        self.assertTrue(np.isin(times, timestamps))
+                        # Must copy because buf data will change with each read
+                        u_data.append(buf[ilocu:lrec*numVisBuff:lrec].copy())
+                        v_data.append(buf[ilocv:lrec*numVisBuff:lrec].copy())
+                        w_data.append(buf[ilocw:lrec*numVisBuff:lrec].copy())
+                        time_data.append(buf[iloct:lrec*numVisBuff:lrec].copy())
 
                         # Check that we're dealing with the same source
-                        self.assertEqual(sources.size, 1)
-                        self.assertEqual(sources[0], expected_source)
+                        # within the scan
+                        sources = buf[ilocsu:lrec*numVisBuff:lrec].copy()
+                        self.assertEqual(sources, expected_source)
+
+                    # Ensure katdal timestamps match AIPS UV file timestamps
+                    # and that there are exactly number of baseline counts
+                    # for each one
+                    times, time_counts = np.unique(time_data, return_counts=True)
+                    self.assertTrue(np.all(times == timestamps))
+                    self.assertTrue(np.all(time_counts == len(bl_argsort)))
+
+                    # Flatten AIPS UVW data, there'll be (ntime*nbl) values
+                    u_data = np.concatenate(u_data).ravel()
+                    v_data = np.concatenate(v_data).ravel()
+                    w_data = np.concatenate(w_data).ravel()
+
+                    # uv_u will have shape (ntime, ncorrprods)
+                    # Select katdal stokes 0 UVW coordinates and flatten
+                    uv_u = uv_u[:,bl_argsort].ravel()
+                    uv_v = uv_v[:,bl_argsort].ravel()
+                    uv_w = uv_w[:,bl_argsort].ravel()
+
+                    # Confirm UVW coordinate equality
+                    self.assertTrue(np.all(uv_u == u_data))
+                    self.assertTrue(np.all(uv_v == v_data))
+                    self.assertTrue(np.all(uv_w == w_data))
 
                 # Check that we read the expected number of visibilities
                 self.assertEqual(summed_vis, naips_vis)
