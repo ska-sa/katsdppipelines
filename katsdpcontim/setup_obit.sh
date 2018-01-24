@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash/env
 
 # For future reference, the following are the environment variables
 # created by setup.sh, in turn created by calling InstallObit.sh
@@ -12,7 +12,7 @@
 # OBITINSTALL=/src/Obit/trunk; export OBITINSTALL
 # PLPLOT_DRV_DIR=/src/Obit/trunk/other/lib/plplot5.8.0/drivers; export PLPLOT_DRV_DIR
 
-export OBIT_BASE_PATH=/usr/local/Obit
+export OBIT_BASE_PATH=/home/kat/Obit
 export OBIT=$OBIT_BASE_PATH/ObitSystem/Obit
 export OBITINSTALL=$OBIT_BASE_PATH
 export OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
