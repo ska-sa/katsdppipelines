@@ -152,6 +152,7 @@ with obit_context():
 
     # Save katdal selection
     global_select = args.select.copy()
+    scan_select = args.select.copy()
 
     # Perform katdal selection
     # retrieving selected scan indices as python ints
@@ -165,6 +166,7 @@ with obit_context():
 
     global_desc = KA.uv_descriptor()
     global_table_cmds = KA.default_table_cmds()
+    scan_indices = [int(i) for i in KA.scan_indices]
 
     def _source_info(KA):
         """
@@ -198,9 +200,13 @@ with obit_context():
 
     # Export each scan individually, baseline average
     # and merge it
-    for si, state, aips_source in KA.scans():
+    for si in scan_indices:
+        # Clear katdal selection and set to global selection
+        KA.select()
+        KA.select(**global_select)
+
         # Get path, with sequence based on scan index
-        scan_path = uv_merge_path.copy(aclass='raw', seq=int(si))
+        scan_path = uv_merge_path.copy(aclass='raw', seq=si)
 
         log.info("Creating '%s'", scan_path)
 
@@ -210,10 +216,15 @@ with obit_context():
                             table_cmds=global_table_cmds,
                             desc=global_desc) as uvf:
 
+            # Perform katdal selection on the specific scan
+            scan_select['scans'] = si
+            KA.select(**scan_select)
+
             # Perform export to the file
             uv_export(KA, uvf)
 
         # Get the AIPS source for logging purposes
+        aips_source = KA.catalogue[KA.target_indices[0]]
         aips_source_name = aips_source["SOURCE"][0].strip()
 
         blavg_kwargs = scan_path.task_input_kwargs()
