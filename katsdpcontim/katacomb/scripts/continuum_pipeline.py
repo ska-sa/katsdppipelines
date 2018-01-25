@@ -12,18 +12,13 @@ Basic version of the continuum imaging pipeline.
 """
 
 import argparse
-import collections
-from copy import deepcopy
 import logging
-import multiprocessing
 import os.path
 from os.path import join as pjoin
 import sys
 
 import numpy as np
 import pkg_resources
-from pretty import pprint, pretty
-import six
 
 import katdal
 from katsdptelstate import TelescopeState
@@ -126,283 +121,25 @@ def create_parser():
 
 args = create_parser().parse_args()
 
-# Standard MFImage output classes for UV and CLEAN images
-UV_CLASS = "MFImag"
-IMG_CLASS = "IClean"
+# Open the observation
+katdata = katdal.open(args.katdata)
 
-with obit_context():
-    KA = katacomb.KatdalAdapter(katdal.open(args.katdata))
-    uv_merge_path = KA.aips_path(aclass='merge')
-    uv_merge_path = uv_merge_path.copy(seq=next_seq_nr(uv_merge_path))
-    log.info("Exporting to '%s'", uv_merge_path)
+post_process_args(args, katdata)
 
-    # Perform argument postprocessing
-    args = post_process_args(args, KA)
+# Set up telstate link then create
+# a view based the capture block ID and sub-band ID
+telstate = TelescopeState(args.telstate)
+sub_band_id_str = "sub_band%d" % args.sub_band_id
+view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
+ts_view = telstate.view(view)
 
-    # Set up telstate link then create
-    # a view based the capture block ID and sub-band ID
-    telstate = TelescopeState(args.telstate)
-    sub_band_id_str = "sub_band%d" % args.sub_band_id
-    view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
-    ts_view = telstate.view(view)
-
-    # The merged UV observation file. We wait until
-    # we have a baseline averaged file to condition it with
-    merge_uvf = None
-
-    # Save katdal selection
-    global_select = args.select.copy()
-    scan_select = args.select.copy()
-
-    # Perform katdal selection
-    # retrieving selected scan indices as python ints
-    # so that we can do per scan selection
-    KA.select(**global_select)
-
-    # Fall over on empty selections
-    if not KA.size > 0:
-        raise ValueError("The katdal selection produced an empty dataset"
-                        "\n'%s'\n" % pretty(global_select))
-
-    global_desc = KA.uv_descriptor()
-    global_table_cmds = KA.default_table_cmds()
-    scan_indices = [int(i) for i in KA.scan_indices]
-
-    def _source_info(KA):
-        """
-        Infer MFImage source names and file outputs.
-        For each source, MFImage outputs UV data and a CLEAN file.
-        """
-
-        # Source names
-        uv_sources = [s["SOURCE"][0].strip() for s in KA.uv_source_rows]
-
-        uv_files = [AIPSPath(name=s, disk=args.disk,
-                             aclass=UV_CLASS, atype="UV")
-                                        for s in uv_sources]
-
-        clean_files = [AIPSPath(name=s, disk=args.disk,
-                                aclass=IMG_CLASS, atype="MA")
-                                        for s in uv_sources]
-
-        # Find sequence number which references an unassigned catalogue number
-        uv_files = [f.copy(seq=next_seq_nr(f)) for f in uv_files]
-        clean_files = [f.copy(seq=next_seq_nr(f)) for f in clean_files]
-
-        return uv_sources, uv_files, clean_files
-
-    uv_sources, uv_files, clean_files = _source_info(KA)
-    target_indices = KA.target_indices
-    assert len(target_indices) == len(uv_sources)
-
-    # FORTRAN indexing
-    merge_firstVis = 1
-
-    # Export each scan individually, baseline average
-    # and merge it
-    for si in scan_indices:
-        # Clear katdal selection and set to global selection
-        KA.select()
-        KA.select(**global_select)
-
-        # Get path, with sequence based on scan index
-        scan_path = uv_merge_path.copy(aclass='raw', seq=si)
-
-        log.info("Creating '%s'", scan_path)
-
-        # Create a UV file for the scan
-        with uv_factory(aips_path=scan_path, mode="w",
+# Create Continuum Pipeline
+pipeline = ContinuumPipeline(katdata, ts_view,
+                            katdal_select=args.select,
+                            uvblavg_params=args.uvblavg,
+                            mfimage_params=args.mfimage,
                             nvispio=args.nvispio,
-                            table_cmds=global_table_cmds,
-                            desc=global_desc) as uvf:
+                            disk=args.disk)
 
-            # Perform katdal selection on the specific scan
-            scan_select['scans'] = si
-            KA.select(**scan_select)
-
-            # Perform export to the file
-            uv_export(KA, uvf)
-
-        # Get the AIPS source for logging purposes
-        aips_source = KA.catalogue[KA.target_indices[0]]
-        aips_source_name = aips_source["SOURCE"][0].strip()
-
-        blavg_kwargs = scan_path.task_input_kwargs()
-        blavg_path = scan_path.copy(aclass='uvav')
-        blavg_kwargs.update(blavg_path.task_output_kwargs())
-
-        blavg_kwargs.update(args.uvblavg)
-
-        log.info("Time-dependent baseline averaging "
-                "'%s' to '%s'", scan_path, blavg_path)
-
-        blavg = task_factory("UVBlAvg", **blavg_kwargs)
-        blavg.go()
-
-        # Retrieve the single scan index.
-        # The time centroids and interval should be correct
-        # but the visibility indices need to be repurposed
-        scan_uvf = uv_factory(aips_path=scan_path, mode='r',
-                                        nvispio=args.nvispio)
-
-        assert len(scan_uvf.tables["AIPS NX"].rows) == 1, scan_uvf.tables["AIPS NX"].rows
-        nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
-        scan_desc = scan_uvf.Desc.Dict
-        scan_nvis = scan_desc['nvis']
-
-        # If we've performed channel averaging, the FREQ dimension
-        # and FQ tables in the baseline averaged file will be smaller
-        # than that of the scan file. This data must either be
-        # (1) Used to condition a new merge UV file
-        # (2) compared against the method in the existing merge UV file
-        blavg_uvf = uv_factory(aips_path=blavg_path, mode='r',
-                                          nvispio=args.nvispio)
-        blavg_desc = blavg_uvf.Desc.Dict
-        blavg_nvis = blavg_desc['nvis']
-
-        # Record something about the baseline averaging process
-        param_str = ', '.join("%s=%s" % (k,v) for k,v in args.uvblavg.items())
-        blavg_history = ("Scan %d '%s' averaged %s to %s visiblities. UVBlAvg(%s)" %
-                (si, aips_source_name, scan_nvis, blavg_nvis, param_str))
-        log.info(blavg_history)
-
-        blavg_fq_keywords = dict(blavg_uvf.tables["AIPS FQ"].keywords)
-        blavg_fq_rows = blavg_uvf.tables["AIPS FQ"].rows
-
-        # Get the merge file if it hasn't yet been created,
-        # conditioning it with the baseline averaged file
-        # descriptor. Baseline averaged files
-        # have integration time as an additional random parameter
-        # so the merged file will need to take this into account.
-        if merge_uvf is None:
-            log.info("Creating '%s'",  uv_merge_path)
-
-            # Use the FQ table rows and keywords to create
-            # the merge UV file.
-            blavg_table_cmds = deepcopy(global_table_cmds)
-            fq_cmd = blavg_table_cmds["AIPS FQ"]
-            fq_cmd["keywords"] = blavg_fq_keywords
-            fq_cmd["rows"] = blavg_fq_rows
-
-            # Create the UV object
-            merge_uvf = uv_factory(aips_path=uv_merge_path, mode="w",
-                                    nvispio=args.nvispio,
-                                    table_cmds=blavg_table_cmds,
-                                    desc=blavg_desc)
-
-            # Write history
-            uv_history_obs_description(KA, merge_uvf)
-            uv_history_selection(global_select, merge_uvf)
-
-        # Now do some sanity checks of the merge UV file's metadata
-        # against that of the blavg UV file. Mostly we check that the
-        # frequency information is the same.
-        merge_desc = merge_uvf.Desc.Dict
-        merge_fq_keywords = dict(merge_uvf.tables["AIPS FQ"].keywords)
-        merge_fq_rows = merge_uvf.tables["AIPS FQ"].rows
-
-        # Compare
-        # (1) UV FITS shape parameters
-        # (2) FQ table keywords
-        # (3) FQ table rows
-        assert all(merge_desc[k] == blavg_desc[k] for k in (
-                    'inaxes', 'cdelt', 'crval', 'naxis', 'crota', 'crpix',
-                     'ilocu', 'ilocv', 'ilocw', 'ilocb', 'iloct', 'ilocsu',
-                    'jlocc', 'jlocs', 'jlocf', 'jlocif', 'jlocr', 'jlocd'))
-        assert all(merge_fq_keywords[k] == blavg_fq_keywords[k] for k in blavg_fq_keywords.keys())
-        assert len(merge_fq_rows) == len(blavg_fq_rows)
-        assert all(all(mr[k] == br[k] for k in br.keys()) for mr, br in zip(merge_fq_rows, blavg_fq_rows))
-
-        merge_uvf.append_history(blavg_history)
-
-        # Record the starting visibility
-        # for this scan in the merge file
-        nx_row['START VIS'] = [merge_firstVis]
-
-        log.info("Merging '%s' into '%s'", blavg_path, uv_merge_path)
-
-        for blavg_firstVis in six.moves.range(1, blavg_nvis+1, args.nvispio):
-            # How many visibilities do we write in this iteration?
-            numVisBuff = min(blavg_nvis+1 - blavg_firstVis, args.nvispio)
-
-            # Update read file descriptor
-            blavg_desc = blavg_uvf.Desc.Dict
-            blavg_desc.update(numVisBuff=numVisBuff)
-            blavg_uvf.Desc.Dict = blavg_desc
-
-            # Update write file descriptor
-            merge_desc = merge_uvf.Desc.Dict
-            merge_desc.update(numVisBuff=numVisBuff)
-            merge_uvf.Desc.Dict = merge_desc
-
-            # Read, copy, write
-            blavg_uvf.Read(firstVis=blavg_firstVis)
-            merge_uvf.np_visbuf[:] = blavg_uvf.np_visbuf
-            merge_uvf.Write(firstVis=merge_firstVis)
-
-            # Update starting positions
-            blavg_firstVis += numVisBuff
-            merge_firstVis += numVisBuff
-
-        # Record the ending visibility
-        # for this scan in the merge file
-        nx_row['END VIS'] = [merge_firstVis-1]
-
-        # Append row to index table
-        merge_uvf.tables["AIPS NX"].rows.append(nx_row)
-
-        # Remove scan and baseline averaged files once merged
-        if 'scans' in args.clobber:
-            log.info("Zapping '%s'", scan_uvf.aips_path)
-            scan_uvf.Zap()
-
-        if 'avgscans' in args.clobber:
-            log.info("Zapping '%s'", blavg_uvf.aips_path)
-            blavg_uvf.Zap()
-
-    # Write the index table
-    merge_uvf.tables["AIPS NX"].write()
-
-    # Create an empty calibration table
-    merge_uvf.attach_CL_from_NX_table(KA.max_antenna_number)
-
-    # Close merge file
-    merge_uvf.close()
-
-    uv_seq = max(f.seq for f in uv_files)
-    clean_seq = max(f.seq for f in clean_files)
-
-    # Run MFImage task on merged file,
-    # using no-self calibration config options (mfimage_nosc.in)
-    mfimage_kwargs = uv_merge_path.task_input_kwargs()
-    mfimage_kwargs.update(uv_merge_path.task_output_kwargs(name='', aclass=IMG_CLASS, seq=clean_seq))
-    mfimage_kwargs.update(uv_merge_path.task_output2_kwargs(name='', aclass=UV_CLASS, seq=uv_seq))
-    mfimage_cfg = pkg_resources.resource_filename('katacomb', pjoin('conf', 'mfimage_nosc.in'))
-    mfimage_kwargs.update(maxFBW=fractional_bandwidth(blavg_desc)/20.0,
-                          nThreads=multiprocessing.cpu_count())
-
-    mfimage_kwargs.update(args.mfimage)
-
-    log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
-
-    mfimage = task_factory("MFImage", mfimage_cfg, taskLog='IMAGE.log', prtLv=5,**mfimage_kwargs)
-    mfimage.go()
-
-    # Export calibration and clean solutions to telstate
-    export_calibration_solutions(uv_files, KA, ts_view)
-    export_clean_components(clean_files, target_indices, KA, ts_view)
-
-    # Clobber any result files
-    for uv_file, clean_file in zip(uv_files, clean_files):
-        if "mfimage" in args.clobber:
-            with uv_factory(aips_path=uv_file, mode="r") as uvf:
-                uvf.Zap()
-
-        if "clean" in args.clobber:
-            with uv_factory(aips_path=clean_file, mode="r") as cf:
-                cf.Zap()
-
-    merge_uvf.close()
-
-    if 'merge' in args.clobber:
-        merge_uvf.Zap()
+# Execute it
+pipeline.execute()
