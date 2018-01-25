@@ -154,6 +154,8 @@ class AIPSPath(object):
         else:
             _check_disk_type(self.dtype, False)
 
+    __repr__ = __str__
+
     def task_input_kwargs(self):
         """
         Returns
