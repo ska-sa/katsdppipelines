@@ -82,6 +82,7 @@ class BufferReadyEvent(object):
 
 class SensorReadingEvent(object):
     """An update to a sensor sent to the master"""
+
     def __init__(self, name, reading):
         self.name = name
         self.reading = reading
@@ -89,6 +90,7 @@ class SensorReadingEvent(object):
 
 class QueueObserver(object):
     """katcp Sensor observer that forwards updates to a queue"""
+
     def __init__(self, queue):
         self._queue = queue
 
@@ -141,6 +143,39 @@ def _slots_slices(slots):
         end = slot + 1
     if end is not None:
         yield slice(start, end)
+
+
+def _corr_total(corr_data):
+    """
+    Compresses a list of dictionaries each containing a single scan of averaged, corrected data
+    into a single dictionary containing corrected data for all scans.
+
+    Parameters
+    ----------
+    corr_data : list of dict
+        dict's contain all of the following keys: 'vis','flags',
+        'weights', 'times', 'n_flags', 'targets, 'timestamps'
+
+    Returns
+    --------
+    dict
+        Dictionary, keys 'vis', 'flags','weights', 'times', 'n_flags' contain numpy arrays
+        of averaged, corrected data for all scans. Key 'targets' contains a list of target
+        strings corresponding to each scan, while 'timestamps' contains a list of numpy arrays
+        of timestamps for each scan.
+    """
+    total = {}
+    for key in ['vis', 'flags', 'weights', 'times', 'n_flags']:
+        stack = [d[key] for d in corr_data if len(d[key]) > 0]
+        if len(stack) > 0:
+            total[key] = np.concatenate(stack, axis=0)
+        else:
+            total[key] = np.asarray(stack)
+    for key in ['targets', 'timestamps']:
+        stack = [d[key] for d in corr_data]
+        stack_flat = [y for z in stack for y in z]
+        total[key] = stack_flat
+    return total
 
 
 class Task(object):
@@ -910,7 +945,9 @@ class Pipeline(Task):
 
     def run_pipeline(self, data):
         # run pipeline calibration
-        pipeline(data, self.telstate, self.l0_name)
+        target_slices, avg_corr = pipeline(data, self.telstate, self.l0_name)
+        # put corrected data into pipeline_report_queue
+        self.pipeline_report_queue.put(avg_corr)
 
 
 class Sender(Task):
@@ -1038,7 +1075,7 @@ class ReportWriter(Task):
                 'report-last-path', 'Directory containing the most recent report')
         ]
 
-    def write_report(self, obs_start, obs_end):
+    def write_report(self, obs_start, obs_end, av_corr):
         now = time.time()
         # get observation name
         try:
@@ -1068,7 +1105,8 @@ class ReportWriter(Task):
         # create pipeline report (very basic at the moment)
         try:
             make_cal_report(self.telstate, self.l0_name,
-                            current_obs_dir, experiment_id, st=obs_start, et=obs_end)
+                            current_obs_dir, av_corr, experiment_id,
+                            st=obs_start, et=obs_end)
         except Exception as error:
             logger.warn('Report generation failed: %s', error, exc_info=True)
 
@@ -1088,16 +1126,24 @@ class ReportWriter(Task):
         reports_sensor = self.sensors['reports-written']
         report_time_sensor = self.sensors['report-last-time']
         report_path_sensor = self.sensors['report-last-path']
+        # Set initial value of averaged corrected data
+        av_corr = []
+
         while True:
             event = self.pipeline_report_queue.get()
             if isinstance(event, StopEvent):
                 break
+            if isinstance(event, dict):
+                logger.info('Corrected Data is in the queue')
+                av_corr.append(event)
             elif isinstance(event, ObservationEndEvent):
                 try:
                     logger.info('Starting report on %s', event.capture_block_id)
                     start_time = time.time()
-                    obs_dir = self.write_report(event.start_time, event.end_time)
+                    av_corr = _corr_total(av_corr)
+                    obs_dir = self.write_report(event.start_time, event.end_time, av_corr)
                     end_time = time.time()
+                    av_corr = []
                     reports_sensor.set_value(reports_sensor.value() + 1, timestamp=end_time)
                     report_time_sensor.set_value(end_time - start_time, timestamp=end_time)
                     report_path_sensor.set_value(obs_dir, timestamp=end_time)
