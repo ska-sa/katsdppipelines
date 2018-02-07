@@ -121,6 +121,42 @@ class TestKatdalAdapter(unittest.TestCase):
                             mode="r",
                             nvispio=nvispio) as uvf:
 
+                def _strip_strings(aips_keywords):
+                    """ AIPS string are padded, strip them """
+                    return { k: v.strip()
+                            if isinstance(v, six.string_types) else v
+                            for k, v in aips_keywords.iteritems() }
+
+                fq_kw =  _strip_strings(uvf.tables["AIPS FQ"].keywords)
+                src_kw = _strip_strings(uvf.tables["AIPS SU"].keywords)
+                ant_kw = _strip_strings(uvf.tables["AIPS AN"].keywords)
+
+                # Check that the subset of keywords generated
+                # by the katdal adapter match those read from the AIPS table
+                self.assertDictContainsSubset(KA.uv_spw_keywords, fq_kw)
+                self.assertDictContainsSubset(KA.uv_source_keywords, src_kw)
+                self.assertDictContainsSubset(KA.uv_antenna_keywords, ant_kw)
+
+                def _strip_metadata(aips_table_rows):
+                    """
+                    Strip out ``Numfields``, ``_status``, ``Table name``
+                    fields from each row entry
+                    """
+                    STRIP = { 'NumFields', '_status', 'Table name' }
+                    return [{k: v for k, v in d.items()
+                                if k not in STRIP}
+                                        for d in aips_table_rows]
+
+                # Check that frequency, source and antenna rows
+                # are correctly exported
+                fq_rows = _strip_metadata(uvf.tables["AIPS FQ"].rows)
+                src_rows = _strip_metadata(uvf.tables["AIPS SU"].rows)
+                ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)
+
+                self.assertEqual(fq_rows, KA.uv_spw_rows)
+                self.assertEqual(src_rows, KA.uv_source_rows)
+                self.assertEqual(ant_rows, KA.uv_antenna_rows)
+
                 uv_desc = uvf.Desc.Dict
                 inaxes = tuple(reversed(uv_desc['inaxes'][:6]))
                 naips_vis = uv_desc['nvis']
