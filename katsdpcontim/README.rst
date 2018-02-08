@@ -158,6 +158,8 @@ For example, the following code,
       9 Rukbat      .IClean.    1 MA 08-Feb-2018 11:56:19
      11 Sirrah      .IClean.    1 MA 08-Feb-2018 11:55:52
 
+    >>> x = getname(7)
+
     >>> err = OErr.OErr()
     >>> imtab(x, "IMAGE.FITS", 1, err)
     <C Image instance> FITS Image DATA>
