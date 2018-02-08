@@ -6,7 +6,7 @@ funcsigs == 0.4
 future
 ipaddress
 h5py
-katversion == 0.8
+katversion
 netifaces
 nose
 numpy
