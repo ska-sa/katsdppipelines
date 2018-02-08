@@ -7,6 +7,8 @@ import katpoint
 import numpy as np
 import six
 
+from katsdptelstate import TelescopeState
+
 from katacomb.mock_dataset import (MockDataSet,
                     ANTENNA_DESCRIPTIONS,
                     DEFAULT_METADATA,
@@ -129,7 +131,7 @@ class TestUVExport(unittest.TestCase):
         uv_file_path = AIPSPath('test', 1, 'test', 1)
 
         with obit_context(), file_cleaner([uv_file_path]):
-            # Perform export of katdal selection
+            # Perform export of katdal selection via uv_export
             if export_type == "uv_export":
                 with uv_factory(aips_path=uv_file_path, mode="w",
                                 nvispio=nvispio,
@@ -137,11 +139,9 @@ class TestUVExport(unittest.TestCase):
                                 desc=KA.uv_descriptor()) as uvf:
 
                     uv_export(KA, uvf)
+            # Perform export of katdal selection visa ContinuumPipline
             elif export_type == "continuum_export":
-                from katsdptelstate import TelescopeState
-                telstate = TelescopeState()
-                # Perform export of katdal selection
-                pipeline = ContinuumPipeline(KA.katdal, telstate,
+                pipeline = ContinuumPipeline(KA.katdal, TelescopeState(),
                                             katdal_select=select,
                                             __merge_scans=True)
                 pipeline._export_and_merge_scans()
