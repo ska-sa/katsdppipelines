@@ -113,6 +113,107 @@ The ``continuum_pipeline.py`` script runs the Continuum Pipeline.
     $ continuum_pipeline.py --help
     $ continuum_pipeline.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
+Any resulting images will be stored in AIPS disks described in
+`AIPS Disk Setup`_.
+
+Inspecting , Viewing and Exporting data in ObitTalk
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Obit has a number of python utilities for inspecting, viewing and exporting
+AIPS data.
+
+Start ``ObitView`` in an X11 terminal to start the Obit Image viewer.
+
+.. code-block::
+
+    $ ObitView
+
+Then, in another terminal start ``ObitTalk``, which interacts with
+AIPS disk data.
+
+.. code-block::
+
+    $ ObitTalk
+
+``ObitTalk`` starts a python terminal that can inspect AIPS disk data
+and interact with ``ObitView``.
+
+AIPS disk data can briefly be subdivided into UV and Image data.
+This data can be viewed with the ``AUcat`` and ``AMcat``
+commands.
+
+For example, the following code,
+
+- lists all the AIPS images on disk 1
+- Creates a python object associated with the Mimosa image
+- Writes the image as ``IMAGE.FITS`` on FITS disk 1
+
+.. code-block:: python
+
+    >>> AMcat(1)
+    AIPS Directory listing for disk 1
+      2 Merope      .IClean.    1 MA 08-Feb-2018 11:55:52
+      5 Kaus Austral.IClean.    1 MA 08-Feb-2018 11:55:52
+      7 Mimosa      .IClean.    1 MA 08-Feb-2018 11:55:52
+      9 Rukbat      .IClean.    1 MA 08-Feb-2018 11:56:19
+     11 Sirrah      .IClean.    1 MA 08-Feb-2018 11:55:52
+
+    >>> err = OErr.OErr()
+    >>> imtab(x, "IMAGE.FITS", 1, err)
+    <C Image instance> FITS Image DATA>
+
+Then, it is also possible to display the image in ``ObitView``
+through the ``tvlod`` command.
+
+.. code-block:: python
+
+    >>> tvlod(x)
+
+AIPS UV data can be inspected via the ``imhead`` command:
+
+.. code-block:: python
+
+    >>> AUcat(1)
+    AIPS Directory listing for disk 1
+      1 Merope      .MFImag.    1 UV 08-Feb-2018 11:55:52
+      3 mock        .merge .    1 UV 08-Feb-2018 11:55:53
+      4 Kaus Austral.MFImag.    1 UV 08-Feb-2018 11:55:52
+      6 Mimosa      .MFImag.    1 UV 08-Feb-2018 11:55:52
+      8 Rukbat      .MFImag.    1 UV 08-Feb-2018 11:55:52
+     10 Sirrah      .MFImag.    1 UV 08-Feb-2018 11:55:52
+     13 mock        .merge .    2 UV 08-Feb-2018 11:55:53
+
+
+    >>> imhead(getname(3))
+    AIPS UV mock         merge  1 1
+    AIPS UV Data Name: mock         Class: merge  seq:        1 disk:    1
+    Object: MULTI
+    Observed: 2018-02-08 Telescope:  MeerKAT  Created: 2018-02-08
+    Observer: ghost      Instrument: MeerKAT
+     # visibilities       1430  Sort order = TB
+    Rand axes: UU-L-SIN VV-L-SIN WW-L-SIN BASELINE TIME1
+               SOURCE   INTTIM
+    --------------------------------------------------------------
+    Type    Pixels   Coord value     at Pixel     Coord incr   Rotat
+    COMPLEX      3               1       1.00              1    0.00
+    STOKES       2      XPol             1.00             -1    0.00
+    FREQ         2      1.0432e+09       1.00       4.28e+08    0.00
+    IF           1               1       1.00              1    0.00
+    RA           1   0  0  0.00000       1.00              0    0.00
+    DEC          1 -00  0  0.0000        1.00              0    0.00
+    --------------------------------------------------------------
+    Coordinate equinox 2000.0  Coordinate epoch 2000.00
+    Observed RA    0  0  0.00000 Observed Dec -00  0  0.0000
+    Rest freq            0 Vel type: Observer,  wrt  Optical
+    Alt ref value            0  wrt pixel     0.88
+    Maximum version number of AIPS FQ tables is 1
+    Maximum version number of AIPS SU tables is 1
+    Maximum version number of AIPS PS tables is 1
+    Maximum version number of AIPS AN tables is 1
+    Maximum version number of AIPS CL tables is 1
+    Maximum version number of AIPS NX tables is 1
+
+
 
 Export katdal observation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -199,8 +300,8 @@ and the run MFImage using the configuration file.
     /obitconf $ MFImage -input mfimage_nosc.in &
     /obitconf $ tail -f IMAGE.log
 
-Export CLEAN image with FITS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Export AIPS CLEAN image to FITS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Run AIPS and look for the CLEAN image with the ``MCAT`` command.
 Then, run the ``FITTP`` task to export the CLEAN image from the
