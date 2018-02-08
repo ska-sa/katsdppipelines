@@ -72,8 +72,7 @@ class TestUVExport(unittest.TestCase):
         target_names = random.sample(stars.keys(), 5)
 
         # Pick 5 random stars as targets
-        targets = [katpoint.Target("%s, star" % t) for t in
-                                                target_names]
+        targets = [katpoint.Target("%s, star" % t) for t in target_names]
 
         # Set up varying scans
         scans = [('slew', 1, targets[0]), ('track', 3, targets[0]),
