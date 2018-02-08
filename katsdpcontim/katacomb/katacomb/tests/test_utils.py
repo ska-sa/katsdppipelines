@@ -3,6 +3,9 @@ import unittest
 from katacomb.util import parse_python_assigns
 
 class TestUtils(unittest.TestCase):
+    """
+    Tests functionality in :mod:`katacomb.util`.
+    """
 
     def test_parse_python_assigns(self):
         """ Test basic assignments """

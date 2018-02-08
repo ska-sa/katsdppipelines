@@ -9,6 +9,10 @@ def file_cleaner(paths):
     """
     Delete a list of AIPS files at both the context start and stop
     """
+
+    if not isinstance(paths, (tuple, list)):
+        paths = [paths]
+
     try:
         for path in paths:
             with uv_factory(aips_path=path, mode="w") as f:
@@ -21,6 +25,9 @@ def file_cleaner(paths):
                 f.Zap()
 
 class TestAipsPath(unittest.TestCase):
+    """
+    Test AIPS path functionalityy
+    """
 
     def test_next_seq_nr(self):
         """ Test finding the next highest disk sequence number of an AIPS Path """
