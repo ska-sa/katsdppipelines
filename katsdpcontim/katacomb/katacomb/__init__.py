@@ -32,3 +32,5 @@ from uv_export import (uv_export,
 
 from aips_export import (export_calibration_solutions,
                         export_clean_components)
+
+from continuum_pipeline import ContinuumPipeline

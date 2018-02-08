@@ -83,6 +83,8 @@ class ContinuumPipeline(object):
         self.mfimage_params = kwargs.pop("mfimage_params", {})
         self.clobber = kwargs.pop("clobber", set(['scans', 'avgscans']))
 
+        self.__merge_scans = kwargs.get("__merge_scans", False)
+
     def execute(self):
         """ Execute the Continuum Pipeline """
         with obit_context():
@@ -375,9 +377,6 @@ class ContinuumPipeline(object):
                 self.ka.select(scans=si)
                 uv_export(self.ka, uvf)
 
-            # Perform baseline averaging
-            blavg_path = self._blavg_scan(scan_path)
-
             # Retrieve the single scan index.
             # The time centroids and interval should be correct
             # but the visibility indices need to be repurposed
@@ -389,8 +388,19 @@ class ContinuumPipeline(object):
             scan_desc = scan_uvf.Desc.Dict
             scan_nvis = scan_desc['nvis']
 
-            blavg_uvf = uv_factory(aips_path=blavg_path, mode='r',
-                                              nvispio=self.nvispio)
+            # If we should be merging scans for testing purposes
+            # just use the existing scan path and file
+            if self.__merge_scans:
+                blavg_path = scan_path
+                blavg_uvf = scan_uvf
+            # Otherwise performing baseline averaging, deriving
+            # a new scan path and file
+            else:
+                # Perform baseline averaging
+                blavg_path = self._blavg_scan(scan_path)
+                blavg_uvf = uv_factory(aips_path=blavg_path,
+                                        mode='r',
+                                        nvispio=self.nvispio)
 
             # Create the merge UV file, if necessary
             merge_uvf = self._maybe_create_merge_uvf(merge_uvf, blavg_uvf,
@@ -419,18 +429,24 @@ class ContinuumPipeline(object):
                                                     merge_uvf, blavg_uvf,
                                                     nx_row)
 
-            # Remove scan and baseline averaged files once merged
+            # Remove scan once merged
             if 'scans' in self.clobber:
                 log.info("Zapping '%s'", scan_uvf.aips_path)
                 scan_uvf.Zap()
             else:
                 scan_uvf.Close()
 
-            if 'avgscans' in self.clobber:
-                log.info("Zapping '%s'", blavg_uvf.aips_path)
-                blavg_uvf.Zap()
-            else:
-                blavg_uvf.Close()
+            # If merging scans for testing purposes, our
+            # baseline averaged file will be the same as the
+            # scan file, which was handled above, so don't
+            # delete again. Otherwise default to
+            # normal clobber handling.
+            if not self.__merge_scans:
+                if 'avgscans' in self.clobber:
+                    log.info("Zapping '%s'", blavg_uvf.aips_path)
+                    blavg_uvf.Zap()
+                else:
+                    blavg_uvf.Close()
 
         # Write the index table
         merge_uvf.tables["AIPS NX"].write()

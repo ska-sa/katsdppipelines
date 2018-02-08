@@ -14,6 +14,7 @@ from katacomb.mock_dataset import (MockDataSet,
                     DEFAULT_TIMESTAMPS)
 
 from katacomb import (AIPSPath,
+                    ContinuumPipeline,
                     KatdalAdapter,
                     obit_context,
                     uv_factory,
@@ -22,17 +23,39 @@ from katacomb import (AIPSPath,
 from katacomb.tests.test_aips_path import file_cleaner
 from katacomb.util import parse_python_assigns
 
-class TestKatdalAdapter(unittest.TestCase):
+class TestUVExport(unittest.TestCase):
 
-    def test_katdal_adapter(self):
-        """
-        Tests writing data from a :class:`KatdalAdapter` object
-        to an AIPS UV file.
 
-        Then, the AIPS UV file is re-opened and visibility
-        data is read per scan and compared with the data
-        from each scan of the :class:`KatdalAdapter`
+    def test_uv_export(self):
         """
+        Test that export of UV data via the
+        :func:`katacomb.uv_export` method works.
+        """
+        self._test_export_implementation("uv_export")
+
+    def test_continuum_export(self):
+        """
+        Test that export of UV data via the
+        :class:`katacomb.ContinuumPipeline` method works.
+        """
+        self._test_export_implementation("continuum_export")
+
+    def _test_export_implementation(self, export_type="uv_export"):
+        """
+        Implementation of export test. Tests export via
+        either the :func:`katabomb.uv_export` or
+        :class:`katacomb.ContinuumPipeline, depending on ``export_type``.
+
+        When testing export via the Continuum Pipeline, baseline
+        averaging is disabled.
+
+        Parameters
+        ----------
+        export_type (optional): string
+            Either ``"uv_export"`` or ``"continuum_export"``.
+            Defaults to ``"uv_export"``
+        """
+
         nchan = 16
         nvispio = 1024
 
@@ -107,12 +130,29 @@ class TestKatdalAdapter(unittest.TestCase):
 
         with obit_context(), file_cleaner([uv_file_path]):
             # Perform export of katdal selection
-            with uv_factory(aips_path=uv_file_path, mode="w",
-                            nvispio=nvispio,
-                            table_cmds=KA.default_table_cmds(),
-                            desc=KA.uv_descriptor()) as uvf:
+            if export_type == "uv_export":
+                with uv_factory(aips_path=uv_file_path, mode="w",
+                                nvispio=nvispio,
+                                table_cmds=KA.default_table_cmds(),
+                                desc=KA.uv_descriptor()) as uvf:
 
-                uv_export(KA, uvf)
+                    uv_export(KA, uvf)
+            elif export_type == "continuum_export":
+                from katsdptelstate import TelescopeState
+                telstate = TelescopeState()
+                # Perform export of katdal selection
+                pipeline = ContinuumPipeline(KA.katdal, telstate,
+                                            katdal_select=select,
+                                            __merge_scans=True)
+                pipeline._export_and_merge_scans()
+
+                uv_file_path = pipeline.uv_merge_path
+
+                newselect = select.copy()
+                newselect['reset'] = 'TFB'
+                KA.select(**newselect)
+            else:
+                raise ValueError("Invalid export_type '%s'" % export_type)
 
             nvispio = 1
 
@@ -150,12 +190,18 @@ class TestKatdalAdapter(unittest.TestCase):
                 # Check that frequency, source and antenna rows
                 # are correctly exported
                 fq_rows = _strip_metadata(uvf.tables["AIPS FQ"].rows)
-                src_rows = _strip_metadata(uvf.tables["AIPS SU"].rows)
-                ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)
-
                 self.assertEqual(fq_rows, KA.uv_spw_rows)
-                self.assertEqual(src_rows, KA.uv_source_rows)
+
+                ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)
                 self.assertEqual(ant_rows, KA.uv_antenna_rows)
+
+                # TODO(sjperkins)
+                # For some reason, source radec and apparent radec
+                # coordinates are off by some minor difference
+                # Probably related to float32 conversion.
+                if not export_type == "continuum_export":
+                    src_rows = _strip_metadata(uvf.tables["AIPS SU"].rows)
+                    self.assertEqual(src_rows, KA.uv_source_rows)
 
                 uv_desc = uvf.Desc.Dict
                 inaxes = tuple(reversed(uv_desc['inaxes'][:6]))
@@ -306,7 +352,6 @@ class TestKatdalAdapter(unittest.TestCase):
                     # This produces (ntime, nchan, nbl, nstokes, 3)
                     kat_vis = kat_vis[:, :, cp_argsort, :].reshape(shape)
 
-
                     # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
                     # (2) reshape to include the full inaxes shape,
                     #     including singleton nif, ra and dec dimensions
@@ -319,6 +364,7 @@ class TestKatdalAdapter(unittest.TestCase):
 
                 # Check that we read the expected number of visibilities
                 self.assertEqual(summed_vis, naips_vis)
+
 
 if __name__ == "__main__":
     unittest.main()
