@@ -103,29 +103,27 @@ Then, on your local machine, you should direct your VNC client to ``localhost:59
 your VNC traffic through the tunnel to the server inside the container.
 
 
+Run Continuum Imaging Pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``continuum_pipeline.py`` script runs the Continuum Pipeline.
+
+.. code-block::
+
+    $ continuum_pipeline.py --help
+    $ continuum_pipeline.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+
+
 Export katdal observation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
-For example:
 
 .. code-block::
 
-    # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+    $ uv_export.py --help
+    $ uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
-The AIPS filename is automatically derived from the input filename.
-Five command line options can be specified to further customise the AIPS filenames.
-
---disk  AIPS disk number
---name  Name of the file. ``'1500148809'`` for example
---class  Short string indicating file class. Can be thought of as arbitrary tags
-         assigned by the user.
-         ``'raw'``  to indicate raw visibilities for example.
---seq  AIPS file sequence number.
-       A number used to specify bits of data in a sequence. ``'1'`` for example.
---select  katdal select statement. Should only contain python
-          assignment statements to python literals, separated
-          by semi-colons. e.g. "scans='track';spw=0".
 
 Run AIPS
 ~~~~~~~~
