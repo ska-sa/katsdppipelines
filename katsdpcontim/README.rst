@@ -20,6 +20,9 @@ Requirements
 
 You'll need some docker infrastructure:
 
+- The ``docker-base`` docker image available in the
+  `SDP docker registry <https://github.com/ska-sa/katsdpinfrastructure/tree/master/registry#client-setup>`_. ``docker-base-gpu`` may also be useful to
+  build Obit with GPU acceleration.
 - Docker Ubuntu `installation instructions <https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/>`_.
 - docker-compose. ``pip install docker-compose``.
 
