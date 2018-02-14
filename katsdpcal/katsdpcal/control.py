@@ -264,7 +264,6 @@ class Accumulator(object):
                  l0_name, l0_endpoints, l0_interface_address, telstate, parameters):
         self.buffers = buffers
         self.telstate = telstate
-        self.l0_endpoints = l0_endpoints
         self.l0_interface_address = l0_interface_address
         self.accum_pipeline_queue = accum_pipeline_queue
         self.master_queue = master_queue
@@ -312,6 +311,17 @@ class Accumulator(object):
         self._thread_pool = spead2.ThreadPool()
         self._memory_pool = spead2.MemoryPool(heap_size, heap_size + 4096,
                                               4 * self.n_substreams, 4 * self.n_substreams)
+
+        if stream_n_chans % len(l0_endpoints):
+            raise ValueError('Number of channels ({}) not a multiple of number of endpoints ({})'
+                             .format(stream_n_chans, len(l0_endpoints)))
+        self.l0_endpoints = []
+        for i, endpoint in enumerate(l0_endpoints):
+            start = i * stream_n_chans // len(l0_endpoints)
+            stop = (i + 1) * stream_n_chans // len(l0_endpoints)
+            if (start < parameters['channel_slice'].stop
+                    and stop > parameters['channel_slice'].start):
+                self.l0_endpoints.append(endpoint)
 
         # Sensors for the katcp server to report
         sensors = [
@@ -659,22 +669,23 @@ class Accumulator(object):
         """
         # **************** ACCUMULATOR BREAK CONDITIONS ****************
         # ********** THIS BREAKING NEEDS TO BE THOUGHT THROUGH CAREFULLY **********
-        # CASE 1 -- break if activity has changed (i.e. the activity time has changed)
-        #   unless previous scan was a target, in which case accumulate
-        #   subsequent gain scan too
         ignore_states = ['slew', 'stop', 'unknown']
-        if (new.activity_time != old.activity_time) \
-                and not np.any([ignore in old.activity for ignore in ignore_states]) \
-                and ('unknown' not in new.target_tags) \
-                and ('target' not in old.target_tags):
-            logger.info('Accumulation break - transition %s -> %s', old.activity, new.activity)
-            return True
+        if new is not None and old is not None:
+            # CASE 1 -- break if activity has changed (i.e. the activity time has changed)
+            #   unless previous scan was a target, in which case accumulate
+            #   subsequent gain scan too
+            if (new.activity_time != old.activity_time) \
+                    and not np.any([ignore in old.activity for ignore in ignore_states]) \
+                    and ('unknown' not in new.target_tags) \
+                    and ('target' not in old.target_tags):
+                logger.info('Accumulation break - transition %s -> %s', old.activity, new.activity)
+                return True
 
-        # CASE 2 -- beamformer special case
-        if (new.activity_time != old.activity_time) \
-                and ('single_accumulation' in old.target_tags):
-            logger.info('Accumulation break - single scan accumulation')
-            return True
+            # CASE 2 -- beamformer special case
+            if (new.activity_time != old.activity_time) \
+                    and ('single_accumulation' in old.target_tags):
+                logger.info('Accumulation break - single scan accumulation')
+                return True
 
         # CASE 3 -- end accumulation if maximum array size has been accumulated
         if len(slots) >= self.max_length:
@@ -719,7 +730,7 @@ class Accumulator(object):
         n_stop = 0                   # Number of stop heaps received
         old_state = None
         unsync_start_time = None     # Batch start time, raw
-        last_idx = None              # Previous value of data_idx
+        last_idx = -1                # Previous value of data_idx
         # list of slots that have been filled
         slots = []
         # Look up dump index by slot
@@ -737,13 +748,14 @@ class Accumulator(object):
                 n_stop += 1
                 if n_stop == len(self.l0_endpoints):
                     rx.stop()
+                    stopped = True
                     break
                 else:
                     continue
 
             data_ts = ig['timestamp'].value + self.sync_time
-            data_idx = ig['dump_index'].value
-            if last_idx is not None and data_idx < last_idx:
+            data_idx = int(ig['dump_index'].value)  # Convert from np.uint64, which behaves oddly
+            if data_idx < last_idx:
                 try:
                     slot = slot_for_index[data_idx]
                     logger.warning('Dump index went backwards (%d < %d), but managed to accept it',
@@ -752,62 +764,81 @@ class Accumulator(object):
                     logger.warning('Dump index went backwards (%d < %d), skipping heap',
                                    data_idx, last_idx)
                     continue
-            elif data_idx != last_idx:
-                if self._obs_start is None:
-                    self._obs_start = data_ts - 0.5 * self.int_time
-                self._obs_end = data_ts + 0.5 * self.int_time
-
-                # get activity and target tag from telescope state
-                new_state = self._get_activity_state(refant_name, data_ts)
-                if new_state is None:
-                    continue     # _get_activity logs the reason
-
-                # if this is the first heap of the batch, set up some values
-                if old_state is None:
-                    unsync_start_time = ig['timestamp'].value
-                    logger.info('accumulating data from targets:')
-
-                if old_state is None or new_state.target_name != old_state.target_name:
-                    # update source list if necessary
-                    self._update_source_list(new_state.target_name, data_ts)
-
-                # flush a batch if necessary
-                duration = ig['timestamp'].value - unsync_start_time
-                if old_state is not None and self._is_break(old_state, new_state, slots, duration):
-                    self._flush_slots(slots)
-                    slots = []
-                    slot_for_index.clear()
-                    old_state = None
-                    unsync_start_time = ig['timestamp'].value
-
-                # print name of target and activity type on changes (and start of batch)
-                if old_state != new_state:
-                    logger.info(' - %s (%s)', new_state.target_name, new_state.activity)
-
-                # Obtain a slot to copy to
-                slot = yield From(self._next_slot())
-                if slot is None:
-                    logger.info('Accumulation interrupted while waiting for a slot')
-                    break
-                slots.append(slot)
-                slot_for_index[data_idx] = slot
-
-                old_state = new_state
-                last_idx = data_idx
             else:
+                # Create slots for all entries we haven't seen yet
+                stopped = False
+                for idx in range(last_idx + 1, data_idx + 1):
+                    unsync_ts = ig['timestamp'].value - self.int_time * (data_idx - idx)
+                    data_ts = unsync_ts + self.sync_time
+                    if self._obs_start is None:
+                        self._obs_start = data_ts - 0.5 * self.int_time
+                    self._obs_end = data_ts + 0.5 * self.int_time
+
+                    # get activity and target tag from telescope state
+                    new_state = self._get_activity_state(refant_name, data_ts)
+                    if new_state is not None:
+                        # if this is the first heap of the batch, set up some values
+                        if old_state is None:
+                            unsync_start_time = unsync_ts
+                            logger.info('accumulating data from targets:')
+
+                        if old_state is None or new_state.target_name != old_state.target_name:
+                            # update source list if necessary
+                            self._update_source_list(new_state.target_name, data_ts)
+
+                    # flush a batch if necessary
+                    duration = unsync_ts - unsync_start_time
+                    if self._is_break(old_state, new_state, slots, duration):
+                        self._flush_slots(slots)
+                        slots = []
+                        slot_for_index.clear()
+                        old_state = None
+                        unsync_start_time = unsync_ts
+
+                    # print name of target and activity type on changes (and start of batch)
+                    if new_state is not None and old_state != new_state:
+                        logger.info(' - %s (%s)', new_state.target_name, new_state.activity)
+
+                    # Obtain a slot to copy to
+                    slot = yield From(self._next_slot())
+                    if slot is None:
+                        logger.info('Accumulation interrupted while waiting for a slot')
+                        # Actually want to break out of the while True loop,
+                        # but Python doesn't have labelled breaks, so set a
+                        # flag.
+                        stopped = True
+                        break
+                    slots.append(slot)
+                    slot_for_index[idx] = slot
+                    old_state = new_state
+                    last_idx = idx
+                if stopped:
+                    break
                 slot = slots[-1]
 
             channel0 = ig['frequency'].value
-            channel_slice = np.s_[channel0 : channel0 + ig['flags'].shape[0]]
-            # reshape data and put into relevent arrays
-            self._update_buffer(self.buffers['vis'][slot, channel_slice],
-                                ig['correlator_data'].value, self.ordering)
-            self._update_buffer(self.buffers['flags'][slot, channel_slice],
-                                ig['flags'].value, self.ordering)
-            weights_channel = ig['weights_channel'].value[:, np.newaxis]
-            weights = ig['weights'].value
-            self._update_buffer(self.buffers['weights'][slot, channel_slice],
-                                weights * weights_channel, self.ordering)
+            # Range of channels provided by the heap (from full L0 range)
+            src_range = slice(channel0, channel0 + ig['flags'].shape[0])
+            # Range of channels in the buffer (from full L0 range)
+            trg_range = self.parameters['channel_slice']
+            # Intersection of the two
+            common_range = slice(max(src_range.start, trg_range.start),
+                                 min(src_range.stop, trg_range.stop))
+            if common_range.start < common_range.stop:
+                # Compute slice to apply to src/trg to get the common part
+                src_subset = slice(common_range.start - src_range.start,
+                                   common_range.stop - src_range.start)
+                trg_subset = slice(common_range.start - trg_range.start,
+                                   common_range.stop - trg_range.start)
+                # reshape data and put into relevant arrays
+                self._update_buffer(self.buffers['vis'][slot, trg_subset],
+                                    ig['correlator_data'].value[src_subset], self.ordering)
+                self._update_buffer(self.buffers['flags'][slot, trg_subset],
+                                    ig['flags'].value[src_subset], self.ordering)
+                weights_channel = ig['weights_channel'].value[src_subset, np.newaxis]
+                weights = ig['weights'].value[src_subset]
+                self._update_buffer(self.buffers['weights'][slot, trg_subset],
+                                    weights * weights_channel, self.ordering)
             # These will get overwritten on each heap of the dump, but that
             # should be harmless.
             self.buffers['times'][slot] = data_ts
