@@ -116,6 +116,9 @@ The ``continuum_pipeline.py`` script runs the Continuum Pipeline.
 Any resulting images will be stored in AIPS disks described in
 `AIPS Disk Setup`_.
 
+See `Bill Cotton's Continuum Imaging Pipeline Parameters`_ for details
+on suitable parameters for running the pipeline.
+
 Inspecting , Viewing and Exporting data in ObitTalk
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -367,6 +370,36 @@ This is achieved by running the ``cfg_aips_disks.py`` script which:
 - Creates soft links in the Obit data directory into the FITS area.
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Bill Cotton's Continuum Imaging Pipeline Parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here are the notes on the Phoenix_ field self calibration/continuum subtraction
+
+Did various imagings using MFImage
+
+- Seq 1, 15 sec SI, ch avg to 512 chan, 0.734 of sc solutions OK
+  FOV = 1.2, peak ~ 39 mJy, sum ~ 0.638 Jy
+- Seq 2, 60 sec SI, FOV=1.2 (512 ch/IF), 0.805 of sc solutions OK
+- Seq 3, 120 sec SI FOV=1.2 (512 ch/IF)
+- Seq 4, 120 sec SI, BLFOV = 1.0 (456 ch/IF) 5080 Real
+- Seq 5, 120 sec SI, BLFOV = 0.6 (256 ch/IF) 3001 Real
+
+Imager IF 6, channels 900-923 (1.4145 - 1.4151 GHz)
+
+===  ======== ======= =====  ===== ====  ====== ======
+seq  Cont Rms Size GB SI(s)  ch/IF ch6*   ch12*  ch18*
+===  ======== ======= =====  ===== ====  ====== ======
+1    56.6 u    2.97    15    512   2.91  2.61   2.84
+2    58.2      2.46    60    512   2.91  2.61   2.84
+3    58.5      2.38   120    512   2.91  2.61   2.83
+4    58.9      1.91   120    456   2.91  2.61   2.83
+5    58.7      0.89   120    256   2.91  2.66   2.83
+===  ======== ======= =====  ===== ====  ====== ======
+
+* 26 kHz channel RMS mJy, number in the 24 imaged.
+
+
 ~~~~~~~
 Testing
 ~~~~~~~
@@ -376,3 +409,5 @@ A test suite exists, but must be executed inside the container:
 .. code-block::
 
   $ nosetests /home/kat/src/katacomb
+
+.. _Phoenix: /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/09/14/1505426738.h5 
