@@ -231,7 +231,7 @@ def aips_catalogue(katdata):
             # NOTE(bcotton)
             # I/Q/U/VFLUX are the flux densities, per spectral window,
             # either determined from a standard model or derived in the
-            # calibration process from a standard calibrator. 
+            # calibration process from a standard calibrator.
             # Since this data will likely never be used to derive the
             # external calibration, they are unlikely to ever be used.
             'IFLUX': [0.0],
@@ -526,6 +526,11 @@ class KatdalAdapter(object):
     def description(self):
         """ Proxies :attr:`katdal.DataSet.description` """
         return self._katds.description
+
+    @property
+    def version(self):
+        """ Proxies :attr:`katdal.DataSet.version` """
+        return self._katds.version
 
     @property
     def katdal(self):

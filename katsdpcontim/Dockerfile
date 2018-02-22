@@ -91,9 +91,13 @@ USER kat
 RUN touch $KATHOME/.bashrc && \
     cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
-WORKDIR $KATHOME
+# Obit r580
+ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/e01b0edfb1cfffc420ee5ab2a9dd58f7ac0e937a
 
-RUN svn checkout -r 578 https://github.com/bill-cotton/Obit/trunk Obit
+# Download Obit tarball and untar
+RUN mkdir -p $OBIT_BASE_PATH && \
+    cd $OBIT_BASE_PATH && \
+    curl -L $OBIT_TARBALL | tar xz --strip=1
 
 WORKDIR $OBIT_BASE_PATH
 
