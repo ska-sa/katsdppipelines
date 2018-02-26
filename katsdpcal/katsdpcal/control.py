@@ -358,7 +358,11 @@ class Accumulator(object):
                 'number of batches completed by the accumulator',
                 default=0, initial_status=katcp.Sensor.NOMINAL),
             katcp.Sensor.integer(
-                'accumulator-input-heaps',
+                'input-bytes-total',
+                'number of bytes of L0 data received',
+                default=0, initial_status=katcp.Sensor.NOMINAL),
+            katcp.Sensor.integer(
+                'input-heaps-total',
                 'number of L0 heaps received',
                 default=0, initial_status=katcp.Sensor.NOMINAL),
             katcp.Sensor.integer(
@@ -492,7 +496,8 @@ class Accumulator(object):
         self._run_future = trollius.ensure_future(self._run_observation(capture_block_id))
         self._running = True
         self.sensors['accumulator-capture-active'].set_value(True)
-        self.sensors['accumulator-input-heaps'].set_value(0)
+        self.sensors['input-bytes-total'].set_value(0)
+        self.sensors['input-heaps-total'].set_value(0)
 
     @trollius.coroutine
     def capture_done(self):
@@ -793,11 +798,11 @@ class Accumulator(object):
 
                     # get activity and target tag from telescope state
                     new_state = self._get_activity_state(refant_name, data_ts)
-                    if new_state is not None:
-                        # if this is the first heap of the batch, set up some values
-                        if old_state is None:
-                            start_idx = idx
-                            logger.info('accumulating data from targets:')
+
+                    # if this is the first heap of the batch, set up some values
+                    if start_idx is None:
+                        start_idx = idx
+                        logger.info('accumulating data from targets:')
 
                     # flush a batch if necessary
                     duration = (idx - start_idx) * self.int_time
@@ -856,7 +861,12 @@ class Accumulator(object):
             # should be harmless.
             self.buffers['times'][slot] = data_ts
             self.buffers['dump_indices'][slot] = data_idx
-            _inc_sensor(self.sensors['accumulator-input-heaps'], 1)
+            heap_nbytes = 0
+            for field in ['correlator_data', 'flags', 'weights', 'weights_channel']:
+                heap_nbytes += ig[field].value.nbytes
+            now = time.time()
+            _inc_sensor(self.sensors['input-bytes-total'], heap_nbytes, timestamp=now)
+            _inc_sensor(self.sensors['input-heaps-total'], 1, timestamp=now)
 
         # Flush out the final batch
         self._flush_slots(capture_block_id, slots)
@@ -904,6 +914,10 @@ class Pipeline(Task):
             katcp.Sensor.integer(
                 'pipeline-last-slots',
                 'number of slots filled in the most recent buffer'),
+            katcp.Sensor.boolean(
+                'pipeline-active',
+                'whether pipeline is currently computing',
+                default=False, initial_status=katcp.Sensor.NOMINAL),
             katcp.Sensor.integer(
                 'pipeline-exceptions',
                 'number of times the pipeline threw an exception',
@@ -937,6 +951,7 @@ class Pipeline(Task):
                     logger.info('buffer with %d slots acquired by %s',
                                 len(event.slots), self.name)
                     start_time = time.time()
+                    self.sensors['pipeline-active'].set_value(True, timestamp=start_time)
                     # set up dask arrays around the chosen slots
                     data = {'times': self.buffers['times'][event.slots],
                             'dump_indices': self.buffers['dump_indices'][event.slots]}
@@ -958,6 +973,7 @@ class Pipeline(Task):
                     self.sensors['pipeline-last-time'].set_value(elapsed, timestamp=end_time)
                     self.sensors['pipeline-last-slots'].set_value(
                         len(event.slots), timestamp=end_time)
+                    self.sensors['pipeline-active'].set_value(False, timestamp=end_time)
                     if error:
                         _inc_sensor(self.sensors['pipeline-exceptions'], 1,
                                     status=katcp.Sensor.ERROR,
@@ -1005,6 +1021,7 @@ class Sender(Task):
         self.int_time = self.telstate_l0['int_time']
         self.n_chans = self.telstate_l0['n_chans']
         self.l0_bls = np.asarray(self.telstate_l0['bls_ordering'])
+        self.channel_slice = parameters['channel_slice']
         n_bls = len(self.l0_bls)
         self.rate = self.n_chans * n_bls / float(self.int_time) * flags_rate_ratio
 
@@ -1027,6 +1044,18 @@ class Sender(Task):
             self.telstate_flags.add(key, self.telstate_l0[key])
         self.telstate_flags.add('n_chans_per_substream', self.n_chans)
 
+    def get_sensors(self):
+        return [
+            katcp.Sensor.integer(
+                'output-bytes-total',
+                'bytes written to the flags L1 stream',
+                default=0, initial_status=katcp.Sensor.NOMINAL),
+            katcp.Sensor.integer(
+                'output-heaps-total',
+                'heaps written to the flags L1 stream',
+                default=0, initial_status=katcp.Sensor.NOMINAL)
+        ]
+
     def run(self):
         if self.flags_endpoint is not None:
             config = spead2.send.StreamConfig(max_packet_size=8972, rate=self.rate)
@@ -1047,8 +1076,9 @@ class Sender(Task):
                     shape=(), dtype=None, format=[('u', 64)])
         ig.add_item(id=0x4103, name='frequency',
                     description="Channel index of first channel in the heap",
-                    shape=(), dtype=np.uint32, value=0)
-        # TODO: add capture block ID
+                    shape=(), dtype=np.uint32, value=self.channel_slice.start)
+        ig.add_item(id=None, name='capture_block_id', description='SDP capture block ID',
+                    shape=(None,), dtype=None, format=[('c', 8)])
 
         started = False
         out_flags = np.zeros(ig['flags'].shape, np.uint8)
@@ -1068,6 +1098,7 @@ class Sender(Task):
                         first_timestamp = telstate_cb_l0['first_timestamp']
                         telstate_cb_flags.add('first_timestamp', first_timestamp, immutable=True)
                         tx.send_heap(ig.get_start())
+                        ig['capture_block_id'].value = cbid
                         started = True
                     for slot in event.slots:
                         flags = self.buffers['flags'][slot]
@@ -1080,6 +1111,11 @@ class Sender(Task):
                         ig['timestamp'].value = first_timestamp + idx * self.int_time
                         ig['dump_index'].value = idx
                         tx.send_heap(ig.get_heap(data='all', descriptors='all'))
+                        # 8 for timestamp, 8 for dump_index, 4 for channel
+                        heap_bytes = out_flags.nbytes + 20
+                        now = time.time()
+                        _inc_sensor(self.sensors['output-heaps-total'], 1, timestamp=now)
+                        _inc_sensor(self.sensors['output-bytes-total'], heap_bytes, timestamp=now)
                         self.master_queue.put(BufferReadyEvent(event.capture_block_id, [slot]))
                     logger.info('finished transmission of %d slots', len(event.slots))
             elif isinstance(event, ObservationEndEvent):
@@ -1118,6 +1154,9 @@ class ReportWriter(Task):
             katcp.Sensor.float(
                 'report-last-time', 'Elapsed time to generate most recent report',
                 unit='s'),
+            katcp.Sensor.boolean(
+                'report-active', 'Whether the report writer is active',
+                default=False, initial_status=katcp.Sensor.NOMINAL),
             katcp.Sensor.string(
                 'report-last-path', 'Directory containing the most recent report')
         ]
@@ -1158,6 +1197,7 @@ class ReportWriter(Task):
     def run(self):
         reports_sensor = self.sensors['reports-written']
         report_time_sensor = self.sensors['report-last-time']
+        report_active_sensor = self.sensors['report-active']
         report_path_sensor = self.sensors['report-last-path']
         # Set initial value of averaged corrected data
         av_corr = []
@@ -1173,20 +1213,22 @@ class ReportWriter(Task):
                 try:
                     logger.info('Starting report on %s', event.capture_block_id)
                     start_time = time.time()
+                    report_active_sensor.set_value(True, timestamp=start_time)
                     av_corr = _corr_total(av_corr)
                     obs_dir = self.write_report(
                         self.telstate_cal, event.capture_block_id,
                         event.start_time, event.end_time, av_corr)
                     end_time = time.time()
                     av_corr = []
-                    reports_sensor.set_value(reports_sensor.value() + 1, timestamp=end_time)
+                    _inc_sensor(reports_sensor, 1, timestamp=end_time)
                     report_time_sensor.set_value(end_time - start_time, timestamp=end_time)
                     report_path_sensor.set_value(obs_dir, timestamp=end_time)
+                    report_active_sensor.set_value(False, timestamp=end_time)
                 finally:
                     self.master_queue.put(event)
             else:
                 logger.error('unknown event type %r', event)
-        logger.info('Pipeline has finished, exiting')
+        logger.info('Report writer has finished, exiting')
 
 
 class CalDeviceServer(katcp.server.AsyncDeviceServer):
