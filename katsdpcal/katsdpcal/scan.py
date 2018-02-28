@@ -14,7 +14,7 @@ from katdal.h5datav3 import FLAG_NAMES
 import katpoint
 
 from . import calprocs, calprocs_dask, inplace
-from .calprocs import CalSolution
+from .solutions import CalSolution, CalSolutions
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def _rfi(vis, flags, flagger, out_bit):
     # flagger doesn't handle a separate pol axis, so the caller must use
     # a chunk size of 1
     assert flags.shape[2] == 1
-    # Mask out the output but from the input. This ensures that the process
+    # Mask out the output bit from the input. This ensures that the process
     # gives invariant values even if some chunks are updated in-place before
     # they are used to compute other chunks (which shouldn't happen, but the
     # safety check in the inplace module isn't smart enough to detect this).
@@ -123,22 +123,18 @@ class Scan(object):
         Time slice of the scan in the buffer arrays.
     dump_period : float
         Dump period of correlator data.
-    nant : int
-        Number of antennas in the array.
-    npol : int
-        Number of polarisation products in the data.
     bls_lookup : list of int, shape (2, number of baselines)
         List of antenna pairs for each baseline.
     target : string
         Name of target observed in the scan.
     chans : array of float
         Array of channel frequencies.
-    ants : array of string
-        Array of antenna description strings.
+    ants : array of :class:`katpoint.Antenna`
+        Array of antennas.
     refant : int
         Index of reference antenna in antenna description list.
-    array_position : string
-        Description string of array centre position.
+    array_position : :class:`katpoint.Antenna`
+        Array centre position.
     corr : string, optional
         String to select correlation product, 'xc' for cross-correlations.
     logger : logger
@@ -164,7 +160,7 @@ class Scan(object):
         Cross polarisation flag data.
     cross_weights : array of float32, shape (ntime, nchan, 2, nbl)
         Cross polarisation weight data.
-    timestamps : array of float, shape (ntime, nchan, npol, nbl)
+    timestamps : array of float, shape (ntime,)
         Times.
     target : katpoint Target
         Phase centre of the scan.
@@ -179,14 +175,12 @@ class Scan(object):
         the absence of frequencies).
     npol : int
         Number of polarisations in the data.
-    nant : int
-        Number of antennas in the data
-    antenna_descriptions : list of string
-        Description strings for each antenna
+    antennas : list of :class:`katpoint.Antenna`
+        The antennas
     refant : int
         Index of reference antenna in antenna description list
-    array_position : string
-        Description sctring for array position
+    array_position : :class:`katpoint.Antenna`
+        Array centre position
     model_raw_params : list
         List of model components
     model : scalar or array
@@ -195,8 +189,8 @@ class Scan(object):
         logger
     """
 
-    def __init__(self, data, time_slice, dump_period, nant, npol, bls_lookup, target,
-                 chans=None, ants=None, refant=0, array_position=None, corr='xc', logger=logger):
+    def __init__(self, data, time_slice, dump_period, bls_lookup, target,
+                 chans, ants, refant=0, array_position=None, corr='xc', logger=logger):
 
         # cross-correlation mask. Must be np array so it can be used for indexing
         # if scan has explicitly been set up as a cross-correlation scan, select XC data only
@@ -229,13 +223,9 @@ class Scan(object):
         self.dump_period = dump_period
         self.nchan = self.orig.auto.shape[1]
         # note - keep an eye on ordering of frequencies - increasing with index, or decreasing?
-        if chans is None:
-            self.channel_freqs = np.arange(self.nchan, dtype=np.float32)
-        else:
-            self.channel_freqs = np.array(chans, dtype=np.float32)
-        self.npol = npol
-        self.nant = nant
-        self.antenna_descriptions = ants
+        self.channel_freqs = np.array(chans, dtype=np.float32)
+        self.npol = all_data.vis.shape[3]
+        self.antennas = ants
         self.refant = refant
         self.array_position = array_position
 
@@ -281,11 +271,12 @@ class Scan(object):
         g0 : initial estimate of gains for solver, shape (time, pol, nant)
         bchan : start channel for fit, int, optional
         echan : end channel for fit, int, optional
-        pre_apply : calibration solutions to apply, list of CalSolutions, optional
+        pre_apply : calibration solutions to apply, list of :class:`~.CalSolutions`, optional
 
         Returns
         -------
-        Gain CalSolution with soltype 'G', shape (time, pol, nant)
+        :class:`~.CalSolutions`
+            Solutions with soltype 'G', shape (time, pol, nant)
         """
         modvis = self.pre_apply(pre_apply)
 
@@ -313,7 +304,7 @@ class Scan(object):
         # solve for gain
         g_soln = calprocs.g_fit(ave_vis.compute(), self.corrprod_lookup, g0, self.refant, **kwargs)
 
-        return CalSolution('G', g_soln, ave_times)
+        return CalSolutions('G', g_soln, ave_times)
 
     @logsolutiontime
     def kcross_sol(self, bchan=1, echan=0, chan_ave=1, pre_apply=[]):
@@ -326,11 +317,12 @@ class Scan(object):
         bchan : start channel for fit, int, optional
         echan : end channel for fit, int, optional
         chan_ave : channels to average together prior during fit, int, optional
-        pre_apply : calibration solutions to apply, list of CalSolutions, optional
+        pre_apply : calibration solutions to apply, list of :class:`~.CalSolutions`, optional
 
         Returns
         -------
-        Cross hand polarisation delay offset CalSolution with soltype 'KCROSS', shape (nant)
+        :class:`~.CalSolution`
+            Cross hand polarisation delay offset CalSolution with soltype 'KCROSS', shape (nant)
         """
         if self.npol < 4:
             self.logger.info('Cant solve for KCROSS without four polarisation products')
@@ -366,11 +358,12 @@ class Scan(object):
         bchan : start channel for fit, int, optional
         echan : end channel for fit, int, optional
         chan_sample : channel sampling to use in delay fit, optional
-        pre_apply : calibration solutions to apply, list of CalSolutions, optional
+        pre_apply : calibration solutions to apply, list of :class:`CalSolutions`, optional
 
         Returns
         -------
-        Delay CalSolution with soltype 'K', shape (2, nant)
+        :class:`~.CalSolution`
+            Delay solution with soltype 'K', shape (2, nant)
         """
 
         modvis = self.pre_apply(pre_apply)
@@ -410,11 +403,12 @@ class Scan(object):
         Parameters
         ----------
         bp0 : initial estimate of bandpass for solver, shape (chan, pol, nant)
-        pre_apply : calibration solutions to apply, list of CalSolutions, optional
+        pre_apply : calibration solutions to apply, list of :class:`CalSolutions`, optional
 
         Returns
         -------
-        Bandpass CalSolution with soltype 'B', shape (chan, pol, nant)
+        :class:`~.CalSolution `
+            Bandpass with soltype 'B', shape (chan, pol, nant)
         """
         modvis = self.pre_apply(pre_apply)
 
@@ -466,28 +460,28 @@ class Scan(object):
     def apply(self, soln, vis):
         # set up more complex interpolation methods later
         soln_values = da.asarray(soln.values)
-        if soln.soltype is 'G':
+        if soln.soltype == 'G':
             # add empty channel dimension if necessary
             full_sol = soln_values[:, np.newaxis, :, :] \
                 if soln_values.ndim < 4 else soln_values
             return self._apply(full_sol, vis)
-        elif soln.soltype is 'K':
+        elif soln.soltype == 'K':
             # want shape (ntime, nchan, npol, nant)
             channel_freqs = da.asarray(self.channel_freqs)
             g_from_k = da.exp(2j * np.pi * soln.values[:, np.newaxis, :, :]
                               * channel_freqs[np.newaxis, :, np.newaxis, np.newaxis])
             return self._apply(g_from_k, vis)
-        elif soln.soltype is 'B':
+        elif soln.soltype == 'B':
             return self._apply(soln_values, vis)
         else:
-            raise ValueError('Solution type is invalid.')
+            raise ValueError('Solution type {} is invalid.'.format(soln.soltype))
 
     def pre_apply(self, pre_apply_solns, data=None):
         """Apply a set of solutions to the visibilities.
 
         Parameters
         ----------
-        pre_apply_solns : list of :class:`~katsdpcal.calprocs.CalSolution`
+        pre_apply_solns : list of :class:`~katsdpcal.calprocs.CalSolutions`
             Solutions to apply
         data : :class:`ScanData`
             Data view to which to apply solutions. Defaults to
@@ -534,13 +528,19 @@ class Scan(object):
     # interpolation
 
     def interpolate(self, solns):
+        """Interpolate a solution to the timestamps of the scan.
+
+        Converts either a :class:`CalSolution` or :class:`CalSolutions` to a
+        :class:`CalSolutions`. A :class:`CalSolution` is simply expanded to a
+        :class:`CalSolutions` with the new timestamps (relying on
+        broadcasting), while a :class:`CalSolutions` undergoes linear
+        interpolation.
+        """
+
         # set up more complex interpolation methods later
-        soltype = solns.soltype
-        if soltype is 'G':
+        if isinstance(solns, CalSolutions):
             return self.linear_interpolate(solns)
-        if soltype is 'K':
-            return self.inf_interpolate(solns)
-        if soltype is 'B':
+        else:
             return self.inf_interpolate(solns)
 
     def linear_interpolate(self, solns):
@@ -549,7 +549,7 @@ class Scan(object):
 
         if len(timestamps) < 2:
             # case of only one solution value being interpolated
-            return self.inf_interpolate(solns)
+            return CalSolutions(solns.soltype, solns.values, self.timestamps)
         else:
             real_interp = scipy.interpolate.interp1d(
                 timestamps, values.real, kind='linear', axis=0, fill_value='extrapolate')
@@ -558,12 +558,13 @@ class Scan(object):
             # interp1d gives float64 answers even given float32 inputs
             interp_solns = real_interp(self.timestamps).astype(np.float32) \
                 + 1.0j * imag_interp(self.timestamps).astype(np.float32)
-            return CalSolution(solns.soltype, interp_solns, self.timestamps)
+            return CalSolutions(solns.soltype, interp_solns, self.timestamps)
 
-    def inf_interpolate(self, solns):
-        values = solns.values
+    def inf_interpolate(self, soln):
+        """Expand a single solution to span all timestamps of the scan"""
+        values = soln.values
         interp_solns = np.expand_dims(values, axis=0)
-        return CalSolution(solns.soltype, interp_solns, self.timestamps)
+        return CalSolutions(soln.soltype, interp_solns, self.timestamps)
 
     # ---------------------------------------------------------------------------------------------
     # model related functions
@@ -594,7 +595,7 @@ class Scan(object):
         first_source = katpoint.construct_radec_target(self.model_raw_params[0]['RA'].item(),
                                                        self.model_raw_params[0]['DEC'].item())
         position_offset = self.target.separation(first_source,
-                                                 antenna=katpoint.Antenna(self.array_position))
+                                                 antenna=self.array_position)
 
         # deal with easy case first - single point at the phase centre
         if (self.model_raw_params.size == 1) \
@@ -642,7 +643,7 @@ class Scan(object):
                 wl = light_speed / self.channel_freqs
                 self.uvw = calprocs.calc_uvw_wave(
                     self.target, self.timestamps, self.corrprod_lookup,
-                    self.antenna_descriptions, wl, self.array_position)
+                    self.antennas, wl, self.array_position)
 
             # set up model visibility
             complexmodel = np.zeros_like(self.vis)
