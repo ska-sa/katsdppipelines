@@ -7,6 +7,8 @@ import katpoint
 import numpy as np
 import six
 
+from katsdptelstate import TelescopeState
+
 from katacomb.mock_dataset import (MockDataSet,
                     ANTENNA_DESCRIPTIONS,
                     DEFAULT_METADATA,
@@ -14,6 +16,7 @@ from katacomb.mock_dataset import (MockDataSet,
                     DEFAULT_TIMESTAMPS)
 
 from katacomb import (AIPSPath,
+                    ContinuumPipeline,
                     KatdalAdapter,
                     obit_context,
                     uv_factory,
@@ -22,17 +25,39 @@ from katacomb import (AIPSPath,
 from katacomb.tests.test_aips_path import file_cleaner
 from katacomb.util import parse_python_assigns
 
-class TestKatdalAdapter(unittest.TestCase):
+class TestUVExport(unittest.TestCase):
 
-    def test_katdal_adapter(self):
-        """
-        Tests writing data from a :class:`KatdalAdapter` object
-        to an AIPS UV file.
 
-        Then, the AIPS UV file is re-opened and visibility
-        data is read per scan and compared with the data
-        from each scan of the :class:`KatdalAdapter`
+    def test_uv_export(self):
         """
+        Test that export of UV data via the
+        :func:`katacomb.uv_export` method works.
+        """
+        self._test_export_implementation("uv_export")
+
+    def test_continuum_export(self):
+        """
+        Test that export of UV data via the
+        :class:`katacomb.ContinuumPipeline` method works.
+        """
+        self._test_export_implementation("continuum_export")
+
+    def _test_export_implementation(self, export_type="uv_export"):
+        """
+        Implementation of export test. Tests export via
+        either the :func:`katabomb.uv_export` or
+        :class:`katacomb.ContinuumPipeline, depending on ``export_type``.
+
+        When testing export via the Continuum Pipeline, baseline
+        averaging is disabled.
+
+        Parameters
+        ----------
+        export_type (optional): string
+            Either ``"uv_export"`` or ``"continuum_export"``.
+            Defaults to ``"uv_export"``
+        """
+
         nchan = 16
         nvispio = 1024
 
@@ -47,8 +72,7 @@ class TestKatdalAdapter(unittest.TestCase):
         target_names = random.sample(stars.keys(), 5)
 
         # Pick 5 random stars as targets
-        targets = [katpoint.Target("%s, star" % t) for t in
-                                                target_names]
+        targets = [katpoint.Target("%s, star" % t) for t in target_names]
 
         # Set up varying scans
         scans = [('slew', 1, targets[0]), ('track', 3, targets[0]),
@@ -77,6 +101,7 @@ class TestKatdalAdapter(unittest.TestCase):
         # converts it back to a dict.
         select = {
             'scans': 'track',
+            'corrprods': 'cross',
             'targets': target_names,
             'pol': 'HH,VV',
             'channels': slice(0, nchan),}
@@ -105,13 +130,28 @@ class TestKatdalAdapter(unittest.TestCase):
         uv_file_path = AIPSPath('test', 1, 'test', 1)
 
         with obit_context(), file_cleaner([uv_file_path]):
-            # Perform export of katdal selection
-            with uv_factory(aips_path=uv_file_path, mode="w",
-                            nvispio=nvispio,
-                            table_cmds=KA.default_table_cmds(),
-                            desc=KA.uv_descriptor()) as uvf:
+            # Perform export of katdal selection via uv_export
+            if export_type == "uv_export":
+                with uv_factory(aips_path=uv_file_path, mode="w",
+                                nvispio=nvispio,
+                                table_cmds=KA.default_table_cmds(),
+                                desc=KA.uv_descriptor()) as uvf:
 
-                uv_export(KA, uvf)
+                    uv_export(KA, uvf)
+            # Perform export of katdal selection visa ContinuumPipline
+            elif export_type == "continuum_export":
+                pipeline = ContinuumPipeline(KA.katdal, TelescopeState(),
+                                            katdal_select=select,
+                                            __merge_scans=True)
+                pipeline._export_and_merge_scans()
+
+                uv_file_path = pipeline.uv_merge_path
+
+                newselect = select.copy()
+                newselect['reset'] = 'TFB'
+                KA.select(**newselect)
+            else:
+                raise ValueError("Invalid export_type '%s'" % export_type)
 
             nvispio = 1
 
@@ -119,6 +159,48 @@ class TestKatdalAdapter(unittest.TestCase):
             with uv_factory(aips_path=uv_file_path,
                             mode="r",
                             nvispio=nvispio) as uvf:
+
+                def _strip_strings(aips_keywords):
+                    """ AIPS string are padded, strip them """
+                    return { k: v.strip()
+                            if isinstance(v, six.string_types) else v
+                            for k, v in aips_keywords.iteritems() }
+
+                fq_kw =  _strip_strings(uvf.tables["AIPS FQ"].keywords)
+                src_kw = _strip_strings(uvf.tables["AIPS SU"].keywords)
+                ant_kw = _strip_strings(uvf.tables["AIPS AN"].keywords)
+
+                # Check that the subset of keywords generated
+                # by the katdal adapter match those read from the AIPS table
+                self.assertDictContainsSubset(KA.uv_spw_keywords, fq_kw)
+                self.assertDictContainsSubset(KA.uv_source_keywords, src_kw)
+                self.assertDictContainsSubset(KA.uv_antenna_keywords, ant_kw)
+
+                def _strip_metadata(aips_table_rows):
+                    """
+                    Strip out ``Numfields``, ``_status``, ``Table name``
+                    fields from each row entry
+                    """
+                    STRIP = { 'NumFields', '_status', 'Table name' }
+                    return [{k: v for k, v in d.items()
+                                if k not in STRIP}
+                                        for d in aips_table_rows]
+
+                # Check that frequency, source and antenna rows
+                # are correctly exported
+                fq_rows = _strip_metadata(uvf.tables["AIPS FQ"].rows)
+                self.assertEqual(fq_rows, KA.uv_spw_rows)
+
+                ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)
+                self.assertEqual(ant_rows, KA.uv_antenna_rows)
+
+                # TODO(sjperkins)
+                # For some reason, source radec and apparent radec
+                # coordinates are off by some minor difference
+                # Probably related to float32 conversion.
+                if not export_type == "continuum_export":
+                    src_rows = _strip_metadata(uvf.tables["AIPS SU"].rows)
+                    self.assertEqual(src_rows, KA.uv_source_rows)
 
                 uv_desc = uvf.Desc.Dict
                 inaxes = tuple(reversed(uv_desc['inaxes'][:6]))
@@ -269,7 +351,6 @@ class TestKatdalAdapter(unittest.TestCase):
                     # This produces (ntime, nchan, nbl, nstokes, 3)
                     kat_vis = kat_vis[:, :, cp_argsort, :].reshape(shape)
 
-
                     # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
                     # (2) reshape to include the full inaxes shape,
                     #     including singleton nif, ra and dec dimensions
@@ -282,6 +363,7 @@ class TestKatdalAdapter(unittest.TestCase):
 
                 # Check that we read the expected number of visibilities
                 self.assertEqual(summed_vis, naips_vis)
+
 
 if __name__ == "__main__":
     unittest.main()

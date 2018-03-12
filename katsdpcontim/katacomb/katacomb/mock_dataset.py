@@ -417,11 +417,21 @@ class MockDataSet(DataSet):
 
     @property
     def weights(self):
-        return np.ones(self.shape, dtype=np.float32)
+        # Dump space is linear space between scaled dump indices
+        start, stop = self.dumps[[0,-1]]/ 1000.0
+        return np.linspace(start, stop,
+                            num=np.product(self.shape),
+                            endpoint=True,
+                            dtype=np.float32).reshape(self.shape)
 
     @property
     def flags(self):
-        return np.zeros(self.shape, dtype=np.bool)
+        flags = np.zeros(self.shape, dtype=np.bool)
+
+        # Flag 10% of visibilities
+        nflagged = int(0.1*flags.size)
+        flags.ravel()[-nflagged:] = True
+        return flags
 
     def _corr_product_indices(self):
         """

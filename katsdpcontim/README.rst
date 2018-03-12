@@ -20,6 +20,9 @@ Requirements
 
 You'll need some docker infrastructure:
 
+- The ``docker-base`` docker image available in the
+  `SDP docker registry <https://github.com/ska-sa/katsdpinfrastructure/tree/master/registry#client-setup>`_. ``docker-base-gpu`` may also be useful to
+  build Obit with GPU acceleration.
 - Docker Ubuntu `installation instructions <https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/>`_.
 - docker-compose. ``pip install docker-compose``.
 
@@ -100,49 +103,133 @@ Then, on your local machine, you should direct your VNC client to ``localhost:59
 your VNC traffic through the tunnel to the server inside the container.
 
 
+Run Continuum Imaging Pipeline
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``continuum_pipeline.py`` script runs the Continuum Pipeline.
+
+.. code-block::
+
+    $ continuum_pipeline.py --help
+    $ continuum_pipeline.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+
+Any resulting images will be stored in AIPS disks described in
+`AIPS Disk Setup`_.
+
+See `Bill Cotton's Continuum Imaging Pipeline Parameters`_ for details
+on suitable parameters for running the pipeline.
+
+Inspecting , Viewing and Exporting data in ObitTalk
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Obit has a number of python utilities for inspecting, viewing and exporting
+AIPS data.
+
+Start ``ObitView`` in an X11 terminal to start the Obit Image viewer.
+
+.. code-block::
+
+    $ ObitView
+
+Then, in another terminal start ``ObitTalk``, which interacts with
+AIPS disk data.
+
+.. code-block::
+
+    $ ObitTalk
+
+``ObitTalk`` starts a python terminal that can inspect AIPS disk data
+and interact with ``ObitView``.
+
+AIPS disk data can briefly be subdivided into UV and Image data.
+This data can be viewed with the ``AUcat`` and ``AMcat``
+commands.
+
+For example, the following code,
+
+- lists all the AIPS images on disk 1
+- Creates a python object associated with the Mimosa image
+- Writes the image as ``IMAGE.FITS`` on FITS disk 1
+
+.. code-block:: python
+
+    >>> AMcat(1)
+    AIPS Directory listing for disk 1
+      2 Merope      .IClean.    1 MA 08-Feb-2018 11:55:52
+      5 Kaus Austral.IClean.    1 MA 08-Feb-2018 11:55:52
+      7 Mimosa      .IClean.    1 MA 08-Feb-2018 11:55:52
+      9 Rukbat      .IClean.    1 MA 08-Feb-2018 11:56:19
+     11 Sirrah      .IClean.    1 MA 08-Feb-2018 11:55:52
+
+    >>> x = getname(7)
+
+    >>> err = OErr.OErr()
+    >>> imtab(x, "IMAGE.FITS", 1, err)
+    <C Image instance> FITS Image DATA>
+
+Then, it is also possible to display the image in ``ObitView``
+through the ``tvlod`` command.
+
+.. code-block:: python
+
+    >>> tvlod(x)
+
+AIPS UV data can be inspected via the ``imhead`` command:
+
+.. code-block:: python
+
+    >>> AUcat(1)
+    AIPS Directory listing for disk 1
+      1 Merope      .MFImag.    1 UV 08-Feb-2018 11:55:52
+      3 mock        .merge .    1 UV 08-Feb-2018 11:55:53
+      4 Kaus Austral.MFImag.    1 UV 08-Feb-2018 11:55:52
+      6 Mimosa      .MFImag.    1 UV 08-Feb-2018 11:55:52
+      8 Rukbat      .MFImag.    1 UV 08-Feb-2018 11:55:52
+     10 Sirrah      .MFImag.    1 UV 08-Feb-2018 11:55:52
+     13 mock        .merge .    2 UV 08-Feb-2018 11:55:53
+
+
+    >>> imhead(getname(3))
+    AIPS UV mock         merge  1 1
+    AIPS UV Data Name: mock         Class: merge  seq:        1 disk:    1
+    Object: MULTI
+    Observed: 2018-02-08 Telescope:  MeerKAT  Created: 2018-02-08
+    Observer: ghost      Instrument: MeerKAT
+     # visibilities       1430  Sort order = TB
+    Rand axes: UU-L-SIN VV-L-SIN WW-L-SIN BASELINE TIME1
+               SOURCE   INTTIM
+    --------------------------------------------------------------
+    Type    Pixels   Coord value     at Pixel     Coord incr   Rotat
+    COMPLEX      3               1       1.00              1    0.00
+    STOKES       2      XPol             1.00             -1    0.00
+    FREQ         2      1.0432e+09       1.00       4.28e+08    0.00
+    IF           1               1       1.00              1    0.00
+    RA           1   0  0  0.00000       1.00              0    0.00
+    DEC          1 -00  0  0.0000        1.00              0    0.00
+    --------------------------------------------------------------
+    Coordinate equinox 2000.0  Coordinate epoch 2000.00
+    Observed RA    0  0  0.00000 Observed Dec -00  0  0.0000
+    Rest freq            0 Vel type: Observer,  wrt  Optical
+    Alt ref value            0  wrt pixel     0.88
+    Maximum version number of AIPS FQ tables is 1
+    Maximum version number of AIPS SU tables is 1
+    Maximum version number of AIPS PS tables is 1
+    Maximum version number of AIPS AN tables is 1
+    Maximum version number of AIPS CL tables is 1
+    Maximum version number of AIPS NX tables is 1
+
+
+
 Export katdal observation
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``uv_export.py`` script exports a katdal observation to a UV data file on an AIPS disk.
-For example:
 
 .. code-block::
 
-    # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
+    $ uv_export.py --help
+    $ uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
-The AIPS filename is automatically derived from the input filename.
-Five command line options can be specified to further customise the AIPS filenames.
-
---disk  AIPS disk number
---name  Name of the file. ``'1500148809'`` for example
---class  Short string indicating file class. Can be thought of as arbitrary tags
-         assigned by the user.
-         ``'raw'``  to indicate raw visibilities for example.
---seq  AIPS file sequence number.
-       A number used to specify bits of data in a sequence. ``'1'`` for example.
---select  katdal select statement. Should only contain python
-          assignment statements to python literals, separated
-          by semi-colons. e.g. "scans='track';spw=0".
-
-Compare export versus legacy export
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-An observation export can be compared against the legacy export
-code available in the older ``katim`` package:
-
-.. code-block::
-
-    # uv_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
-    # legacy_export.py /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
-    # cmp_uv.py -n1 1500148809 -c1 raw -n2 1500148809 -c2 legacy
-
-This will iterate over the visibilities in each file comparing
-one against the other and logging comparison failures.
-
-**Note that the time random parameter is slightly different
-in current vs legacy. This is because the starting time,
-or midnight is computed from the** :code:`katdal.DataSet.start_time.sec`
-**rather than** :code:`katdal.DataSet.timestamps[1:2]`.
 
 Run AIPS
 ~~~~~~~~
@@ -218,8 +305,8 @@ and the run MFImage using the configuration file.
     /obitconf $ MFImage -input mfimage_nosc.in &
     /obitconf $ tail -f IMAGE.log
 
-Export CLEAN image with FITS
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Export AIPS CLEAN image to FITS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Run AIPS and look for the CLEAN image with the ``MCAT`` command.
 Then, run the ``FITTP`` task to export the CLEAN image from the
@@ -283,6 +370,36 @@ This is achieved by running the ``cfg_aips_disks.py`` script which:
 - Creates soft links in the Obit data directory into the FITS area.
 
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Bill Cotton's Continuum Imaging Pipeline Parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here are the notes on the Phoenix_ field self calibration/continuum subtraction
+
+Did various imagings using MFImage
+
+- Seq 1, 15 sec SI, ch avg to 512 chan, 0.734 of sc solutions OK
+  FOV = 1.2, peak ~ 39 mJy, sum ~ 0.638 Jy
+- Seq 2, 60 sec SI, FOV=1.2 (512 ch/IF), 0.805 of sc solutions OK
+- Seq 3, 120 sec SI FOV=1.2 (512 ch/IF)
+- Seq 4, 120 sec SI, BLFOV = 1.0 (456 ch/IF) 5080 Real
+- Seq 5, 120 sec SI, BLFOV = 0.6 (256 ch/IF) 3001 Real
+
+Imager IF 6, channels 900-923 (1.4145 - 1.4151 GHz)
+
+===  ======== ======= =====  ===== ====  ====== ======
+seq  Cont Rms Size GB SI(s)  ch/IF ch6*   ch12*  ch18*
+===  ======== ======= =====  ===== ====  ====== ======
+1    56.6 u    2.97    15    512   2.91  2.61   2.84
+2    58.2      2.46    60    512   2.91  2.61   2.84
+3    58.5      2.38   120    512   2.91  2.61   2.83
+4    58.9      1.91   120    456   2.91  2.61   2.83
+5    58.7      0.89   120    256   2.91  2.66   2.83
+===  ======== ======= =====  ===== ====  ====== ======
+
+* 26 kHz channel RMS mJy, number in the 24 imaged.
+
+
 ~~~~~~~
 Testing
 ~~~~~~~
@@ -292,3 +409,5 @@ A test suite exists, but must be executed inside the container:
 .. code-block::
 
   $ nosetests /home/kat/src/katacomb
+
+.. _Phoenix: /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/09/14/1505426738.h5 

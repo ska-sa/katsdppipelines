@@ -1,3 +1,5 @@
+from __future__ import with_statement
+
 import logging
 
 from katacomb import (uv_factory,
@@ -37,34 +39,39 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
     # (1) Extract complex gains from attached "AIPS SN" table
     # (2) Write them to telstate
     for si, uv_file in enumerate(uv_files):
-        with uv_factory(aips_path=uv_file, mode='r') as uvf:
-            try:
-                sntab = uvf.tables["AIPS SN"]
-            except KeyError:
-                log.warn("No calibration solutions in '%s'", uv_file)
-            else:
-                # Handle cases for single/dual pol gains
-                if "REAL2" in sntab.rows[0]:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL2"] + 1j*row["IMAG2"]],
-                                            dtype=np.complex64)
+        try:
+            with uv_factory(aips_path=uv_file, mode='r') as uvf:
+                try:
+                    sntab = uvf.tables["AIPS SN"]
+                except KeyError:
+                    log.warn("No calibration solutions in '%s'", uv_file)
                 else:
-                    def _extract_gains(row):
-                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                         row["REAL1"] + 1j*row["IMAG1"]],
-                                            dtype=np.complex64)
+                    # Handle cases for single/dual pol gains
+                    if "REAL2" in sntab.rows[0]:
+                        def _extract_gains(row):
+                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
+                                             row["REAL2"] + 1j*row["IMAG2"]],
+                                                dtype=np.complex64)
+                    else:
+                        def _extract_gains(row):
+                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
+                                             row["REAL1"] + 1j*row["IMAG1"]],
+                                                dtype=np.complex64)
 
-                # Write each complex gain out per antenna
-                for row in (_condition(r) for r in sntab.rows):
-                    # Convert time back from AIPS to katdal UTC
-                    time = katdal_timestamps(row["TIME"], kat_adapter.midnight)
-                    # Convert from AIPS FORTRAN indexing to katdal C indexing
-                    ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
+                    # Write each complex gain out per antenna
+                    for row in (_condition(r) for r in sntab.rows):
+                        # Convert time back from AIPS to katdal UTC
+                        time = katdal_timestamps(row["TIME"], kat_adapter.midnight)
+                        # Convert from AIPS FORTRAN indexing to katdal C indexing
+                        ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
 
-                    # Store complex gain for this antenna
-                    # in telstate at this timestamp
-                    telstate.add(ant, _extract_gains(row), ts=time)
+                        # Store complex gain for this antenna
+                        # in telstate at this timestamp
+                        telstate.add(ant, _extract_gains(row), ts=time)
+        except Exception as e:
+            log.warn("Export of calibration solutions from '%s' failed.\n%s",
+                        uv_file, str(e))
+
 
 
 def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
@@ -91,21 +98,26 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
 
     it = enumerate(zip(clean_files, target_indices))
     for si, (clean_file, ti) in it:
-        with img_factory(aips_path=clean_file, mode='r') as cf:
-            try:
-                cctab = cf.tables["AIPS CC"]
-            except KeyError:
-                log.warn("No clean components in '%s'", clean_file)
-            else:
-                target = "target%d" % si
+        try:
+            with img_factory(aips_path=clean_file, mode='r') as cf:
+                try:
+                    cctab = cf.tables["AIPS CC"]
+                except KeyError:
+                    log.warn("No clean components in '%s'", clean_file)
+                else:
+                    target = "target%d" % si
 
-                # Condition all rows up front
-                rows = [_condition(r) for r in cctab.rows]
+                    # Condition all rows up front
+                    rows = [_condition(r) for r in cctab.rows]
 
-                # Extract description
-                description = targets[ti].description
-                data = { 'description': description, 'components': rows }
+                    # Extract description
+                    description = targets[ti].description
+                    data = { 'description': description, 'components': rows }
 
-                # Store them in telstate
-                key = telstate.SEPARATOR.join((target, "clean_components"))
-                telstate.add(key, data, immutable=True)
+                    # Store them in telstate
+                    key = telstate.SEPARATOR.join((target, "clean_components"))
+                    telstate.add(key, data, immutable=True)
+
+        except Exception as e:
+            log.warn("Export of clean components from '%s' failed.\n%s",
+                        clean_file, str(e))
