@@ -301,9 +301,7 @@ class Accumulator(object):
         self.name = 'Accumulator'
         self._rx = None
         self._run_future = None
-        # First and last timestamps in observation
-        self._obs_start = None
-        self._obs_end = None
+        self._reset_capture_state()
 
         # Get data shape
         buffer_shape = buffers['vis'].shape
@@ -316,9 +314,8 @@ class Accumulator(object):
         # Free space tracking
         self._free_slots = deque(range(buffer_shape[0]))
         self._slots_cond = trollius.Condition()  # Signalled when new slots are available
-        # Whether a capture session is active. However, it is set to false as soon as
-        # capture_done is entered, before the _run_future is actually yielded.
-        self._running = False
+        # Set if stop(force=True) is called, to abort waiting for an available slot
+        self._force_stopping = False
         # Enforce only one capture_done at a time
         self._done_lock = trollius.Lock()
 
@@ -410,7 +407,7 @@ class Accumulator(object):
     def _next_slot(self):
         wait_sensor = self.sensors['accumulator-last-wait']
         with (yield From(self._slots_cond)):
-            if not self._running:
+            if self._force_stopping:
                 raise Return(None)
             elif self._free_slots:
                 wait_sensor.set_value(0.0)
@@ -418,9 +415,9 @@ class Accumulator(object):
                 logger.warn('no slots available - waiting for pipeline to return buffers')
                 loop = trollius.get_event_loop()
                 now = loop.time()
-                while self._running and not self._free_slots:
+                while not self._force_stopping and not self._free_slots:
                     yield From(self._slots_cond.wait())
-                if not self._running:
+                if self._force_stopping:
                     raise Return(None)
                 elapsed = loop.time() - now
                 logger.info('slot acquired')
@@ -456,6 +453,7 @@ class Accumulator(object):
     def _run_observation(self, capture_block_id):
         """Runs for a single observation i.e., until a stop heap is received."""
         try:
+            self._reset_capture_state(capture_block_id)
             yield From(self._accumulate(capture_block_id))
             # Tell the pipeline that the observation ended, but only if there
             # was something to work on.
@@ -481,13 +479,10 @@ class Accumulator(object):
     def capture_init(self, capture_block_id):
         assert self._rx is None, "observation already running"
         assert self._run_future is None, "inconsistent state"
-        assert not self._running, "inconsistent state"
         logger.info('===========================')
         logger.info('   Starting new observation')
         # Prepend the CBID to the cal_name to form a new namespace
         self.telstate_cb = make_telstate_cb(self.telstate_cal, capture_block_id)
-        self._obs_start = None
-        self._obs_end = None
         # Initialise SPEAD receiver
         logger.info('Initializing SPEAD receiver')
         rx = spead2.recv.trollius.Stream(
@@ -508,7 +503,6 @@ class Accumulator(object):
         logger.info('reader added')
         self._rx = rx
         self._run_future = trollius.ensure_future(self._run_observation(capture_block_id))
-        self._running = True
         self.sensors['accumulator-capture-active'].set_value(True)
         self.sensors['input-bytes-total'].set_value(0)
         self.sensors['input-heaps-total'].set_value(0)
@@ -524,13 +518,9 @@ class Accumulator(object):
             # Give it a chance to stop on its own (from stop heaps)
             logger.info('Waiting for capture to finish (5s timeout)...')
             done, _ = yield From(trollius.wait([self._run_future], timeout=5))
-            self._running = False
             if future not in done:
                 logger.info('Stopping receiver')
                 self._rx.stop()
-                with (yield From(self._slots_cond)):
-                    # Interrupts wait for free slot, if any
-                    self._slots_cond.notify()
                 logger.info('Waiting for capture to finish...')
                 yield From(self._run_future)
             logger.info('Joined with _run_observation')
@@ -547,11 +537,17 @@ class Accumulator(object):
         terminated, and it does not try to wake it up; otherwise it sends
         it a stop event.
         """
+        if force:
+            self._force_stopping = True
+            with (yield From(self._slots_cond)):
+                # Interrupts wait for free slot, if any
+                self._slots_cond.notify()
+
         if self._run_future is not None:
             yield From(self.capture_done())
-        if not force:
-            if self.accum_pipeline_queue is not None:
-                self.accum_pipeline_queue.put(StopEvent())
+
+        if not force and self.accum_pipeline_queue is not None:
+            self.accum_pipeline_queue.put(StopEvent())
         self.accum_pipeline_queue = None    # Make safe for concurrent calls to stop
         if self._thread_pool is not None:
             self._thread_pool.stop()
@@ -563,6 +559,19 @@ class Accumulator(object):
         antenna_names = self.parameters['antenna_names']
         bls_ordering = self.telstate_l0['bls_ordering']
         self.ordering = calprocs.get_reordering(antenna_names, bls_ordering)[0]
+
+    def _reset_capture_state(self, capture_block_id=None):
+        self._capture_block_id = capture_block_id
+        # First and last timestamps in observation
+        self._obs_start = None
+        self._obs_end = None
+        self._state = None
+        self._first_timestamp = None
+        self._last_idx = -1                # Last dump index that has a slot
+        # List of slots that have been filled in for this batch
+        self._slots = []
+        # Look up slot by dump index
+        self._slot_for_index = {}
 
     @classmethod
     def _update_buffer(cls, out, l0, ordering):
@@ -600,17 +609,21 @@ class Accumulator(object):
         out_view.shape = (out.shape[0], out.shape[1] * out.shape[2])
         np.take(l0, ordering, axis=1, out=out_view)
 
-    def _flush_slots(self, capture_block_id, slots):
+    def _flush_slots(self):
         now = time.time()
-        logger.info('Accumulated %d timestamps', len(slots))
+        logger.info('Accumulated %d timestamps', len(self._slots))
         _inc_sensor(self.sensors['accumulator-batches'], 1, timestamp=now)
 
         # pass the buffer to the pipeline
-        if len(slots) > 0:
-            self.accum_pipeline_queue.put(BufferReadyEvent(capture_block_id, slots))
+        if self._slots:
+            self.accum_pipeline_queue.put(BufferReadyEvent(self._capture_block_id, self._slots))
             logger.info('accum_pipeline_queue updated by %s', self.name)
-            _inc_sensor(self.sensors['pipeline-slots'], len(slots), timestamp=now)
-            _inc_sensor(self.sensors['accumulator-slots'], -len(slots), timestamp=now)
+            _inc_sensor(self.sensors['pipeline-slots'], len(self._slots), timestamp=now)
+            _inc_sensor(self.sensors['accumulator-slots'], -len(self._slots), timestamp=now)
+
+        self._slots = []
+        self._slot_for_index.clear()
+        self._state = None
 
     @trollius.coroutine
     def _next_heap(self, rx, ig):
@@ -651,14 +664,11 @@ class Accumulator(object):
                 continue
             raise Return(updated)
 
-    def _get_activity_state(self, refant_name, data_ts):
+    def _get_activity_state(self, data_ts):
         """Extract telescope state information about current activity.
 
         Parameters
         ----------
-        refant_name : str
-            Name of reference antenna. It is the one whose activity and target
-            are used.
         data_ts : float
             Timestamp (UNIX time) for the query.
 
@@ -667,6 +677,7 @@ class Accumulator(object):
         :class:`ActivityState`
             Current state, or ``None`` if no activity was recorded
         """
+        refant_name = self.parameters['refant'].name
         activity_full = []
         try:
             activity_full = self.telstate.get_range(
@@ -696,12 +707,11 @@ class Accumulator(object):
         target_tags = target_split[1] if len(target_split) > 1 else 'unknown'
         return ActivityState(activity, activity_time, target_name, target_tags)
 
-    def _is_break(self, old, new, slots, duration):
+    def _is_break(self, old, new, slots):
         """Determine whether to break batches between `old` and `new`:
          * case 1 -- activity change (unless gain cal following target)
          * case 2 -- beamformer phase up ended
          * case 3 -- buffer capacity limit reached
-         * case 4 -- time limit reached (may be replaced later?)
 
         Parameters
         ----------
@@ -709,8 +719,6 @@ class Accumulator(object):
             Encapsulated activity sensors for the previous and next dump
         slots : list
             Already accumulated slots (including `old` but not `new`)
-        duration : float
-            Duration of the current batch (including `new`)
 
         Returns
         -------
@@ -742,13 +750,52 @@ class Accumulator(object):
             logger.warn('Accumulate break - buffer size limit %d', self.max_length)
             return True
 
-        # CASE 4 -- temporary mock up of a natural break in the data stream
-        # may ultimately be provided by some sort of sensor?
-        if duration > 2000000:
-            logger.warn('Accumulate break due to duration (%f)', duration)
-            return True
-
         return False
+
+    @trollius.coroutine
+    def _ensure_slots(self, cur_idx):
+        """Add new slots until there is one for `cur_idx`.
+
+        This assumes that ``self._last_idx`` is less than `cur_idx`.
+
+        Returns
+        -------
+        bool
+            True if successful, False if we were interrupted by a force stop
+        """
+        for idx in range(self._last_idx + 1, cur_idx + 1):
+            data_ts = self._first_timestamp + idx * self.int_time + self.sync_time
+            if self._obs_start is None:
+                self._obs_start = data_ts - 0.5 * self.int_time
+            self._obs_end = data_ts + 0.5 * self.int_time
+
+            # get activity and target tag from telescope state
+            new_state = self._get_activity_state(data_ts)
+
+            # if this is the first heap of the batch, log a header
+            if self._state is None:
+                logger.info('accumulating data from targets:')
+
+            # flush a batch if necessary
+            if self._is_break(self._state, new_state, self._slots):
+                self._flush_slots()
+
+            # print name of target and activity type on changes (and start of batch)
+            if new_state is not None and self._state != new_state:
+                logger.info(' - %s (%s)', new_state.target_name, new_state.activity)
+
+            # Obtain a slot to copy to
+            slot = yield From(self._next_slot())
+            if slot is None:
+                logger.info('Accumulation interrupted while waiting for a slot')
+                raise Return(False)
+            self._slots.append(slot)
+            self._slot_for_index[idx] = slot
+            self.buffers['times'][slot] = data_ts
+            self.buffers['dump_indices'][slot] = idx
+            self._state = new_state
+            self._last_idx = idx
+        raise Return(True)
 
     @trollius.coroutine
     def _accumulate(self, capture_block_id):
@@ -769,15 +816,6 @@ class Accumulator(object):
         rx = self._rx
         ig = spead2.ItemGroup()
         n_stop = 0                   # Number of stop heaps received
-        old_state = None
-        start_idx = None             # Batch first index
-        first_timestamp = None
-        last_idx = -1                # Previous value of data_idx
-        # list of slots that have been filled
-        slots = []
-        # Look up dump index by slot
-        slot_for_index = {}
-        refant_name = self.parameters['refant'].name
         telstate_cb_l0 = make_telstate_cb(self.telstate_l0, capture_block_id)
 
         # receive SPEAD stream
@@ -791,74 +829,29 @@ class Accumulator(object):
                 n_stop += 1
                 if n_stop == len(self.l0_endpoints):
                     rx.stop()
-                    stopped = True
                     break
                 else:
                     continue
 
-            if first_timestamp is None:
-                first_timestamp = telstate_cb_l0['first_timestamp']
+            if self._first_timestamp is None:
+                self._first_timestamp = telstate_cb_l0['first_timestamp']
             data_idx = int(ig['dump_index'].value)  # Convert from np.uint64, which behaves oddly
-            data_ts = first_timestamp + data_idx * self.int_time + self.sync_time
-            if data_idx < last_idx:
+            if data_idx < self._last_idx:
                 try:
-                    slot = slot_for_index[data_idx]
+                    slot = self._slot_for_index[data_idx]
                     logger.info('Dump index went backwards (%d < %d), but managed to accept it',
-                                data_idx, last_idx)
+                                data_idx, self._last_idx)
                 except KeyError:
                     logger.warning('Dump index went backwards (%d < %d), skipping heap',
-                                   data_idx, last_idx)
+                                   data_idx, self._last_idx)
                     _inc_sensor(self.sensors['input-too-old-heaps-total'], 1,
                                 status=katcp.Sensor.WARN)
                     continue
             else:
                 # Create slots for all entries we haven't seen yet
-                stopped = False
-                for idx in range(last_idx + 1, data_idx + 1):
-                    data_ts = first_timestamp + idx * self.int_time + self.sync_time
-                    if self._obs_start is None:
-                        self._obs_start = data_ts - 0.5 * self.int_time
-                    self._obs_end = data_ts + 0.5 * self.int_time
-
-                    # get activity and target tag from telescope state
-                    new_state = self._get_activity_state(refant_name, data_ts)
-
-                    # if this is the first heap of the batch, set up some values
-                    if start_idx is None:
-                        start_idx = idx
-                        logger.info('accumulating data from targets:')
-
-                    # flush a batch if necessary
-                    duration = (idx - start_idx) * self.int_time
-                    if self._is_break(old_state, new_state, slots, duration):
-                        self._flush_slots(capture_block_id, slots)
-                        slots = []
-                        slot_for_index.clear()
-                        old_state = None
-                        start_idx = idx
-
-                    # print name of target and activity type on changes (and start of batch)
-                    if new_state is not None and old_state != new_state:
-                        logger.info(' - %s (%s)', new_state.target_name, new_state.activity)
-
-                    # Obtain a slot to copy to
-                    slot = yield From(self._next_slot())
-                    if slot is None:
-                        logger.info('Accumulation interrupted while waiting for a slot')
-                        # Actually want to break out of the while True loop,
-                        # but Python doesn't have labelled breaks, so set a
-                        # flag.
-                        stopped = True
-                        break
-                    slots.append(slot)
-                    slot_for_index[idx] = slot
-                    self.buffers['times'][slot] = data_ts
-                    self.buffers['dump_indices'][slot] = idx
-                    old_state = new_state
-                    last_idx = idx
-                if stopped:
+                if not (yield From(self._ensure_slots(data_idx))):
                     break
-                slot = slots[-1]
+                slot = self._slots[-1]
 
             channel0 = ig['frequency'].value
             # Range of channels provided by the heap (from full L0 range)
@@ -890,8 +883,31 @@ class Accumulator(object):
             _inc_sensor(self.sensors['input-bytes-total'], heap_nbytes, timestamp=now)
             _inc_sensor(self.sensors['input-heaps-total'], 1, timestamp=now)
 
+        # Need to ensure that all parallel cal servers get the same number of
+        # dumps, and hence the same batches. Record the last index of each,
+        # exchange, and take the largest.
+        max_idx = self._last_idx
+        loop = trollius.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(1) as executor:
+            server_id = self.parameters['server_id']
+            n_servers = self.parameters['servers']
+            self.telstate_cb.add('last_dump_index{}'.format(server_id), self._last_idx,
+                                 immutable=True)
+            for i in range(n_servers):
+                if i != server_id:
+                    key = 'last_dump_index{}'.format(i)
+                    logger.debug('Waiting for %s', key)
+                    yield From(loop.run_in_executor(executor, self.telstate_cb.wait_key, key))
+                    other_last_idx = self.telstate_cb[key]
+                    logger.debug('Got %s = %d', key, other_last_idx)
+                    max_idx = max(max_idx, other_last_idx)
+        if max_idx > self._last_idx:
+            logger.info('Adding %d extra slots to align end of observation',
+                        max_idx - self._last_idx)
+            yield From(self._ensure_slots(max_idx))
+
         # Flush out the final batch
-        self._flush_slots(capture_block_id, slots)
+        self._flush_slots()
         logger.info('Accumulation ended')
 
 
@@ -1151,7 +1167,8 @@ class Sender(Task):
                         tx.send_heap(ig.get_heap(data='all', descriptors='all'))
                         now = time.time()
                         _inc_sensor(self.sensors['output-heaps-total'], 1, timestamp=now)
-                        _inc_sensor(self.sensors['output-bytes-total'], out_flags.nbytes, timestamp=now)
+                        _inc_sensor(self.sensors['output-bytes-total'], out_flags.nbytes,
+                                    timestamp=now)
                         self.master_queue.put(BufferReadyEvent(event.capture_block_id, [slot]))
                     logger.info('finished transmission of %d slots', len(event.slots))
             elif isinstance(event, ObservationEndEvent):
@@ -1363,7 +1380,10 @@ class CalDeviceServer(katcp.server.AsyncDeviceServer):
         with concurrent.futures.ThreadPoolExecutor(1) as executor:
             self._stopping = True
             if force:
-                logger.warn('Forced shutdown - data may be lost')
+                if self._capture_block_state:
+                    logger.warn('Forced shutdown with active capture blocks - data may be lost')
+                else:
+                    logger.info('Forced shutdown, no active capture blocks')
             else:
                 logger.info('Shutting down gracefully')
             if not force:
@@ -1408,6 +1428,8 @@ class CalDeviceServer(katcp.server.AsyncDeviceServer):
             If true, terminate processes immediately rather than waiting for
             them to finish pending work. This can cause data loss!
         """
+        if self._stopping and not force:
+            raise tornado.gen.Return(('fail', 'server is already shutting down'))
         yield to_tornado_future(trollius.ensure_future(self.shutdown(force, req)))
         raise tornado.gen.Return(('ok',))
 
