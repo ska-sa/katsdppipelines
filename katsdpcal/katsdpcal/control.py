@@ -184,18 +184,32 @@ def _corr_total(corr_data):
     return total
 
 
-def make_telstate_cb(telstate_cal, capture_block_id):
+def make_telstate_cb(telstate, capture_block_id):
     """Create a telstate view that is capture-block specific.
+
+    This adds two views to the base telstate:
+
+    - <`capture_block_id`>_<first prefix of `telstate`>
+    - <`capture_block_id`>
+
+    The first, more specific, namespace will receive updated keys while the
+    second namespace provides read access to the main capture block namespace
+    for keys like obs sensors.
 
     Parameters
     ----------
-    telstate_cal : :class:`katsdptelstate.TelescopeState`
-        Telescope name whose first prefix corresponds to the `--cal-name` option
+    telstate : :class:`katsdptelstate.TelescopeState`
+        Base telescope state
     capture_block_id : str
         Capture block ID
+
+    Returns
+    -------
+    telstate_cb : :class:`katsdptelstate.TelescopeState`
+        Telescope state with `capture_block_id` prepended to the first prefix
     """
-    prefix = telstate_cal.SEPARATOR.join([capture_block_id, telstate_cal.prefixes[0]])
-    return telstate_cal.view(prefix)
+    prefix = telstate.SEPARATOR.join([capture_block_id, telstate.prefixes[0]])
+    return telstate.view(capture_block_id).view(prefix)
 
 
 class Task(object):
@@ -285,7 +299,7 @@ class Accumulator(object):
         self.buffers = buffers
         self.telstate = telstate_cal.root()
         self.telstate_cal = telstate_cal
-        self.telstate_cb = None    # Capture block-specific view
+        self.telstate_cb_cal = None    # Capture block-specific view
         self.l0_name = l0_name
         self.l0_interface_address = l0_interface_address
         self.accum_pipeline_queue = accum_pipeline_queue
@@ -482,7 +496,7 @@ class Accumulator(object):
         logger.info('===========================')
         logger.info('   Starting new observation')
         # Prepend the CBID to the cal_name to form a new namespace
-        self.telstate_cb = make_telstate_cb(self.telstate_cal, capture_block_id)
+        self.telstate_cb_cal = make_telstate_cb(self.telstate_cal, capture_block_id)
         # Initialise SPEAD receiver
         logger.info('Initializing SPEAD receiver')
         rx = spead2.recv.trollius.Stream(
@@ -526,7 +540,7 @@ class Accumulator(object):
             logger.info('Joined with _run_observation')
             self._run_future = None
             self._rx = None
-            self._telstate_cb = None
+            self.telstate_cb_cal = None
             self.sensors['accumulator-capture-active'].set_value(False)
 
     @trollius.coroutine
@@ -677,33 +691,23 @@ class Accumulator(object):
         :class:`ActivityState`
             Current state, or ``None`` if no activity was recorded
         """
-        refant_name = self.parameters['refant'].name
-        activity_full = []
         try:
-            activity_full = self.telstate.get_range(
-                refant_name + '_activity', et=data_ts, include_previous=True)
+            activity, activity_time = self.telstate_cb_cal.get_range(
+                'obs_activity', et=data_ts, include_previous=True)[0]
         except KeyError:
-            pass
-        if not activity_full:
-            logger.info('no activity recorded for reference antenna %s - ignoring dump',
-                        refant_name)
+            logger.info('No obs_activity found in telstate - ignoring dump')
             return None
-        activity, activity_time = activity_full[0]
-
-        # get target from telescope state, if it is present (if it
-        # isn't present, set to unknown)
-        target_key = refant_name + '_target'
+        # Get target from telescope state if present (otherwise 'unknown')
         try:
-            target = self.telstate.get_range(target_key, et=data_ts,
+            target = self.telstate.get_range('cbf_target', et=data_ts,
                                              include_previous=True)[0][0]
-            if target == '':
-                target = 'unknown'
         except KeyError:
-            logger.warning('target description %s absent from telescope state', target_key)
-            target = 'unknown'
-        # extract name and tags from target description string
+            logger.warning('No cbf_target found in telstate')
+            target = ''
+        # Extract name and tags from target description string
+        # XXX Rather use katpoint at some stage
         target_split = target.split(',')
-        target_name = target_split[0]
+        target_name = target_split[0] if target else 'unknown'
         target_tags = target_split[1] if len(target_split) > 1 else 'unknown'
         return ActivityState(activity, activity_time, target_name, target_tags)
 
@@ -891,14 +895,15 @@ class Accumulator(object):
         with concurrent.futures.ThreadPoolExecutor(1) as executor:
             server_id = self.parameters['server_id']
             n_servers = self.parameters['servers']
-            self.telstate_cb.add('last_dump_index{}'.format(server_id), self._last_idx,
-                                 immutable=True)
+            self.telstate_cb_cal.add('last_dump_index{}'.format(server_id),
+                                     self._last_idx, immutable=True)
             for i in range(n_servers):
                 if i != server_id:
                     key = 'last_dump_index{}'.format(i)
                     logger.debug('Waiting for %s', key)
-                    yield From(loop.run_in_executor(executor, self.telstate_cb.wait_key, key))
-                    other_last_idx = self.telstate_cb[key]
+                    yield From(loop.run_in_executor(
+                        executor, self.telstate_cb_cal.wait_key, key))
+                    other_last_idx = self.telstate_cb_cal[key]
                     logger.debug('Got %s = %d', key, other_last_idx)
                     max_idx = max(max_idx, other_last_idx)
         if max_idx > self._last_idx:
@@ -1037,8 +1042,8 @@ class Pipeline(Task):
 
     def run_pipeline(self, capture_block_id, data):
         # run pipeline calibration
-        telstate_cb = make_telstate_cb(self.telstate_cal, capture_block_id)
-        target_slices, avg_corr = pipeline(data, telstate_cb, self.parameters,
+        telstate_cb_cal = make_telstate_cb(self.telstate_cal, capture_block_id)
+        target_slices, avg_corr = pipeline(data, telstate_cb_cal, self.parameters,
                                            self.solution_stores, self.l0_name)
         # put corrected data into pipeline_report_queue
         self.pipeline_report_queue.put(avg_corr)
@@ -1222,7 +1227,7 @@ class ReportWriter(Task):
 
     def write_report(self, telstate_cal, capture_block_id, obs_start, obs_end, av_corr):
         # make directory for this capture block, for logs and report
-        telstate_cb = make_telstate_cb(self.telstate_cal, capture_block_id)
+        telstate_cb_cal = make_telstate_cb(self.telstate_cal, capture_block_id)
         base_name = '{}_{}_calreport_{}.{}'.format(
             capture_block_id, self.l0_name, self.telstate_cal.prefixes[0][:-1],
             self.parameters['server_id'] + 1)
@@ -1235,7 +1240,7 @@ class ReportWriter(Task):
 
         # create pipeline report
         try:
-            make_cal_report(telstate_cb, capture_block_id, self.l0_name, self.parameters,
+            make_cal_report(telstate_cb_cal, capture_block_id, self.l0_name, self.parameters,
                             current_report_dir, av_corr,
                             st=obs_start, et=obs_end)
         except Exception as error:

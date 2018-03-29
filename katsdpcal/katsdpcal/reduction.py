@@ -6,7 +6,6 @@ import numpy as np
 import dask.array as da
 
 from katdal.sensordata import TelstateSensorData, SensorCache
-from katdal.categorical import CategoricalData
 from katdal.h5datav3 import SENSOR_PROPS
 
 from katsdpsigproc.rfi.twodflag import SumThresholdFlagger
@@ -58,17 +57,15 @@ def init_flagger(parameters, dump_period):
     return calib_flagger, targ_flagger
 
 
-def get_tracks(data, ts, parameters, dump_period):
+def get_tracks(data, telstate, dump_period):
     """Determine the start and end indices of each track segment in data buffer.
 
     Inputs
     ------
     data : dict
         Data buffer
-    ts : :class:`katsdptelstate.TelescopeState`
+    telstate : :class:`katsdptelstate.TelescopeState`
         The telescope state associated with this pipeline
-    parameters : dict
-        Pipeline parameters
     dump_period : float
         Dump period in seconds
 
@@ -76,53 +73,46 @@ def get_tracks(data, ts, parameters, dump_period):
     -------
     segments : list of slice objects
         List of slices indicating dumps associated with each track in buffer
-
     """
-    # Collect all receptor activity sensors from telstate
-    cache = {}
-    for ant in parameters['antennas']:
-        sensor_name = '{}_activity'.format(ant.name)
-        cache[sensor_name] = TelstateSensorData(ts, sensor_name)
-    num_dumps = data['times'].shape[0]
-    timestamps = data['times']
-    sensors = SensorCache(cache, timestamps, dump_period, props=SENSOR_PROPS)
-    # Interpolate onto data timestamps and find dumps where all receptors track
-    tracking = np.ones(num_dumps, dtype=bool)
-    for activity in sensors:
-        tracking &= (np.array(sensors[activity]) == 'track')
-    # Convert sequence of flags into segments and return the ones that are True
-    all_tracking = CategoricalData(tracking, range(num_dumps + 1))
-    all_tracking.remove_repeats()
-    return [segment for (segment, track) in all_tracking.segments() if track]
+    sensor_name = 'obs_activity'
+    cache = {sensor_name: TelstateSensorData(telstate, sensor_name)}
+    sensors = SensorCache(cache, data['times'], dump_period, props=SENSOR_PROPS)
+    activity = sensors.get(sensor_name)
+    return [segment for (segment, a) in activity.segments() if a == 'track']
 
 
-def get_noise_diode(telstate, ant_names, time_range=[]):
-    """
-    For a given timerange check if the noise diode is on for
-    antennas in ant_names
+def check_noise_diode(telstate, ant_names, time_range):
+    """Check if the noise diode is on at all per antenna within the time range.
 
     Inputs
     ------
     telstate : :class:`katsdptelstate.TelescopeState`
-        telescope state
-    ant_names : list of str
-        names of antennas
-    time_range : list of float
-        timerange to check the noise diode is on for
+        Telescope state
+    ant_names : sequence of str
+        Antenna names
+    time_range : sequence of 2 floats
+        Time range as [start_time, end_time]
 
     Returns
     -------
-    nd_on : :class:`np.ndarray` of bool
-        True for antennas with noise diode on during time_range, otherwise False
+    nd_on : :class:`np.ndarray` of bool, shape (len(ant_names),)
+        True for each antenna with noise diode on at some time in `time_range`
     """
     sub_band = telstate['sub_band']
-    nd_key = '_dig_{0}_band_noise_diode'.format(sub_band)
-    nd_during = [telstate.get_range('{0}{1}'.format(a, nd_key),
-                 st=time_range[0], et=time_range[1], include_previous=True)
-                 for a in ant_names]
-
-    nd_on = [min(zip(*values)[0]) > 0 for values in nd_during]
-    return np.asarray(nd_on)
+    nd_key = 'dig_{}_band_noise_diode'.format(sub_band)
+    nd_on = np.full(len(ant_names), False)
+    for n, ant in enumerate(ant_names):
+        try:
+            value_times = telstate.get_range('{}_{}'.format(ant, nd_key),
+                                             st=time_range[0], et=time_range[1],
+                                             include_previous=True)
+        except KeyError:
+            pass
+        else:
+            # Set to True if any noise diode value is positive, per antenna
+            values = zip(*value_times)[0]
+            nd_on[n] = max(values) > 0
+    return nd_on
 
 
 def get_solns_to_apply(s, solution_stores, sol_list, time_range=[]):
@@ -359,16 +349,12 @@ def pipeline(data, ts, parameters, solution_stores, stream_name):
             'Parameter %s_int_time not present in TS. Will be derived from data.', stream_name)
         dump_period = data['times'][1] - data['times'][0]
 
-    n_ants = len(parameters['antennas'])
     n_pols = len(parameters['bls_pol_ordering'])
     # refant index number in the antenna list
     refant_ind = parameters['refant_index']
 
     # Set up flaggers
     calib_flagger, targ_flagger = init_flagger(parameters, dump_period)
-
-    # get names of target TS key, using TS reference antenna
-    target_key = '{0}_target'.format(parameters['refant'].name)
 
     # ----------------------------------------------------------
     # set initial values for fits
@@ -381,7 +367,7 @@ def pipeline(data, ts, parameters, solution_stores, stream_name):
     #    iterate backwards in time through the scans,
     #    for the case where a gains need to be calculated from a gain scan
     #    after a target scan, for application to the target scan
-    track_slices = get_tracks(data, ts, parameters, dump_period)
+    track_slices = get_tracks(data, ts, dump_period)
     target_slices = []
     # initialise corrected data
     av_corr = {'targets': [], 'vis': [], 'flags': [], 'weights': [],
@@ -395,14 +381,16 @@ def pipeline(data, ts, parameters, solution_stores, stream_name):
         n_times = scan_slice.stop - scan_slice.start
 
         #  target string contains: 'target name, tags, RA, DEC'
-        target = ts.get_range(target_key, et=t0)[0][0]
+        # XXX Use katpoint at some stage
+        target = ts.get_range('cbf_target', et=t0)[0][0]
         target_list = target.split(',')
         target_name = target_list[0]
         logger.info('-----------------------------------')
         logger.info('Target: {0}'.format(target_name))
         logger.info('  Timestamps: {0}'.format(n_times))
         logger.info('  Time:       {0} - {1}'.format(
-            time.strftime("%H:%M:%S", time.gmtime(t0)), time.strftime("%H:%M:%S", time.gmtime(t1))))
+            time.strftime("%H:%M:%S", time.gmtime(t0)),
+            time.strftime("%H:%M:%S", time.gmtime(t1))))
 
         # if there are no tags, don't process this scan
         if len(target_list) > 1:
@@ -477,15 +465,15 @@ def pipeline(data, ts, parameters, solution_stores, stream_name):
             # use single solution interval
             dumps_per_solint = scan_slice.stop - scan_slice.start
             g_solint = dumps_per_solint * dump_period
-            g_soln = shared_solve(ts, parameters, solution_stores['G'],
-                                  parameters['g_bchan'], parameters['g_echan'],
-                                  s.g_sol, g_solint, g0_h, pre_apply=solns_to_apply)
+            shared_solve(ts, parameters, solution_stores['G'],
+                         parameters['g_bchan'], parameters['g_echan'],
+                         s.g_sol, g_solint, g0_h, pre_apply=solns_to_apply)
 
             # ----------------------------------------
             # KCROSS solution
             logger.info('Checking if the noise diode was fired')
             ant_names = [a.name for a in s.antennas]
-            nd_on = get_noise_diode(ts, ant_names, [t0, t1])
+            nd_on = check_noise_diode(ts, ant_names, [t0, t1])
             if any(nd_on):
                 logger.info("Noise diode was fired,"
                             " solving for KCROSS_DIODE on beamformer calibrator %s", target_name)

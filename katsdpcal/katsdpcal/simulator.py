@@ -515,12 +515,12 @@ class SimDataMS(SimData):
             positions = t.getcol('DELAY_DIR')
         with self.subtable('STATE') as t:
             intents = t.getcol('OBS_MODE')
-        antlist = self.ants
         # set up ItemGroup for transmission
         flavour = spead2.Flavour(4, 64, 48)
         ig = send.ItemGroup(flavour=flavour)
 
         self.setup_capture_block(telstate, self.to_ut(self.file.getcell('TIME', 0)))
+        telstate_cb = telstate.view(self.cbid)
 
         time_ind = 0
         # send data scan by scan
@@ -547,10 +547,8 @@ class SimDataMS(SimData):
 
             scan_time = tscan.getcell('TIME', 0)
             scan_time_ut = self.to_ut(scan_time)
-            for ant in antlist:
-                telstate.add('{0}_target'.format(ant), target_desc, ts=scan_time_ut-random()*0.1)
-                telstate.add('{0}_activity'.format(ant), scan_state, ts=scan_time_ut-random()*0.1)
             telstate.add('cbf_target', target_desc, ts=scan_time_ut-random()*0.1)
+            telstate_cb.add('obs_activity', scan_state, ts=scan_time_ut-random()*0.1)
             n_ts = len(tscan.select('unique TIME'))
             logger.info('Scan %d/%d -- timestamps: %d -- %s %s',
                         scan_ind+1, max_scans, n_ts, scan_state, target_desc)
@@ -708,18 +706,15 @@ class SimDataKatdal(SimData):
         ig = send.ItemGroup(flavour=flavour)
 
         self.setup_capture_block(telstate, self.file.timestamps[0])
+        telstate_cb = telstate.view(self.cbid)
 
         for scan_ind, scan_state, target in self.file.scans():
             # update telescope state with scan information
             #   subtract random offset to time, <= 0.1 seconds, to simulate
             #   slight differences in times of different sensors
             ts0 = self.file.timestamps[0]    # First timestamp in scan
-            for ant in self.file.ants:
-                telstate.add('{0}_target'.format(ant.name), target.description,
-                             ts=ts0-random()*0.1)
-                telstate.add('{0}_activity'.format(ant.name,), scan_state,
-                             ts=ts0-random()*0.1)
             telstate.add('cbf_target', target.description, ts=ts0 - random()*0.1)
+            telstate_cb.add('obs_activity', scan_state, ts=ts0 - random()*0.1)
             n_ts = len(self.file.timestamps)
             logger.info('Scan %d/%d -- timestamps: %d -- %s, %s',
                         scan_ind+1, max_scans, n_ts, scan_state, target.description)
