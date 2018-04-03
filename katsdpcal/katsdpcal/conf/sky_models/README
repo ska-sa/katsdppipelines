@@ -14,3 +14,7 @@ a3      Stokes I flux model coefficient a3
 fq      fractional Stokes Q
 fu      fractional Stokes U
 fv      fractional Stokes V
+
+The log convension used to express the integrated spectrum is the Baars polynomial:
+log10(S) = a + b*log10(v) + c*log10(v)**2 + d*log10(v)**3 + e*exp(f*log10(v))
+**where v is measured in GHz**, contrary to the MHz convention used in KATpoint.
