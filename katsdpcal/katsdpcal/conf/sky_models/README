@@ -16,5 +16,5 @@ fu      fractional Stokes U
 fv      fractional Stokes V
 
 The log convention used to express the integrated spectrum is the Baars polynomial:
-log10(S) = a + b*log10(v) + c*log10(v)**2 + d*log10(v)**3 + e*exp(f*log10(v))
+log10(S) = a0 + a1*log10(v) + a2*log10(v)**2 + a3*log10(v)**3
 **where v is measured in GHz**, contrary to the MHz convention used in KATpoint.
