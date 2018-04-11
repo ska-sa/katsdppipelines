@@ -25,6 +25,7 @@ from katsdptelstate import TelescopeState
 
 import katacomb
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
+                        ContinuumPipeline,
                         task_factory,
                         uv_factory,
                         uv_export,
