@@ -12,6 +12,8 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         uv_factory, uv_export,
                         uv_history_obs_description,
                         uv_history_selection)
+
+from katacomb.aips_path import next_seq_nr
 from katacomb.util import parse_python_assigns, log_exception
 
 log = logging.getLogger('katacomb')
@@ -61,6 +63,10 @@ with obit_context():
     # Construct file object
     aips_path = KA.aips_path(name=args.name, disk=args.disk,
                             aclass=args.aclass, seq=args.seq, dtype="AIPS")
+
+    # Handle invalid sequence numbers
+    if args.seq is None or args.seq < 1:
+        aips_path.seq = next_seq_nr(aips_path)
 
     # Apply the katdal selection
     KA.select(**args.select)
