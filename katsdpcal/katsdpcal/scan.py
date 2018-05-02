@@ -309,12 +309,11 @@ class Scan(object):
             fitvis, self.cross_ant.tf.auto_pol.flags[chan_slice],
             self.cross_ant.tf.auto_pol.weights[chan_slice], dumps_per_solint, times=self.timestamps)
         # secondly, average channels
-        _, flagged_weights = calprocs_dask.weight_data(ave_vis, ave_flags, ave_weights)
-        flagged_weights = da.sum(flagged_weights, axis=1)
-        ave_vis = calprocs_dask.wavg(ave_vis, ave_flags, ave_weights, axis=1)
-
+        ave_vis, ave_flags, ave_weights = calprocs_dask.wavg_full(ave_vis, ave_flags, ave_weights,
+                                                                  axis=1)
         # solve for gain
-        g_soln = calprocs.g_fit(ave_vis.compute(), flagged_weights.compute(),
+        ave_vis, ave_weights = da.compute(ave_vis, ave_weights)
+        g_soln = calprocs.g_fit(ave_vis, ave_weights,
                                 self.cross_ant.bls_lookup, g0,
                                 self.refant, **kwargs)
 
@@ -379,10 +378,14 @@ class Scan(object):
         av_vis = (weighted_data[:, 0, :] +
                   np.conjugate(weighted_data[:, 1, :]) /
                   av_weights)
+        # replace NaN'ed data caused by dividing by zero weights with a zero.
+        isnan = da.isnan(av_vis)
+        av_vis = calprocs_dask.where(isnan, av_vis.dtype.type(0), av_vis)
 
         if not auto_ant:
             av_flags = da.any(av_flags, axis=-2)
-            av_vis = calprocs_dask.wavg(av_vis, av_flags, av_weights, axis=-1)
+            av_vis, av_flags, av_weights = calprocs_dask.wavg_full(av_vis, av_flags, av_weights,
+                                                                   axis=-1)
             # add antenna axis
             av_vis = av_vis[..., np.newaxis]
 
@@ -390,10 +393,9 @@ class Scan(object):
         ave_chans = np.add.reduceat(
                 chans, range(0, len(chans), chan_ave)) / chan_ave
 
-        av_vis = av_vis.compute()
-        kcross_soln = calprocs.k_fit(av_vis, corr.bls_lookup,
-                                     ave_chans,
-                                     refant=self.refant,
+        av_vis, av_weights = da.compute(av_vis, av_weights)
+        kcross_soln = calprocs.k_fit(av_vis, av_weights,
+                                     corr.bls_lookup, ave_chans, self.refant,
                                      chan_sample=1)
         # set delay in the second polarisation axis to zero
         kcross_soln = np.vstack([kcross_soln, np.zeros_like(kcross_soln)])
@@ -437,12 +439,17 @@ class Scan(object):
         else:
             fitvis = self._get_solver_model(modvis, chan_select=chan_slice)
         # average over all time, for specified channel range (no averaging over channel)
-        ave_vis, ave_time = calprocs_dask.wavg(fitvis, self.cross_ant.tf.auto_pol.flags[chan_slice],
-                                               self.cross_ant.tf.auto_pol.weights[chan_slice],
-                                               times=self.timestamps, axis=0)
+        ave_vis, ave_flags, ave_weights = calprocs_dask.wavg_full(
+            fitvis,
+            self.cross_ant.tf.auto_pol.flags[chan_slice],
+            self.cross_ant.tf.auto_pol.weights[chan_slice])
+
+        ave_time = np.average(self.timestamps, axis=0)
         # fit for delay
-        k_soln = calprocs.k_fit(ave_vis.compute(), self.cross_ant.bls_lookup, k_freqs, self.refant,
-                                chan_sample=chan_sample)
+        ave_vis, ave_weights = da.compute(ave_vis, ave_weights)
+        k_soln = calprocs.k_fit(ave_vis, ave_weights,
+                                self.cross_ant.bls_lookup,
+                                k_freqs, self.refant, chan_sample)
 
         return CalSolution('K', k_soln, ave_time)
 
@@ -468,9 +475,11 @@ class Scan(object):
         fitvis = self._get_solver_model(modvis)
 
         # first average in time
-        ave_vis, ave_flags, ave_weights = calprocs_dask.wavg_full(fitvis,
-                                                                  self.cross_ant.tf.auto_pol.flags,
-                                                                  self.cross_ant.tf.auto_pol.weights)
+        ave_vis, ave_flags, ave_weights = calprocs_dask.wavg_full(
+            fitvis,
+            self.cross_ant.tf.auto_pol.flags,
+            self.cross_ant.tf.auto_pol.weights)
+
         ave_time = np.average(self.timestamps, axis=0)
         # solve for bandpass
         b_soln = calprocs_dask.bp_fit(ave_vis, ave_weights,

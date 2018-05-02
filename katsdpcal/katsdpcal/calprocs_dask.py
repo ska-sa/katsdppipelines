@@ -69,7 +69,7 @@ def stefcal(rawvis, num_ants, corrprod_lookup, weights=None, ref_ant=0,
                    concatenate=True, new_axes={'l': num_ants}, dtype=dtype)
 
 
-def _where(condition, x, y):
+def where(condition, x, y):
     """Reimplementation of :func:`da.where` that doesn't suffer from
     https://github.com/dask/dask/issues/2526, and is also faster. It
     may not be as fully featured, however.
@@ -87,12 +87,12 @@ def weight_data(data, flags, weights):
     flags   : array of uint8 or boolean
     weights : array of floats
     """
-    flagged_weights = _where(flags, weights.dtype.type(0), weights)
+    flagged_weights = where(flags, weights.dtype.type(0), weights)
     weighted_data = data * flagged_weights
     # Clear the elements that have a nan anywhere
     isnan = da.isnan(weighted_data)
-    weighted_data = _where(isnan, weighted_data.dtype.type(0), weighted_data)
-    flagged_weights = _where(isnan, flagged_weights.dtype.type(0), flagged_weights)
+    weighted_data = where(isnan, weighted_data.dtype.type(0), weighted_data)
+    flagged_weights = where(isnan, flagged_weights.dtype.type(0), flagged_weights)
     return weighted_data, flagged_weights
 
 
@@ -117,20 +117,22 @@ def wavg(data, flags, weights, times=False, axis=0):
     vis = da.sum(weighted_data, axis=axis) / da.sum(flagged_weights, axis=axis)
     # Zero nans caused by flagged_weights all being zero along axis
     isnan = da.isnan(vis)
-    vis = _where(isnan, vis.dtype.type(0), vis)
+    vis = where(isnan, vis.dtype.type(0), vis)
     return vis if times is False else (vis, np.average(times, axis=axis))
 
 
-def wavg_full(data, flags, weights, threshold=0.3):
+def wavg_full(data, flags, weights, axis=0, threshold=0.3):
     """
     Perform weighted average of data, flags and weights,
-    applying flags, over axis 0.
+    applying flags, over axis
 
     Parameters
     ----------
     data       : array of complex
     flags      : array of uint8 or boolean
     weights    : array of floats
+    axis       : int
+    threshold  : int
 
     Returns
     -------
@@ -139,13 +141,13 @@ def wavg_full(data, flags, weights, threshold=0.3):
     av_weights : weighted average of weights
     """
     weighted_data, flagged_weights = weight_data(data, flags, weights)
-    av_weights = da.sum(flagged_weights, axis=0)
-    av_data = da.sum(weighted_data, axis=0) / av_weights
+    av_weights = da.sum(flagged_weights, axis)
+    av_data = da.sum(weighted_data, axis) / av_weights
     # Zero nans caused by flagged_weights all being zero along axis
     isnan = da.isnan(av_data)
-    av_data = _where(isnan, av_data.dtype.type(0), av_data)
-    n_flags = da.sum(calprocs.asbool(flags), axis=0)
-    av_flags = n_flags > flags.shape[0] * threshold
+    av_data = where(isnan, av_data.dtype.type(0), av_data)
+    n_flags = da.sum(calprocs.asbool(flags), axis)
+    av_flags = n_flags > flags.shape[axis] * threshold
     return av_data, av_flags, av_weights
 
 
