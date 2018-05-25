@@ -1,4 +1,4 @@
-FROM obit/xenial:latest
+FROM sdp-docker-registry.kat.ac.za:5000/katsdpcontim
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
