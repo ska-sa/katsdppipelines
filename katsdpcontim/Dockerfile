@@ -1,25 +1,15 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base:latest
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build:latest as build
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
 USER root
 
 ENV PACKAGES \
-    software-properties-common \
-    python-software-properties \
     python-pip \
     curl \
-    vim \
     wget \
-    git \
-    cvs \
-    subversion \
-    autotools-dev \
-    automake \
     build-essential \
-    cmake \
     gfortran \
-    g++ \
     libglib2.0-dev \
     libncurses5-dev \
     libreadline-dev \
@@ -31,10 +21,7 @@ ENV PACKAGES \
     # Needs GSL 1.x but xenial has 2.x
     # Manually download and install below
     # libgsl0-dev \
-    wcslib-dev \
-    libhdf5-serial-dev \
     libfftw3-dev \
-    python-numpy \
     libmotif-dev \
     # Without libcurl Obit pretends it can't find an external xmlrpc
     libcurl4-openssl-dev \
@@ -43,20 +30,15 @@ ENV PACKAGES \
     libboost-all-dev \
     # Required by bnmin1
     swig \
-    zlib1g-dev \
-    libpython3.5-dev \
-    libpython2.7-dev \
-    python-tk
+    zlib1g-dev
 
 # Update, upgrade and install packages
 RUN apt-get update && \
-    apt-get install -y $PACKAGES && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    apt-get install -y $PACKAGES
 
-ENV KATHOME=/home/kat \
-    OBIT_BASE_PATH=/home/kat/Obit \
-    OBIT=/home/kat/Obit/ObitSystem/Obit
+ENV KATHOME=/home/kat
+ENV OBIT_BASE_PATH=/home/kat/Obit
+ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
 # Install gsl 1.16
 RUN mkdir -p $KATHOME/src && \
@@ -66,30 +48,16 @@ RUN mkdir -p $KATHOME/src && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
     make -j 8 install && \
-    rm -rf $KATHOME/src/gsl-1.16
-
-
-# Add task configuration files
-ADD katacomb/katacomb/conf /obitconf
-
-# Add OBIT setup script
-ADD setup_obit.sh /bin/setup_obit.sh
+    make DESTDIR=/installs install-strip
 
 # Add python package requirements
-ADD install-requirements.txt /tmp/install-requirements.txt
+COPY --chown=kat:kat install-requirements.txt /tmp/install-requirements.txt
 
 # Add OBIT patch
-ADD obit.patch /tmp/obit.patch
-
-# Change ownership of added files
-RUN chown -R kat:kat /tmp/obit.patch /tmp/install-requirements.txt /obitconf
+COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
 # Now downgrade to kat
 USER kat
-
-# Add obit setup to bashrc
-RUN touch $KATHOME/.bashrc && \
-    cat /bin/setup_obit.sh >> $KATHOME/.bashrc
 
 # Obit r580
 ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/e01b0edfb1cfffc420ee5ab2a9dd58f7ac0e937a
@@ -102,8 +70,7 @@ RUN mkdir -p $OBIT_BASE_PATH && \
 WORKDIR $OBIT_BASE_PATH
 
 # Apply OBIT patch
-RUN patch -p1 -N -s < /tmp/obit.patch && \
-    rm -rf /tmp/obit.patch
+RUN patch -p1 -N -s < /tmp/obit.patch
 
 # Compile Obit
 RUN cd ObitSystem/Obit && \
@@ -125,7 +92,7 @@ RUN cd ObitSystem/ObitView && \
 # and ObitView
 # This could be removed from the Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitTalk && \
-    # --with-obit doesn'tt pick up the PYTHONPATH and libObit.so correctly
+    # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
     export PYTHONPATH=$OBIT/python && \
     export LD_LIBRARY_PATH=$OBIT/lib && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
@@ -134,43 +101,83 @@ RUN cd ObitSystem/ObitTalk && \
     { make || true; }
 
 # Go back to root priviledges to install
-# ObitView and ObitTalk in the /usr filesystem
+# ObitView and ObitTalk in the /installs filesystem
 USER root
 
-# Install ObitView
+# Install ObitView. Its Makefile.in doesn't support DESTDIR, so the install is
+# done manually.
 RUN cd ObitSystem/ObitView && \
-    make install
+    mkdir -p /installs/usr/bin && \
+    install -s ObitView ObitMess /installs/usr/bin
 
 # Install ObitTalk
 RUN cd ObitSystem/ObitTalk && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
-    { make install || true; } && \
+    { make DESTDIR=/installs install || true; } && \
     # Just install ObitTalk and ObitTalkServer
     cd bin && \
     make clean && \
     make && \
-    make install
+    make DESTDIR=/installs install
 
-ADD katacomb $KATHOME/src/katacomb
-
-# Ensure everything under $KATHOME/src belongs to kat
-RUN chown -R kat:kat $KATHOME/src
+COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
 
 USER kat
 
 # Install required python packages
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt && \
-    rm -rf /tmp/install-requirements.txt
+ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt
 
 # Install katacomb
-RUN pip install -e $KATHOME/src/katacomb
+RUN pip install $KATHOME/src/katacomb
+
+#######################################################################
+
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:latest
+MAINTAINER sperkins@ska.ac.za
+
+# Switch to root for package install
+USER root
+
+ENV PACKAGES \
+    libglib2.0-0 \
+    libncurses5 \
+    libreadline6 \
+    libcurl3 \
+    libxmlrpc-core-c3 \
+    libxmlrpc-c++8v5 \
+    libxm4
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends $PACKAGES && \
+    rm -rf /var/lib/apt/lists/*
+
+# Now downgrade to kat
+USER kat
+
+# Install system packages
+COPY --from=build /installs /
+COPY --from=build --chown=kat:kat /home/kat/Obit /home/kat/Obit
+
+# Add task configuration files
+COPY --chown=kat:kat katacomb/katacomb/conf /obitconf
+
+# Install Python ve
+COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
+ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
+
+# Add OBIT setup script
+COPY setup_obit.sh /bin/setup_obit.sh
+
+# Add obit setup to bashrc
+RUN cat /bin/setup_obit.sh >> /home/kat/.bashrc
 
 # Configure Obit/AIPS disks
 RUN . /bin/setup_obit.sh && cfg_aips_disks.py
 
 # Execute test cases
-RUN . /bin/setup_obit.sh && nosetests $KATHOME/src/katacomb
+RUN . /bin/setup_obit.sh && nosetests katacomb
