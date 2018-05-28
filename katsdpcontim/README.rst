@@ -20,8 +20,9 @@ Requirements
 
 You'll need some docker infrastructure:
 
-- The ``docker-base`` docker image available in the
-  `SDP docker registry <https://github.com/ska-sa/katsdpinfrastructure/tree/master/registry#client-setup>`_. ``docker-base-gpu`` may also be useful to
+- The ``docker-base-build`` and ``docker-base-runtime`` docker images available in the
+  `SDP docker registry <https://github.com/ska-sa/katsdpinfrastructure/tree/master/registry#client-setup>`_.
+  ``docker-base-gpu-build``/``docker-base-gpu-runtime`` may also be useful to
   build Obit with GPU acceleration.
 - Docker Ubuntu `installation instructions <https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/>`_.
 - docker-compose. ``pip install docker-compose``.
@@ -36,8 +37,8 @@ for further insight.
 
 .. code-block::
 
-    # docker-compose build xenial-obit
-    # docker-compose build xenial-obit-dev
+    # docker-compose build katacomb
+    # docker-compose build katacomb-dev
 
 
 ~~~~~~~~~~~~~
@@ -81,7 +82,7 @@ Run
 
 .. code-block::
 
-    # docker-compose run --rm xenial-obit-dev
+    # docker-compose run --rm katacomb-dev
 
 Access the VNC Server
 ~~~~~~~~~~~~~~~~~~~~~
@@ -410,4 +411,4 @@ A test suite exists, but must be executed inside the container:
 
   $ nosetests /home/kat/src/katacomb
 
-.. _Phoenix: /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/09/14/1505426738.h5 
+.. _Phoenix: /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/09/14/1505426738.h5

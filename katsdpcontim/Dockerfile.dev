@@ -1,4 +1,4 @@
-FROM obit/xenial:latest
+FROM sdp-docker-registry.kat.ac.za:5000/katsdpcontim
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -8,7 +8,11 @@ ENV DEBIAN_FRONTEND noninteractive
 
 ENV PACKAGES \
     xfce4 \
-    tightvncserver
+    tightvncserver \
+    vim \
+    git \
+    cvs \
+    subversion
 
 # Update, upgrade and install packages
 RUN apt-get update && \
