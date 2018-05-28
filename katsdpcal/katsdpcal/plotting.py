@@ -3,6 +3,7 @@ import datetime
 import numpy as np
 import matplotlib.dates as md
 
+from cycler import cycler
 # use Agg backend for when the pipeline is run without an X1 connection
 from matplotlib import use
 use('Agg', warn=False)
@@ -12,189 +13,50 @@ import matplotlib.pylab as plt     # noqa: E402
 # for multiple page pdf plotting
 from matplotlib.backends.backend_pdf import PdfPages     # noqa: E402
 
-# PLOT_COLORS = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
-
 # Figure sizes
 FIG_X = 10
 FIG_Y = 4
 
+# figure colors to cycle through in plots
+colors = plt.cm.tab20.colors
+plt.rc('axes', prop_cycle=(cycler('color', colors)))
 
-def plot_data_v_chan(data, axes, plotnum=0, chans=None, ylabelplus=''):
+
+def plot_v_antenna(data, ylabel='', title=None, antenna_names=None, pol=[0, 1]):
     """
-    Plots data versus channel
+    Plots a value vs antenna
 
     Parameters
     ----------
-    data    : array of complex, shape(num_chans, num_ants)
-    plotnum : location of plot on axes
-    chans   : channel numbers, shape(num_chans)
-    ylabelplus : additional y-label text, type(string)
+    data : :class:`np.ndarray`
+        real, shape(num_pols,num_ants)
+    ylabel : str, optional
+        label for y-axis
+    title : str, optional
+        title for plot
+    antenna_names: list of str
+        antenna names for legend, optional
+    pol : list
+        list of polarisation descriptions, optional
     """
-
-    if len(axes.shape) > 1:
-        axes_ = axes[plotnum]
-    elif len(axes.shape) == 1:
-        axes_ = axes
-    # raise error here for more axes?
-
-    if not chans:
-        chans = np.arange(data.shape[-2])
-
-    # plot amplitude
-    axes_[0].plot(chans, np.abs(data), '.-')  # ,color=PLOT_COLORS[plotnum])
-    axes_[0].set_xlim([0, max(chans)])
-    axes_[0].set_ylabel('Amplitude' + ylabelplus)
-
-    # plot phase
-    axes_[1].plot(chans, 360. * np.angle(data) / (2. * np.pi), '.')
-    axes_[1].set_xlim([0, max(chans)])
-    axes_[1].set_ylabel('Phase' + ylabelplus)
-
-    axes_[1].set_xlabel('Channels')
-
-
-def plot_bp_data(data, chans=None, plotavg=False):
-    """
-    Plots bandpass data versus channel
-
-    Parameters
-    ----------
-    data    : array of complex, shape(num_times, num_chans, num_pol, num_ants)
-    chans   : channel numbers, shape(num_chans)
-    plotavg : plot additional panel of the average of data over time
-    """
-    # just label channels from zero if channel numbers not supplied
-    if not chans:
-        chans = np.arange(data.shape[-2])
-
-    if plotavg:
-        nrows, ncols = 2, 2
-    else:
-        nrows, ncols = 1, 2
-    fig, axes = plt.subplots(nrows, ncols, figsize=(2 * ncols * FIG_X, nrows * FIG_Y))
-
-    tlist = np.arange(data.shape[0])
-    for ti in tlist:
-        plot_data_v_chan(data[ti], axes, plotnum=0)
-
-    if plotavg:
-        plot_data_v_chan(np.nanmean(data, axis=0), axes, plotnum=1, ylabelplus=' (Avg)')
-
-    # debug
-    # plt.savefig('tst.png')
-
-    return fig
-
-
-def plot_bp_solns(data, chans=None):
-    """
-    Plots bandpass solutions
-
-    Parameters
-    ----------
-    data  : array of complex, shape(num_chans,num_pols,num_ants)
-    chans : channel numbers, shape(num_chans)
-    """
-    # just label channels from zero if channel numbers not supplied
-    if not chans:
-        chans = np.arange(data.shape[-2])
-
     npols = data.shape[-2]
-    nrows, ncols = npols, 2
+    nants = data.shape[-1]
+    fig, axes = plt.subplots(1, figsize=(2 * FIG_X, FIG_Y / 2.0))
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * FIG_X, nrows * FIG_Y))
     for p in range(npols):
-        plot_data_v_chan(data[:, p, :], axes, plotnum=p, ylabelplus=' - POL ' + str(p))
+        axes.plot(data[p], '.', label=pol[p])
 
-    return fig
+    axes.set_xticks(np.arange(0, nants))
+    if antenna_names is not None:
+        # right justify the antenna_names for better alignment of labels
+        labels = [a.strip().rjust(12) for a in antenna_names]
+        axes.set_xticklabels(labels, rotation='vertical')
 
-
-def plot_bp_soln_list(bplist, chans=None):
-    """
-    Plots bandpass solutions
-
-    Parameters
-    ----------
-    data  : array of complex, shape(num_chans,num_ants)
-    chans : channel numbers, shape(num_chans)
-    """
-    # just label channels from zero if channel numbers not supplied
-    if not chans:
-        chans = np.arange(bplist[0].shape[-2])
-
-    nrows, ncols = 1, 2
-    fig, axes = plt.subplots(nrows, ncols, figsize=(2 * ncols * FIG_X, nrows * FIG_Y))
-    for bp in bplist:
-        plot_data_v_chan(bp, axes, plotnum=0)
-
-    return fig
-
-
-def plot_g_solns(times, data):
-    """
-    Plots gain solutions
-
-    Parameters
-    ----------
-    data   : array of complex, shape(num_times,num_ants)
-    """
-    nrows, ncols = 1, 2
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * FIG_X, nrows * FIG_Y))
-
-    times = np.array(times) - times[0]
-    data = np.array(data)
-
-    # plot amplitude
-    axes[0].plot(times / 60., np.abs(data), '.-')
-    axes[0].set_ylabel('Amplitude')
-
-    # plot phase
-    axes[1].plot(times / 60., 360. * np.angle(data) / (2. * np.pi), '.-')
-    axes[1].set_ylabel('Phase')
-
-    axes[0].set_xlabel('Time / [min]')
-    axes[1].set_xlabel('Time / [min]')
-
-    return fig
-
-
-def plot_g_solns_with_errors(times, data, stddev):
-    """
-    Plots gain solutions and colour fill ranges for amplitude errors
-
-    Parameters
-    ----------
-    data   : array of complex, shape(num_times, num_ants)
-    stddev : array of real, shape(num_times, num_ants)
-    """
-
-    nrows, ncols = 2, 2
-    fig, axes = plt.subplots(nrows, ncols, figsize=(2.0 * ncols * FIG_X, nrows * FIG_Y))
-
-    times = np.array(times) - times[0]
-    data = np.array(data)
-
-    # plot amplitude
-    amp = np.abs(data)
-    amp_max = amp + stddev
-    amp_min = amp - stddev
-
-    axes[0, 0].plot(times / 60., amp, '.-')
-    # axes[0, 0].fill_between(times/60.,amp_min,amp_max,alpha=0.1)
-    for y in zip(amp_min.T, amp_max.T):
-        y0, y1 = y
-        axes[0, 0].fill_between(times / 60., y0, y1, alpha=0.1, color='k')
-    axes[0, 0].set_ylabel('Amplitude')
-
-    # plot phase
-    axes[0, 1].plot(times / 60., 360. * np.angle(data) / (2. * np.pi), '.-')
-    axes[0, 1].set_ylabel('Phase')
-
-    axes[0, 0].set_xlabel('Time / [min]')
-    axes[0, 1].set_xlabel('Time / [min]')
-
-    axes[1, 0].plot(times / 60., stddev, '.-')
-
+    axes.set_xlabel('Antennas')
+    axes.set_ylabel(ylabel)
+    axes.legend(bbox_to_anchor=(1.0, 1.0), loc="upper left", frameon=False)
+    if title is not None:
+        fig.suptitle(title, y=1.0)
     return fig
 
 
@@ -267,12 +129,14 @@ def flags_bl_v_chan(data, chan, uvlist, freq_range=None, pol=[0, 1]):
     nbls = data.shape[-1]
     ncols = npols
     nrows = 1
+    # scale the size of the plot by the number of bls, but have a minimum size
+    rowsize = max(1, nbls / 1000.0)
     fig, axes = plt.subplots(nrows, ncols,
-                             figsize=(ncols * FIG_X, nrows * FIG_Y),
+                             figsize=(ncols * FIG_X, rowsize * FIG_Y),
                              squeeze=False, sharey='row')
     for p in range(npols):
         im = axes[0, p].imshow(data[:, p, :].transpose(), extent=(
-            chan[0], chan[-1], 0, nbls), aspect='auto', origin='lower')
+            chan[0], chan[-1], 0, nbls), aspect='auto', origin='lower', cmap=plt.cm.jet)
         axes[0, p].set_ylabel('Pol {0} Antenna separation [m]'.format(pol[p]))
         axes[0, p].set_xlabel('Channels')
         bl_labels(axes[0, p], uvlist)
@@ -330,19 +194,24 @@ def flags_t_v_chan(data, chan, targets, freq_range=None, pol=[0, 1]):
     nscans = data.shape[0]
     ncols = npols
     nrows = 1
+    # scale the size of the plot by the number of scans but have a min and max plot size
+    rowsize = min(max(1.0, data.shape[0] / 50.0), 10.0)
+
     fig, axes = plt.subplots(nrows, ncols, figsize=(
-        ncols * FIG_X, nrows * FIG_Y), squeeze=False, sharey='row')
+        ncols * FIG_X, rowsize * FIG_Y), squeeze=False, sharey='row')
     for p in range(npols):
         im = axes[0, p].imshow(data[..., p], extent=(
-            chan[0], chan[-1], 0, nscans), aspect='auto', origin='lower')
+            chan[0], chan[-1], 0, nscans), aspect='auto', origin='lower', cmap=plt.cm.jet)
         axes[0, p].set_ylabel('Pol {0}  Scans'.format(pol[p]))
         axes[0, p].set_xlabel('Channels')
     plt.setp(axes[0, 1].get_yticklabels(), visible=False)
 
-    axes[0, 0].set_yticks(np.arange(0, len(targets)))
-    axes[0, 0].set_yticklabels(targets)
-    for label in axes[0, 0].get_yticklabels():
-        label.set_verticalalignment('baseline')
+    # major tick step
+    step = nscans / 25 + 1
+    axes[0, 0].set_yticks(np.arange(0, len(targets))[::step]+0.5)
+    axes[0, 0].set_yticks(np.arange(0, len(targets))+0.5, minor=True)
+    axes[0, 0].set_yticklabels(targets[::step])
+
     # Add colorbar
     cax = fig.add_axes([0.92, 0.12, 0.02, 0.75])
     cb = fig.colorbar(im, cax=cax)
@@ -369,7 +238,7 @@ def time_xtick_fmt(ax, timerange):
     xfmt = md.DateFormatter('%H:%M:%S')
     ax_flat = ax.flatten()
     for a in ax_flat:
-        # set axis range for plots of 1 plot, nb or it will fail
+        # set axis range for plots of 1 point, nb or it will fail
         if timerange[0] == timerange[-1]:
             low = md.date2num(timerange[0] - datetime.timedelta(seconds=10))
             high = md.date2num(timerange[-1] + datetime.timedelta(seconds=10))
@@ -377,7 +246,7 @@ def time_xtick_fmt(ax, timerange):
             plotrange = md.date2num(timerange[-1]) - md.date2num(timerange[0])
             low = md.date2num(timerange[0]) - 0.05*plotrange
             high = md.date2num(timerange[-1]) + 0.05*plotrange
-            a.set_xlim(low, high)
+        a.set_xlim(low, high)
         a.xaxis.set_major_formatter(xfmt)
 
 
@@ -469,14 +338,14 @@ def plot_corr_uvdist(uvdist, data, freqlist=None, title=None, amp=False, pol=[0,
         for i in range(times):
             # Transpose the axes to ensure that the color cycles on frequencies not on baseline
             p1 = axes[p, 0].plot(uvdist[i, :, :].transpose(),
-                                 np.absolute(data[i, :, p, :]).transpose(), '.')
+                                 np.absolute(data[i, :, p, :]).transpose(), '.', ms='3')
 
             if amp:
                 axes[p, 1].plot(uvdist[i, :, :].transpose(),
-                                np.absolute(data[i, :, p, :]).transpose(), '.')
+                                np.absolute(data[i, :, p, :]).transpose(), '.', ms='3')
             else:
                 axes[p, 1].plot(uvdist[i, :, :].transpose(),
-                                np.angle(data[i, :, p, :], deg=True).transpose(), '.')
+                                np.angle(data[i, :, p, :], deg=True).transpose(), '.', ms='3')
 
             # Reset color cycle so that channels have the same color
             axes[p, 0].set_prop_cycle(None)
@@ -489,6 +358,7 @@ def plot_corr_uvdist(uvdist, data, freqlist=None, title=None, amp=False, pol=[0,
             axes[p, 1].set_ylim(low_ylim, upper_ylim)
         else:
             axes[p, 1].set_ylabel('Phase Pol_{0}'.format(pol[p]))
+            axes[p, 1].set_ylim(-180, 180)
         plt.setp(axes[p, 0].get_xticklabels(), visible=False)
         plt.setp(axes[p, 1].get_xticklabels(), visible=False)
 
@@ -502,7 +372,7 @@ def plot_corr_uvdist(uvdist, data, freqlist=None, title=None, amp=False, pol=[0,
     if freqlist is not None:
         freqlabel = ['{0} MHz'.format(int(i / 1e6)) for i in freqlist]
         axes[0, 1].legend(p1, freqlabel, bbox_to_anchor=(1.0, 1.0),
-                          loc="upper left", frameon=False)
+                          loc="upper left", frameon=False, markerscale=2)
     fig.subplots_adjust(hspace=0.1)
     return fig
 
@@ -571,13 +441,14 @@ def plot_phaseonly_spec(data, chan, antenna_names=None, freq_range=None, title=N
 
     for p in range(npols):
         # plot full range amplitude plots
-        p1 = axes[0, p].plot(chan, np.angle(data[..., p, :], deg=True), '.')
+        p1 = axes[0, p].plot(chan, np.angle(data[..., p, :], deg=True), '.', ms=1)
+        axes[0, p].set_ylim(-180, 180)
         axes[0, p].set_ylabel('Phase Pol_{0}'.format(pol[p]))
         axes[0, p].set_xlabel('Channels')
 
     if antenna_names is not None:
         axes[0, 1].legend(p1, antenna_names, bbox_to_anchor=(1.0, 1.0),
-                          loc="upper left", frameon=False)
+                          loc="upper left", frameon=False, markerscale=5)
 
     # If frequency range supplied, plot a frequency axis for the top row
     if freq_range is not None:
@@ -617,17 +488,18 @@ def plot_spec(data, chan, antenna_names=None, freq_range=None, title=None, amp=F
 
     for p in range(npols):
         # plot full range amplitude plots
-        p1 = axes[p, 0].plot(chan, np.absolute(data[..., p, :]), '.')
+        p1 = axes[p, 0].plot(chan, np.absolute(data[..., p, :]), '.', ms=1)
         axes[p, 0].set_ylabel('Amplitude Pol_{0}'.format(pol[p]))
         plt.setp(axes[p, 0].get_xticklabels(), visible=False)
         if amp:
             # plot limited range amplitude plots
             axes[p, 1].plot(chan, np.absolute(data[..., p, :]), '.')
-            axes[p, 1].set_ylabel('Zoom Amplitude Pol_{0}'.format(pol[p]))
+            axes[p, 1].set_ylabel('Zoom Amplitude Pol_{0}'.format(pol[p]), ms=1)
         else:
             # plot phase plots
             axes[p, 1].set_ylabel('Phase Pol_{0}'.format(pol[p]))
-            axes[p, 1].plot(chan, np.angle(data[..., p, :], deg=True), '.')
+            axes[p, 1].plot(chan, np.angle(data[..., p, :], deg=True), '.', ms=1)
+            axes[p, 1].set_ylim(-180, 180)
         plt.setp(axes[p, 1].get_xticklabels(), visible=False)
 
     # set range limit
@@ -644,7 +516,7 @@ def plot_spec(data, chan, antenna_names=None, freq_range=None, title=None, amp=F
 
     if antenna_names is not None:
         axes[0, 1].legend(p1, antenna_names, bbox_to_anchor=(1.0, 1.0),
-                          loc="upper left", frameon=False)
+                          loc="upper left", frameon=False, markerscale=5)
 
     # If frequency range supplied, plot a frequency axis for the top row
     if freq_range is not None:
@@ -749,6 +621,7 @@ def plot_corr_v_time(times, data, plottype='p', antenna_names=None, title=None, 
             else:
                 p1 = axes[p, 0].plot(dates, np.angle(data_pol[:, chan, :], deg=True), '.')
                 axes[p, 0].set_ylabel('Phase Pol_{0}'.format(pol[p]))
+                axes[p, 0].set_ylim(-180, 180)
 
             # Reset the colour cycle, so that all channels have the same plot color
             axes[p, 0].set_prop_cycle(None)
@@ -765,103 +638,3 @@ def plot_corr_v_time(times, data, plottype='p', antenna_names=None, title=None, 
 
     fig.subplots_adjust(hspace=0.1)
     return fig
-
-
-def plot_waterfall(visdata, contrast=0.01, flags=None, channel_freqs=None, dump_timestamps=None):
-    """
-    Make a waterfall plot from visdata- with an option to plot flags
-    and show the frequency axis in MHz and dump in utc seconds if provided.
-
-    Parameters
-    ----------
-    visdata         : array (ntimestamps,nchannels) of floats (amp or phase).
-    contrast        : percentage of maximum and minimum data values to remove from lookup table
-    flags           : array of boolean with same shape as visdata
-    channel_freqs   : array (nchannels) of frequencies represented by each channel
-    dump_timestamps : array (ntimestamps) of timestamps represented by each dump
-    """
-
-    fig = plt.figure(figsize=(0.8 * FIG_X, 2 * FIG_Y))
-    kwargs = {'aspect': 'auto', 'origin': 'lower', 'interpolation': 'none'}
-    # Defaults
-    kwargs['extent'] = [-0.5, visdata.shape[1] - 0.5, -0.5, visdata.shape[0] - 0.5]
-    plt.xlabel('Channel number')
-    plt.ylabel('Dump number')
-    # Change defaults if frequencies or times specified.
-    if channel_freqs is not None:
-        kwargs['extent'][0], kwargs['extent'][1] = channel_freqs[0], channel_freqs[-1]
-        # reverse the data if the frequencies are in descending order
-        if channel_freqs[1] - channel_freqs[0] < 0:
-            visdata = visdata[:, ::-1]
-            kwargs['extent'][0] = channel_freqs[-1] / 1e6
-            kwargs['extent'][1] = channel_freqs[0] / 1e6
-            plt.xlabel('Frequency (MHz)')
-    if dump_timestamps is not None:
-        kwargs['extent'][2], kwargs['extent'][3] = 0, dump_timestamps[-1] - dump_timestamps[0]
-        plt.ylabel('Time (UTC seconds)')
-    image = plt.imshow(visdata, **kwargs)
-    image.set_cmap('Greys')
-    # Make an array of RGBA data for the flags (initialize to alpha=0)
-    if flags:
-        plotflags = np.zeros(flags.shape[0:2] + (4,))
-        plotflags[:, :, 0] = 1.0
-        plotflags[:, :, 3] = flags[:, :, 0]
-        plt.imshow(plotflags, **kwargs)
-
-    ampsort = np.sort(visdata, axis=None)
-    arrayremove = int(len(ampsort) * contrast)
-    lowcut, highcut = ampsort[arrayremove], ampsort[-(arrayremove + 1)]
-    image.norm.vmin = lowcut
-    image.norm.vmax = highcut
-    plt.show()
-    plt.close(fig)
-
-
-def plot_RFI_mask(pltobj, extra=None, channelwidth=1e6):
-    """
-    Plot the frequencies of know rfi satellites on a spectrum
-
-    Parameters
-    ----------
-    plotobj       : the matplotlib plot object to plot the RFI onto
-    extra         : the locations of extra masks to plot
-    channelwidth  : the width of the mask per channel
-    """
-
-    pltobj.axvspan(1674e6, 1677e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1667e6, 1667e6, alpha=0.3, color='grey')  # Fengun
-    pltobj.axvspan(1682e6, 1682e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1685e6, 1687e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1687e6, 1687e6, alpha=0.3, color='grey')  # Fengun
-    pltobj.axvspan(1690e6, 1690e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1699e6, 1699e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1702e6, 1702e6, alpha=0.3, color='grey')  # Fengyun
-    pltobj.axvspan(1705e6, 1706e6, alpha=0.3, color='grey')  # Meteosat
-    pltobj.axvspan(1709e6, 1709e6, alpha=0.3, color='grey')  # Fengun
-    pltobj.axvspan(1501e6, 1570e6, alpha=0.3, color='blue')  # Inmarsat
-    pltobj.axvspan(1496e6, 1585e6, alpha=0.3, color='blue')  # Inmarsat
-    pltobj.axvspan(1574e6, 1576e6, alpha=0.3, color='blue')  # Inmarsat
-    pltobj.axvspan(1509e6, 1572e6, alpha=0.3, color='blue')  # Inmarsat
-    pltobj.axvspan(1574e6, 1575e6, alpha=0.3, color='blue')  # Inmarsat
-    pltobj.axvspan(1512e6, 1570e6, alpha=0.3, color='blue')  # Thuraya
-    pltobj.axvspan(1450e6, 1498e6, alpha=0.3, color='red')  # Afristar
-    pltobj.axvspan(1652e6, 1694e6, alpha=0.2, color='red')  # Afristar
-    pltobj.axvspan(1542e6, 1543e6, alpha=0.3, color='cyan')  # Express AM1
-    pltobj.axvspan(1554e6, 1554e6, alpha=0.3, color='cyan')  # Express AM 44
-    pltobj.axvspan(1190e6, 1215e6, alpha=0.3, color='green')  # Galileo
-    pltobj.axvspan(1260e6, 1300e6, alpha=0.3, color='green')  # Galileo
-    pltobj.axvspan(1559e6, 1591e6, alpha=0.3, color='green')  # Galileo
-    pltobj.axvspan(1544e6, 1545e6, alpha=0.3, color='green')  # Galileo
-    pltobj.axvspan(1190e6, 1217e6, alpha=0.3, color='green')  # Beidou
-    pltobj.axvspan(1258e6, 1278e6, alpha=0.3, color='green')  # Beidou
-    pltobj.axvspan(1559e6, 1563e6, alpha=0.3, color='green')  # Beidou
-    pltobj.axvspan(1555e6, 1596e6, alpha=0.3, color='green')  # GPS L1  1555 -> 1596
-    pltobj.axvspan(1207e6, 1238e6, alpha=0.3, color='green')  # GPS L2  1207 -> 1188
-    pltobj.axvspan(1378e6, 1384e6, alpha=0.3, color='green')  # GPS L3
-    pltobj.axvspan(1588e6, 1615e6, alpha=0.3, color='green')  # GLONASS  1588 -> 1615 L1
-    pltobj.axvspan(1232e6, 1259e6, alpha=0.3, color='green')  # GLONASS  1232 -> 1259 L2
-    pltobj.axvspan(1616e6, 1630e6, alpha=0.3, color='grey')  # IRIDIUM
-    if extra is not None:
-        for i in xrange(extra.shape[0]):
-            pltobj.axvspan(extra[i] - channelwidth / 2, extra[i] + channelwidth / 2,
-                           alpha=0.7, color='Maroon')
