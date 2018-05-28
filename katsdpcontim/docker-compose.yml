@@ -1,28 +1,28 @@
 version: "2.0"
 services:
-  xenial-obit:
+  katacomb:
     build:
       context: .
       dockerfile: Dockerfile
 
-    container_name: xenial-obit
-    image: obit/xenial:latest
+    container_name: katacomb
+    image: sdp-docker-registry.kat.ac.za:5000/katsdpcontim
     network_mode: host
     restart: "no"
-    hostname: xenial-obit
+    hostname: katacomb
     volumes:
       - /var/kat/archive2:/var/kat/archive2:ro
 
-  xenial-obit-dev:
+  katacomb-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
 
-    container_name: xenial-obit-dev
-    image: obit/xenial:dev
+    container_name: katacomb-dev
+    image: sdp-docker-registry.kat.ac.za:5000/katsdpcontim-dev
     network_mode: host
     restart: "no"
-    hostname: xenial-obit-dev
+    hostname: katacomb-dev
     environment:
       - DISPLAY
       - QT_X11_NO_MITSHM=1
