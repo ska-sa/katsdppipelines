@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Basic version of the continuum imaging pipeline.
 
