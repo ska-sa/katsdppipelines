@@ -20,7 +20,7 @@ import scipy.interpolate
 import numpy as np
 import astropy.units as units
 from . import polarization
-from six.moves import range
+from six.moves import range, urllib
 
 
 _logger = logging.getLogger(__name__)
@@ -343,7 +343,16 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
 
     @classmethod
     def match(cls, filename):
-        return filename.lower().endswith('.h5')
+        if filename.lower().endswith('.h5') or filename.lower().endswith('.rdb'):
+            return True
+        # katdal also supports URLs with query parameters, in which case the
+        # URL string won't end with .rdb.
+        try:
+            url = urllib.parse.urlsplit(filename)
+            return url.path.endswith('.rdb')
+        except ValueError:
+            # Invalid URL, but could still be valid for another loader
+            return False
 
     def antenna_diameters(self):
         diameters = [ant.diameter for ant in self._file.ants]
@@ -375,16 +384,16 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
     def has_feed_angles(self):
         return True
 
-    def data_iter(self, start_channel, stop_channel, max_chunk_vis=None, max_load_vis=None):
+    def data_iter(self, start_channel, stop_channel, max_chunk_vis=None):
         n_file_times, n_file_chans, n_file_cp = self._file.shape
         assert 0 <= start_channel < stop_channel <= n_file_chans
         n_chans = stop_channel - start_channel
         n_pols = len(self._polarizations)
         n_ants = len(self._file.ants)
-        if max_load_vis is None:
+        if max_chunk_vis is None:
             load_times = n_file_times
         else:
-            load_times = max(1, max_load_vis // (n_chans * n_file_cp))
+            load_times = max(1, max_chunk_vis // (n_chans * n_file_cp))
         # timestamps is a property, so ensure it's only evaluated once
         timestamps = self._file.timestamps
         antenna_uvw = [None] * n_ants
