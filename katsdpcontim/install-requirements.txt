@@ -31,6 +31,7 @@ ruamel.yaml == 0.15.35
 ruamel.ordereddict == 0.4.13
 six
 toolz
+webencodings == 0.5.1
 git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
 git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
 git+ssh://git@github.com/ska-sa/katdal@master#egg=katdal
