@@ -32,10 +32,14 @@ def post_process_args(args, kat_adapter):
     """
     # Set capture block ID to experiment ID if not set
     if args.capture_block_id is None:
-        args.capture_block_id = kat_adapter.experiment_id
+        file_cb_id = kat_adapter.obs_params.get('capture_block_id')
+        if file_cb_id is None:
+            args.capture_block_id = kat_adapter.experiment_id
 
-        log.warn("No capture block ID was specified. "
-                "Using experiment_id '%s' instead.", kat_adapter.experiment_id)
+            log.warn("No capture block ID was specified. "
+                    "Using experiment_id '%s' instead.", kat_adapter.experiment_id)
+        else:
+            args.capture_block_id = file_cb_id
 
     return args
 
