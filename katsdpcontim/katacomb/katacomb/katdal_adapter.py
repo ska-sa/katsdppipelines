@@ -468,9 +468,10 @@ class KatdalAdapter(object):
         dtype = kwargs.get('dtype', "AIPS")
 
         if name is None:
-            path, file = os.path.split(self.katdal.name)
-            name, ext = os.path.splitext(file)
-
+            name = self._katds.obs_params.get('capture_block_id',
+                                             self._katds.experiment_id)
+            if dtype == 'AIPS':
+                name = name[-10:]
             if dtype == "FITS":
                 name += '.uvfits'
 
