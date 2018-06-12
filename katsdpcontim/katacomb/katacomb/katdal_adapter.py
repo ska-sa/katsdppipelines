@@ -511,7 +511,7 @@ class KatdalAdapter(object):
     @property
     def name(self):
         """ Proxies :attr:`katdal.DataSet.name` """
-        return self._katds.name
+        return self._katds.name.encode()
 
     @property
     def experiment_id(self):
