@@ -15,6 +15,7 @@ from katacomb import AIPSPath
 log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
+MAX_AIPS_PATH_LEN = 10
 
 def aips_timestamps(timestamps, midnight):
     """
@@ -471,7 +472,7 @@ class KatdalAdapter(object):
             name = self._katds.obs_params.get('capture_block_id',
                                              self._katds.experiment_id)
             if dtype == 'AIPS':
-                name = name[-10:]
+                name = name[-MAX_AIPS_PATH_LEN:]
             if dtype == "FITS":
                 name += '.uvfits'
 
