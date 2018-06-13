@@ -1,11 +1,18 @@
 attrs == 17.4.0
 astropy == 2.0.3
+beautifulsoup4 == 4.6.0
+botocore == 1.10.16
+bs4 == 0.0.1
 cerberus == 1.1
+dask
+docutils
 fakeredis
 funcsigs == 0.4
 future
-ipaddress
 h5py
+html5lib == 1.0.1
+ipaddress
+jmespath == 0.9.3
 katversion
 netifaces
 nose
@@ -15,10 +22,17 @@ pretty == 0.1
 py == 1.5.2
 pyephem
 pytest == 3.3.2
+python-dateutil
+python-lzf
+rdbtools
 redis
+requests
 ruamel.yaml == 0.15.35
 ruamel.ordereddict == 0.4.13
 six
+toolz
+webencodings == 0.5.1
+git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
 git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
-git+ssh://git@github.com/ska-sa/katdal@258629e95cf46d41840fbfc62b16d86345894018#egg=katdal
+git+ssh://git@github.com/ska-sa/katdal@master#egg=katdal
 git+ssh://git@github.com/ska-sa/katsdptelstate@master#egg=katsdptelstate
