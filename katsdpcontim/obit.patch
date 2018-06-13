@@ -245,11 +245,11 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  # Turn off memory usage checking
 -CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM 
 +# Add AVX instructions
-+CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -mavx -mavx2
++CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -mavx
  LDFLAGS = @LDFLAGS@
  LIBS = @LIBS@
 -DEFS = @DEFS@
-+DEFS = @DEFS@ -DHAVE_AVX=1 -DHAVE_AVX2=1
++DEFS = @DEFS@ -DHAVE_AVX=1
  
  ALL_CPPFLAGS = $(CPPFLAGS) -I$(top_srcdir)/include $(DEFS) \
 -	@CFITSIO_CPPFLAGS@ @FFTW_CPPFLAGS@ @FFTW3_CPPFLAGS@ @XMLRPC_SERVER_CPPFLAGS@ 
