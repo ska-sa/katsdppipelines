@@ -631,6 +631,13 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         av_flags = s.cross_ant.tf.auto_pol.flags
         av_weights = s.cross_ant.tf.auto_pol.weights
 
+        myvis = av_vis.compute()
+        f = open('{0}-fullVis.npy'.format(s.timestamps[0]),'w')
+        np.save(f,myvis)
+        myweights = av_weights.compute()
+        f = open('{0}-fullVis.npy'.format(s.timestamps[0]),'w')
+        np.save(f,myweights)
+
         logger.info('Averaging corrected data for {0} {1}:'.format(target_type, target_name,))
         if av_vis.shape[1] > 1024:
             av_vis, av_flags, av_weights = calprocs_dask.wavg_full_f(av_vis,
