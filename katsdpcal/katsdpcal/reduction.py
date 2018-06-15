@@ -16,7 +16,7 @@ from .scan import Scan
 from . import lsm_dir
 
 logger = logging.getLogger(__name__)
-
+#jordan was here!
 
 def init_flagger(parameters, dump_period):
     """Set up SumThresholdFlagger objects for targets
