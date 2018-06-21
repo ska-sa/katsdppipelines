@@ -4,7 +4,7 @@ r"""Convolutional gridding with W projection.
 
 Gridding
 --------
-The GPU approach is based on [Rom12_]. Each workgroup (thread block) handles a
+The GPU approach is based on [Rom12]_. Each workgroup (thread block) handles a
 contiguous range of visibilities, with the threads cooperating to grid each
 visibility.  The grid is divided into *bins*. The size of a bin is the size of
 the convolution kernel, plus some padding. These bins are further divided into
@@ -86,7 +86,7 @@ Weights
 There are two sources of weighting: statistical weights and imaging weights
 (the latter combining density and taper weights) [Bri95]_. The statistical
 weights are pre-multiplied into the visibilities before gridding (see
-:py:mod`preprocess`), and are handled outside this module for degridding. The
+:py:mod:`.preprocess`), and are handled outside this module for degridding. The
 imaging weights are stored in a grid and multiplied by the visibilities as
 they are loaded, and have no effect on degridding.
 
@@ -118,15 +118,18 @@ devices, and even then may limit the block size.
 """
 
 from __future__ import division, print_function, absolute_import
-import numpy as np
 import math
+import logging
+
+from six.moves import range
+import numpy as np
 import pkg_resources
+
 import katsdpsigproc.accel as accel
 import katsdpsigproc.tune as tune
 import katsdpimager.types
-from katsdpimager import numba
-import logging
-from six.moves import range
+
+from . import numba
 
 
 logger = logging.getLogger(__name__)
@@ -635,64 +638,36 @@ class GridderTemplate(object):
         return Gridder(self, *args, **kwargs)
 
 
-class GridDegrid(accel.Operation):
-    """Base class for :class:`Gridder` and :class:`Degridder`.
+class VisOperation(accel.Operation):
+    """Base for operation classes that store visibility data in GPU buffers.
 
     .. rubric:: Slots
 
-    **grid** : array of pols × height × width, complex
-        Grid (output for :class:`Gridder`, input for :class:`Degridder`)
-    **weights_grid** : array of pols × height × width, float32
-        Grid of density weights (input for :class:`Gridder`, absent for :class:`Degridder`)
     **uv** : array of int16×4
         The first two elements for each visibility are the
         UV coordinates of the first grid cell to be updated. The other two are
         the subpixel U and V coordinates.
     **w_plane** : array of int16
         W plane index per visibility, clamped to the range of allocated w planes
-    **weights** : array of float32 × pols
-        Statistical weights for visibilities.
     **vis** : array of complex64 × pols
         Visibilities, which are pre-multiplied by statistical weights. For
-        gridding this are inputs.  For degridding these are visibilities on
+        imaging these are inputs.  For prediction these are visibilities on
         input and residual visibilities on output.
 
     Parameters
     ----------
-    template : :class:`GridderTemplate` or :class:`DegridderTemplate`
-        Operation template
     command_queue : |CommandQueue|
         Command queue for the operation
-    array_parameters : :class:`~katsdpimager.parameters.ArrayParameters`
-        Array parameters
+    num_polarizations : int
+        Size of vis buffer on polarization dimnsion
     max_vis : int
         Number of visibilities that can be supported per kernel invocation
     allocator : :class:`DeviceAllocator` or :class:`SVMAllocator`, optional
         Allocator used to allocate unbound slots
-
-    Raises
-    ------
-    ValueError
-        If the longest baseline is too large to find within the grid
     """
-    def __init__(self, template, command_queue, array_parameters,
-                 max_vis, allocator=None):
-        super(GridDegrid, self).__init__(command_queue, allocator)
-        # Check that longest baseline won't cause an out-of-bounds access
-        max_uv_src = float(array_parameters.longest_baseline / template.image_parameters.cell_size)
-        convolve_kernel_size = template.convolve_kernel.padded_data.shape[-1]
-        # I don't think the + 1 is actually needed, but it's a safety factor in
-        # case I've made an off-by-one error in the maths.
-        grid_pixels = 2 * (int(max_uv_src) + convolve_kernel_size // 2 + 1)
-        if grid_pixels > template.image_parameters.pixels:
-            raise ValueError('image_oversample is too small '
-                             'to capture all visibilities in the UV plane')
-        self.template = template
+    def __init__(self, command_queue, num_polarizations, max_vis, allocator=None):
+        super(VisOperation, self).__init__(command_queue, allocator)
         self.max_vis = max_vis
-        num_polarizations = len(template.image_parameters.polarizations)
-        self.slots['grid'] = accel.IOSlot(
-            (num_polarizations, grid_pixels, grid_pixels),
-            template.image_parameters.complex_dtype)
         self.slots['uv'] = accel.IOSlot(
             (max_vis, accel.Dimension(4, exact=True)), np.int16)
         self.slots['w_plane'] = accel.IOSlot((max_vis,), np.int16)
@@ -733,6 +708,57 @@ class GridDegrid(accel.Operation):
         if len(vis) != N:
             raise ValueError('Lengths do not match')
         self.buffer('vis')[:N] = vis
+
+
+class GridDegrid(VisOperation):
+    """Base class for :class:`Gridder` and :class:`Degridder`.
+
+    .. rubric:: Slots
+
+    In addition to those in :class:`VisOperation`:
+
+    **grid** : array of pols × height × width, complex
+        Grid (output for :class:`Gridder`, input for :class:`Degridder`)
+    **weights_grid** : array of pols × height × width, float32
+        Grid of density weights (input for :class:`Gridder`, absent for :class:`Degridder`)
+    **weights** : array of float32 × pols
+        Statistical weights for visibilities (:class:`Degridder` only).
+
+    Parameters
+    ----------
+    template : :class:`GridderTemplate` or :class:`DegridderTemplate`
+        Operation template
+    command_queue : |CommandQueue|
+        Command queue for the operation
+    array_parameters : :class:`~katsdpimager.parameters.ArrayParameters`
+        Array parameters
+    max_vis : int
+        Number of visibilities that can be supported per kernel invocation
+    allocator : :class:`DeviceAllocator` or :class:`SVMAllocator`, optional
+        Allocator used to allocate unbound slots
+
+    Raises
+    ------
+    ValueError
+        If the longest baseline is too large to find within the grid
+    """
+    def __init__(self, template, command_queue, array_parameters,
+                 max_vis, allocator=None):
+        num_polarizations = len(template.image_parameters.polarizations)
+        super(GridDegrid, self).__init__(command_queue, num_polarizations, max_vis, allocator)
+        # Check that longest baseline won't cause an out-of-bounds access
+        max_uv_src = float(array_parameters.longest_baseline / template.image_parameters.cell_size)
+        convolve_kernel_size = template.convolve_kernel.padded_data.shape[-1]
+        # I don't think the + 1 is actually needed, but it's a safety factor in
+        # case I've made an off-by-one error in the maths.
+        grid_pixels = 2 * (int(max_uv_src) + convolve_kernel_size // 2 + 1)
+        if grid_pixels > template.image_parameters.pixels:
+            raise ValueError('image_oversample is too small '
+                             'to capture all visibilities in the UV plane')
+        self.template = template
+        self.slots['grid'] = accel.IOSlot(
+            (num_polarizations, grid_pixels, grid_pixels),
+            template.image_parameters.complex_dtype)
 
     def parameters(self):
         return {
@@ -943,13 +969,6 @@ class DegridderTemplate(object):
 class Degridder(GridDegrid):
     """Instantiation of :class:`DegridderTemplate`. See :class:`GridDegrid` for
     details.
-
-    .. rubric:: Slots
-
-    In addition to those documented in :class:`GridDegrid`:
-
-    **weights** : array of float32 × pols
-        Gridding weights
     """
 
     def __init__(self, *args, **kwargs):
@@ -1039,15 +1058,9 @@ def _grid(kernel, grid, weights_grid, uv, sub_uv, w_plane, vis, sample):
                     grid[pol, int(v0 + j), int(u0 + k)] += sample[pol] * weight
 
 
-class GridDegridHost(object):
-    """Common code shared by :class:`GridderHost` and :class:`DegridderHost`."""
-    def __init__(self, image_parameters, grid_parameters):
-        self.image_parameters = image_parameters
-        self.grid_parameters = grid_parameters
-        self.kernel = ConvolutionKernel(image_parameters, grid_parameters)
-        pixels = image_parameters.pixels
-        shape = (len(image_parameters.polarizations), pixels, pixels)
-        self.values = np.empty(shape, image_parameters.complex_dtype)
+class VisOperationHost(object):
+    """Equivalent to :class:`VisOperation` on the host."""
+    def __init__(self):
         self._num_vis = 0
         self.uv = None
         self.sub_uv = None
@@ -1097,6 +1110,18 @@ class GridDegridHost(object):
         self.vis = vis
 
 
+class GridDegridHost(VisOperationHost):
+    """Common code shared by :class:`GridderHost` and :class:`DegridderHost`."""
+    def __init__(self, image_parameters, grid_parameters):
+        super(GridDegridHost, self).__init__()
+        self.image_parameters = image_parameters
+        self.grid_parameters = grid_parameters
+        self.kernel = ConvolutionKernel(image_parameters, grid_parameters)
+        pixels = image_parameters.pixels
+        shape = (len(image_parameters.polarizations), pixels, pixels)
+        self.values = np.empty(shape, image_parameters.complex_dtype)
+
+
 class GridderHost(GridDegridHost):
     def __init__(self, image_parameters, grid_parameters):
         super(GridderHost, self).__init__(image_parameters, grid_parameters)
@@ -1140,9 +1165,9 @@ class DegridderHost(GridDegridHost):
         super(DegridderHost, self).__init__(image_parameters, grid_parameters)
         self.weights = None
 
-    @GridDegridHost.num_vis.setter
+    @VisOperationHost.num_vis.setter
     def num_vis(self, value):
-        GridDegridHost.num_vis.fset(self, value)
+        VisOperationHost.num_vis.fset(self, value)
         self.weights = None
 
     def set_weights(self, weights):

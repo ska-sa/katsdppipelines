@@ -11,7 +11,8 @@ import atexit
 import os
 import katsdpsigproc.accel as accel
 from katsdpimager import \
-    loader, parameters, polarization, preprocess, io, clean, weight, imaging, progress, beam, numba
+    loader, parameters, polarization, preprocess, io, clean, weight, sky_model, \
+    imaging, progress, beam, numba
 from contextlib import closing, contextmanager
 from six.moves import range
 
@@ -62,6 +63,7 @@ def get_parser():
                         help='Output FITS file')
     parser.add_argument('--log-level', type=str, default='INFO', metavar='LEVEL',
                         help='Logging level [%(default)s]')
+
     group = parser.add_argument_group('Input selection')
     group.add_argument('--input-option', '-i', action='append', default=[], metavar='KEY=VALUE',
                        help='Backend-specific input parsing option')
@@ -69,6 +71,9 @@ def get_parser():
                        help='Index of first channel to process [%(default)s]')
     group.add_argument('--stop-channel', '-C', type=int,
                        help='Index past last channel to process [#channels]')
+    group.add_argument('--subtract', metavar='TYPE:FILENAME',
+                       help='File with sources to subtract at the start')
+
     group = parser.add_argument_group('Image options')
     group.add_argument('--q-fov', type=float, default=1.0,
                        help='Field of view to image, relative to main lobe of beam [%(default)s]')
@@ -82,12 +87,14 @@ def get_parser():
                        help='Stokes parameters to image e.g. IQUV for full-Stokes [%(default)s]')
     group.add_argument('--precision', choices=['single', 'double'], default='single',
                        help='Internal floating-point precision [%(default)s]')
+
     group = parser.add_argument_group('Weighting options')
     group.add_argument('--weight-type', choices=['natural', 'uniform', 'robust'],
                        default='natural',
                        help='Imaging density weights [%(default)s]')
     group.add_argument('--robustness', type=float, default=0.0,
                        help='Robustness parameter for --weight-type=robust [%(default)s]')
+
     group = parser.add_argument_group('Gridding options')
     group.add_argument('--grid-oversample', type=int, default=8,
                        help='Oversampling factor for convolution kernels [%(default)s]')
@@ -104,10 +111,11 @@ def get_parser():
                        help='Support of anti-aliasing kernel [%(default)s]')
     group.add_argument('--kernel-width', type=int, default=60,
                        help='Support of combined anti-aliasing + w kernel [computed]')
-    group.add_argument('--eps-w', type=float, default=0.01,
+    group.add_argument('--eps-w', type=float, default=0.001,
                        help='Level at which to truncate W kernel [%(default)s]')
+
     group = parser.add_argument_group('Cleaning options')
-    group.add_argument('--psf-cutoff', type=float, default=0.05,
+    group.add_argument('--psf-cutoff', type=float, default=0.01,
                        help='fraction of PSF peak at which to truncate PSF [%(default)s]')
     group.add_argument('--loop-gain', type=float, default=0.1,
                        help='Loop gain for cleaning [%(default)s]')
@@ -123,6 +131,7 @@ def get_parser():
                        help='CLEAN border as a fraction of image size [%(default)s]')
     group.add_argument('--clean-mode', choices=['I', 'IQUV'], default='IQUV',
                        help='Stokes parameters to consider for peak-finding [%(default)s]')
+
     group = parser.add_argument_group('Performance tuning options')
     group.add_argument('--vis-block', type=int, default=1048576,
                        help='Number of visibilities to load and grid at a time [%(default)s]')
@@ -135,6 +144,7 @@ def get_parser():
                        help='Keep preprocessed visibilities in memory')
     group.add_argument('--max-cache-size', type=int, default=None,
                        help='Limit HDF5 cache size for preprocessing')
+
     group = parser.add_argument_group('Debugging options')
     group.add_argument('--host', action='store_true',
                        help='Perform operations on the CPU')
@@ -164,9 +174,12 @@ def data_iter(dataset, args, start_channel, stop_channel):
     for chunk in dataset.data_iter(start_channel, stop_channel, args.vis_load):
         if N is not None:
             if N < len(chunk['uvw']):
-                for key in ['uvw', 'weights', 'baselines', 'vis']:
+                for key in ['uvw', 'baselines']:
                     if key in chunk:
                         chunk[key] = chunk[key][:N]
+                for key in ['weights', 'vis']:
+                    if key in chunk:
+                        chunk[key] = chunk[key][:, :N]
                 chunk['progress'] = chunk['total']
         yield chunk
         if N is not None:
@@ -238,7 +251,8 @@ def make_weights(queue, reader, rel_channel, imager, weight_type, vis_block):
     logger.info('Normalized thermal RMS: %g', normalized_rms)
 
 
-def make_dirty(queue, reader, rel_channel, name, field, imager, mid_w, vis_block, full_cycle=False):
+def make_dirty(queue, reader, rel_channel, name, field, imager, mid_w, vis_block,
+               full_cycle=False, subtract_model=None):
     imager.clear_dirty()
     queue.finish()
     for w_slice in range(reader.num_w_slices(rel_channel)):
@@ -258,8 +272,11 @@ def make_dirty(queue, reader, rel_channel, name, field, imager, mid_w, vis_block
                 imager.num_vis = len(chunk.uv)
                 imager.set_coordinates(chunk.uv, chunk.sub_uv, chunk.w_plane)
                 imager.set_vis(chunk[field])
+                if full_cycle or subtract_model:
+                    imager.set_weights(chunk.weights)
+                if subtract_model:
+                    imager.predict(mid_w[w_slice])
                 if full_cycle:
-                    imager.set_degridder_weights(chunk.weights)
                     imager.degrid()
                 imager.grid()
                 # Need to serialise calls to grid, since otherwise the next
@@ -408,7 +425,8 @@ class ChannelParameters(object):
 
 
 def process_channel(dataset, args, start_channel,
-                    context, queue, reader, channel_p, array_p, weight_p):
+                    context, queue, reader, channel_p, array_p, weight_p,
+                    subtract_model):
     channel = channel_p.channel
     rel_channel = channel - start_channel
     image_p = channel_p.image_p
@@ -422,12 +440,14 @@ def process_channel(dataset, args, start_channel,
         allocator = accel.SVMAllocator(context)
         imager_template = imaging.ImagingTemplate(
             queue, array_p, image_p, weight_p, grid_p, clean_p)
-        imager = imager_template.instantiate(args.vis_block, allocator)
+        n_sources = len(subtract_model) if subtract_model else 0
+        imager = imager_template.instantiate(args.vis_block, n_sources, allocator)
         imager.ensure_all_bound()
     psf = imager.buffer('psf')
     dirty = imager.buffer('dirty')
     model = imager.buffer('model')
     grid_data = imager.buffer('grid')
+    imager.clear_model()
 
     # Compute imaging weights
     make_weights(queue, reader, rel_channel,
@@ -461,11 +481,12 @@ def process_channel(dataset, args, start_channel,
                                 channel, image_p.wavelength, restoring_beam)
 
     # Imaging
-    imager.clear_model()
+    if subtract_model:
+        imager.set_sky_model(subtract_model, dataset.phase_centre())
     for i in range(args.major):
         logger.info("Starting major cycle %d/%d", i + 1, args.major)
         make_dirty(queue, reader, rel_channel,
-                   'image', 'vis', imager, mid_w, args.vis_block, i != 0)
+                   'image', 'vis', imager, mid_w, args.vis_block, i != 0, subtract_model)
         imager.scale_dirty(scale)
         queue.finish()
         if i == 0 and args.write_grid is not None:
@@ -583,6 +604,11 @@ def main():
             ChannelParameters(args, dataset, args.start_channel, array_p).log_parameters()
         log_parameters("Weight parameters", weight_p)
 
+        if args.subtract is not None:
+            subtract_model = sky_model.SkyModel.open(args.subtract)
+        else:
+            subtract_model = None
+
         for start_channel in range(args.start_channel, args.stop_channel, args.channel_batch):
             stop_channel = min(args.stop_channel, start_channel + args.channel_batch)
             channels = range(start_channel, stop_channel)
@@ -597,7 +623,7 @@ def main():
             # Do the work
             for channel_p in params:
                 process_channel(dataset, args, start_channel, context, queue,
-                                reader, channel_p, array_p, weight_p)
+                                reader, channel_p, array_p, weight_p, subtract_model)
 
 
 if __name__ == '__main__':
