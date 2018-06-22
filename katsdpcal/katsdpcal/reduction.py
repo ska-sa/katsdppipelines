@@ -524,7 +524,7 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
 
     return residuals,polys
 
-def add_telstate_metric(metric,val,loc,ts,logger,parameters,dtype):
+def add_telstate_metric(metric,val,loc,s,ts,logger,parameters,dtype):
 
     # get timestamps, (auto-)polarisation and baseline for metric
     metric_ts = s.timestamps[loc[0][0]]
@@ -897,11 +897,11 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         # take single bandpass metric as worst
         BP_amp_metric = np.max(amp_resid[:,:,:,3])
         BP_amp_metric_loc = np.where(amp_resid == BP_amp_metric)
-        add_telstate_metric('bp',BP_amp_metric,BP_amp_metric_loc,ts,logger,parameters,'amp')
+        add_telstate_metric('bp',BP_amp_metric,BP_amp_metric_loc,s,ts,logger,parameters,'amp')
 
         BP_phase_metric = np.max(phase_resid[:,:,:,3])
         BP_phase_metric_loc = np.where(phase_resid == BP_phase_metric)
-        add_telstate_metric('bp',BP_phase_metric,BP_phase_metric_loc,ts,logger,parameters,'phase')
+        add_telstate_metric('bp',BP_phase_metric,BP_phase_metric_loc,s,ts,logger,parameters,'phase')
 
         logger.info('Averaging corrected data for {0} {1}:'.format(target_type, target_name,))
         if av_vis.shape[1] > 1024:
