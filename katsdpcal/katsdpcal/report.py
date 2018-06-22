@@ -56,7 +56,7 @@ class rstReport(file):
         self.write_heading(heading, '+')
 
     def write_color(self, text, color, width):
-        string = ":{0}:`{1}`".format(color, text).ljust(width+4+len(color))
+        string = ":{0}:`{1}`".format(color, text).ljust(width)
         self.write(string)
 
     def writeln(self, line=None):
@@ -244,7 +244,7 @@ def write_table_timecol(report, antenna_names, times, data, ave=False):
     data : :class:`np.ndarray`
         table data, shape (time, antenna)
     ave : bool
-        if True write the mean values in each column, else don't
+        if True write the median values in each column, else don't
     """
     n_entries = len(times) + 1
     col_width = 30
@@ -273,15 +273,15 @@ def write_table_timecol(report, antenna_names, times, data, ave=False):
             for di in d:
                 # highlight NaN solutions in red
                 if np.isnan(di):
-                    report.write_color("{:.3f}".format(di.real,), 'red', col_width)
+                    report.write_color("{:.3f}".format(di.real,), 'red', col_width + 1)
                 else:
-                    report.write(" {:<{}.3f}".format(di, col_width))
+                    report.write(" {:<{}.3f}".format(di, col_width + 1))
         report.writeln()
 
     if ave:
-        report.write("MEAN".ljust(col_width + 1))
+        report.write("MEDIAN".ljust(col_width + 1))
         for di in data:
-            report.write(" {:<{}.3f}".format(np.nanmean(di), col_width))
+            report.write(" {:<{}.3f}".format(np.nanmedian(di), col_width + 1))
         report.writeln()
 
     # table footer
@@ -1295,7 +1295,7 @@ def make_cal_report(ts, capture_block_id, stream_name, parameters, report_path, 
 
             # --------------------------------------------------------------------
             # label the reference antenna in the list of antennas
-            antenna_names = parameters['antenna_names']
+            antenna_names = list(parameters['antenna_names'])
             antenna_names[refant_index] += ', refant'
             name_width = len(antenna_names[refant_index])
             antenna_names = [name.ljust(name_width) for name in antenna_names]

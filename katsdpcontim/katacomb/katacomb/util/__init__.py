@@ -16,7 +16,8 @@ def post_process_args(args, kat_adapter):
     """
     Perform post-processing on command line arguments.
 
-    1. Capture Block ID set to katdal experiment ID if not present.
+    1. Capture Block ID set to katdal experiment ID if not present or
+    found in kat_adaptor.obs_params.
 
     Parameters
     ----------
@@ -30,12 +31,18 @@ def post_process_args(args, kat_adapter):
     object
         Modified arguments
     """
-    # Set capture block ID to experiment ID if not set
-    if args.capture_block_id is None:
-        args.capture_block_id = kat_adapter.experiment_id
 
-        log.warn("No capture block ID was specified. "
-                "Using experiment_id '%s' instead.", kat_adapter.experiment_id)
+    # Set capture block ID to experiment ID if not set or found in obs_params
+    if args.capture_block_id is None:
+        try:
+            args.capture_block_id = kat_adapter.obs_params['capture_block_id']
+        except KeyError:
+            args.capture_block_id = kat_adapter.experiment_id
+
+            log.warn("No capture block ID was specified or "
+                     "found in katdal. "
+                     "Using experiment_id '%s' instead.",
+                        kat_adapter.experiment_id)
 
     return args
 
