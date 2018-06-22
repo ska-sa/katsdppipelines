@@ -1,3 +1,4 @@
+from __future__ import division
 import time
 import logging
 import threading
@@ -6,7 +7,6 @@ import numpy as np
 import dask.array as da
 import os
 import matplotlib.pyplot as plt
-from __future__ import division
 
 from katdal.sensordata import TelstateSensorData, SensorCache
 from katdal.h5datav3 import SENSOR_PROPS
@@ -428,7 +428,7 @@ def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=Tr
 
     return red_chi_sq
 
-def bandpass_metrics(vis,weights,flags,dtype='Amplitude',deg=3,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
+def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
 
     """Calculate the bandpass metrics.
 
@@ -442,6 +442,8 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',deg=3,plot=False,plot_p
         The visibility flags. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
     dtype : str, optional
         'phase' | 'amplitude' (case-insensitive).
+    freqs : class:`np.ndarray` or `dask.array`, optional
+        A list of frequencies for each channel.
     deg : int, optional
         Degree of polynomial to fit.
     plot : bool, optional
@@ -489,14 +491,19 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',deg=3,plot=False,plot_p
                 data = vis[time,:,pol,bline]
                 data_w = weights[time,:,pol,bline]
                 data_f = flags[time,:,pol,bline]
-                all_chan = np.arange(len(data))
+                if freqs is None:
+                    all_chan = np.arange(len(data))
+                    x_lab = 'Channel'
+                else:
+                    all_chan = np.arange(freq[0],freq[-1],1) / 1e6
+                    x_lab = 'Frequency (MHz)'
 
                 if plot and infig is None:
                     fig = plt.figure(figsize=(10,5))
                 else:
                     fig = infig
 
-                residuals[time,pol,bline],polys[time,pol,bline] = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab='Channel',ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
+                residuals[time,pol,bline],polys[time,pol,bline] = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
 
                 red_chi_sq = compare_poly(all_chan,polys[time,pol,bline],polys[0,pol,bline],plot_poly=plot_poly,plot=plot,fig=fig)
                 residuals[time,pol,bline,3] = red_chi_sq
@@ -851,18 +858,41 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         av_flags = s.cross_ant.tf.auto_pol.flags
         av_weights = s.cross_ant.tf.auto_pol.weights
 
-        # get good axis limits for plotting amplitude from data
+        logger.info('Deriving bandpass metric for {0} {1}:'.format(target_type, target_name,))
+
+        # get good axis limits from data for plotting amplitude
         inc = vis.shape[1]/4
         high = int(np.nanmedian(vis[:,0:inc,:,:].real)*1.3)
         low = int(np.nanmedian(vis[:,-inc:-1,:,:].real)*0.75)
         aylim=(low,high)
+        freqs = parameters['channel_freqs']
+        plot = False
 
-        amp_resid,amp_polys = bandpass_metrics(av_vis,av_weights,av_flags,dtype='Amp',plot=True,plot_poly=True,plot_ref=True,deg=3,ylim=aylim)
-        phase_resid,phase_polys = bandpass_metrics(av_vis,av_weights,av_flags,dtype='Phase',plot=True,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
+        # compute bandpass data quality metrics
+        amp_resid,amp_polys = bandpass_metrics(av_vis.compute(),av_weights.compute(),av_flags.compute(),dtype='Amp',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=aylim)
+        phase_resid,phase_polys = bandpass_metrics(av_vis.compute(),av_weights.compute(),av_flags.compute(),dtype='Phase',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
+
+        # take single bandpass metric as worst
         BP_metric = np.max(amp_resid[:,:,:,3])
+        BP_metric_loc = np.where(amp_resid == BP_metric)
+
+        # get timestamps, (auto-)polarisation and baseline for metric
+        BP_metric_ts = s.timestamps[BP_metric_loc[0]]
+        BP_ref_ts = s.timestamps[0]
+        BP_metric_pol = parameters['pol_ordering'][BP_metric_loc[1]] * 2
+        BP_metric_bls = s.cross_ant.bls_lookup[BP_metric_loc[2]]
+        BP_metric_bls_str = '{0}-{1}'.format(s.antennas[BP_metric_bline[0]].name,s.antennas[BP_metric_bline[1]].name)
+        BP_loc_str = 'time {0}, pol {1}, baseline {2}'.format(BP_ts,BP_metric_pol,BP_metric_bls_str)
+
+        # add metric to telstate
+        ts.add('bp_metric_val',BP_metric,ts=BP_ts)
+        ts.add('bp_metric_status',BP_metric > 10,ts=BP_ts)
+        ts.add('bp_metric_description','Worst reduced chi squared value of all timestamps (polynomial at time {0} compared to that of time {1}).'.format(BP_loc_str,ref_ts))
+
         print '#\n#\n#\n###TESTING DQA###\n#\n#\n#'
-        print BP_metric
-        print BP_metric > 10
+        print ts.get('bp_metric_val')
+        print ts.get('bp_metric_status')
+        print ts.get('bp_metric_description')
 
         logger.info('Averaging corrected data for {0} {1}:'.format(target_type, target_name,))
         if av_vis.shape[1] > 1024:
