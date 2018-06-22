@@ -493,10 +493,10 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
                 data_f = flags[time,:,pol,bline]
                 if freqs is None:
                     all_chan = np.arange(len(data))
-                    x_lab = 'Channel'
+                    xlab = 'Channel'
                 else:
                     all_chan = np.arange(freq[0],freq[-1],1) / 1e6
-                    x_lab = 'Frequency (MHz)'
+                    xlab = 'Frequency (MHz)'
 
                 if plot and infig is None:
                     fig = plt.figure(figsize=(10,5))
@@ -523,6 +523,28 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
                         plt.close()
 
     return residuals,polys
+
+def add_telstate_metric(metric,val,loc,ts,logger,parameters,dtype):
+
+    # get timestamps, (auto-)polarisation and baseline for metric
+    metric_ts = s.timestamps[loc[0][0]]
+    ref_ts = s.timestamps[0]
+    metric_pol = parameters['pol_ordering'][loc[1][0]] * 2
+    metric_bls = s.cross_ant.bls_lookup[loc[2][0]]
+    metric_bls_str = '{0}-{1}'.format(s.antennas[metric_bls[0]].name,s.antennas[metric_bls[1]].name)
+    loc_str = 'time {0}, pol {1}, baseline {2}'.format(metric_ts,metric_pol,metric_bls_str)
+
+    # add metric to telstate
+    ts.add('{0}_{1}_metric_val'.format(metric,dtype),metric,ts=metric_ts)
+    ts.add('{0}_{1}_metric_status'.format(metric,dtype),metric > 10,ts=metric_ts)
+    ts.add('{0}_{1}_metric_description'.format(metric,dtype),'Worst reduced chi squared value of all timestamps (polynomial fit to {0} at {1} compared to that of time {2}).'.format(dtype,loc_str,ref_ts))
+
+    # print metric from telstate for testing
+    logger.info('Printing metric from telstate')
+    print ts.get('{0}_{1}_metric_val'.format(metric,dtype))
+    print ts.get('{0}_{1}_metric_status'.format(metric,dtype))
+    print ts.get('{0}_{1}_metric_description'.format(metric,dtype))
+
 
 def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
     """
@@ -873,26 +895,13 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         phase_resid,phase_polys = bandpass_metrics(av_vis.compute(),av_weights.compute(),av_flags.compute(),dtype='Phase',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
 
         # take single bandpass metric as worst
-        BP_metric = np.max(amp_resid[:,:,:,3])
-        BP_metric_loc = np.where(amp_resid == BP_metric)
+        BP_amp_metric = np.max(amp_resid[:,:,:,3])
+        BP_amp_metric_loc = np.where(amp_resid == BP_amp_metric)
+        add_telstate_metric('bp',BP_amp_metric,BP_amp_metric_loc,ts,logger,parameters,'amp')
 
-        # get timestamps, (auto-)polarisation and baseline for metric
-        BP_metric_ts = s.timestamps[BP_metric_loc[0]]
-        BP_ref_ts = s.timestamps[0]
-        BP_metric_pol = parameters['pol_ordering'][BP_metric_loc[1]] * 2
-        BP_metric_bls = s.cross_ant.bls_lookup[BP_metric_loc[2]]
-        BP_metric_bls_str = '{0}-{1}'.format(s.antennas[BP_metric_bline[0]].name,s.antennas[BP_metric_bline[1]].name)
-        BP_loc_str = 'time {0}, pol {1}, baseline {2}'.format(BP_ts,BP_metric_pol,BP_metric_bls_str)
-
-        # add metric to telstate
-        ts.add('bp_metric_val',BP_metric,ts=BP_ts)
-        ts.add('bp_metric_status',BP_metric > 10,ts=BP_ts)
-        ts.add('bp_metric_description','Worst reduced chi squared value of all timestamps (polynomial at time {0} compared to that of time {1}).'.format(BP_loc_str,ref_ts))
-
-        print '#\n#\n#\n###TESTING DQA###\n#\n#\n#'
-        print ts.get('bp_metric_val')
-        print ts.get('bp_metric_status')
-        print ts.get('bp_metric_description')
+        BP_phase_metric = np.max(phase_resid[:,:,:,3])
+        BP_phase_metric_loc = np.where(phase_resid == BP_phase_metric)
+        add_telstate_metric('bp',BP_phase_metric,BP_phase_metric_loc,ts,logger,parameters,'phase')
 
         logger.info('Averaging corrected data for {0} {1}:'.format(target_type, target_name,))
         if av_vis.shape[1] > 1024:
