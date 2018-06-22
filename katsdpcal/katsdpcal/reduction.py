@@ -5,6 +5,8 @@ import threading
 import numpy as np
 import dask.array as da
 import os
+import matplotlib.pyplot as plt
+from __future__ import division
 
 from katdal.sensordata import TelstateSensorData, SensorCache
 from katdal.h5datav3 import SENSOR_PROPS
