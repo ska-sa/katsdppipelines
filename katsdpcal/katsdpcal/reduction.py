@@ -491,8 +491,9 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
                 data = vis[time,:,pol,bline]
                 data_w = weights[time,:,pol,bline]
                 data_f = flags[time,:,pol,bline]
+
                 if freqs is None:
-                    all_chan = np.arange(len(data))
+                    all_chan = np.arange(vis.shape[1])
                     xlab = 'Channel'
                 else:
                     all_chan = np.arange(freq[0],freq[-1],1) / 1e6
@@ -535,8 +536,8 @@ def add_telstate_metric(metric,val,loc,s,ts,logger,parameters,dtype):
     loc_str = 'time {0}, pol {1}, baseline {2}'.format(metric_ts,metric_pol,metric_bls_str)
 
     # add metric to telstate
-    ts.add('{0}_{1}_metric_val'.format(metric,dtype),metric,ts=metric_ts)
-    ts.add('{0}_{1}_metric_status'.format(metric,dtype),metric > 10,ts=metric_ts)
+    ts.add('{0}_{1}_metric_val'.format(metric,dtype),val,ts=metric_ts)
+    ts.add('{0}_{1}_metric_status'.format(metric,dtype),val > 10,ts=metric_ts)
     ts.add('{0}_{1}_metric_description'.format(metric,dtype),'Worst reduced chi squared value of all timestamps (polynomial fit to {0} at {1} compared to that of time {2}).'.format(dtype,loc_str,ref_ts))
 
     # print metric from telstate for testing
