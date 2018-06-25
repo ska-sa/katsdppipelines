@@ -1,11 +1,10 @@
-from __future__ import division
 import time
 import logging
 import threading
+import os
 
 import numpy as np
 import dask.array as da
-import os
 import matplotlib.pyplot as plt
 
 from katdal.sensordata import TelstateSensorData, SensorCache
@@ -19,7 +18,6 @@ from .scan import Scan
 from . import lsm_dir
 
 logger = logging.getLogger(__name__)
-#jordan was here!
 
 def init_flagger(parameters, dump_period):
     """Set up SumThresholdFlagger objects for targets
@@ -299,7 +297,7 @@ def shared_solve(telstate, parameters, solution_store, bchan, echan,
             save_solution(None, None, solution_store, soln)
         return soln
 
-def poly_residual(xdata,ydata,weights=None,flags=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False,deg=3,plot=True,fig=None):
+def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False):
 
     """Return residual statistics based on fitting a polynomial to a distribution.
 
@@ -314,6 +312,12 @@ def poly_residual(xdata,ydata,weights=None,flags=None,xlab=None,ylab=None,xlim=N
         The x axis weights.
     flags : class:`np.ndarray` or `dask.array`, optional
         The x axis flags.
+    deg : int, optional
+        The degree of polynomial to fit
+    plot : bool, optional
+        Plot figure?
+    fig : class:`plt.figure`, optional
+        Use this existing figure.
     xlab : string, optional
         The x axis label
     ylab : string, optional
@@ -324,12 +328,6 @@ def poly_residual(xdata,ydata,weights=None,flags=None,xlab=None,ylab=None,xlim=N
         Limits to put on the y axis
     logy : bool
         Log the y axis?
-    deg : int, optional
-        The degree of polynomial to fit
-    plot : bool, optional
-        Plot figure?
-    fig : class:`plt.figure`, optional
-        Use this existing figure.
 
     Returns:
     --------
@@ -339,15 +337,14 @@ def poly_residual(xdata,ydata,weights=None,flags=None,xlab=None,ylab=None,xlim=N
         nmad : float
             The normalised median absolute deviation
         nmad_model : float
-            ??
+            The normalised median absolute deviation from the model
         None : NoneType
-            Place holder for reduced chi squared metric.
-    """
+            Place holder for reduced chi squared metric"""
 
     indices = ~np.isnan(xdata) & ~np.isnan(ydata) & (flags == 0)
     if weights is not None:
         indices = indices & ~(weights == 0)
-        w = 1/weights[indices]
+        w = 1.0/weights[indices]
 
     x = xdata[indices]
     y = ydata[indices]
@@ -471,7 +468,7 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
     weights = weights[:,:,0:1,0:5]
     flags = flags[:,:,0:1,0:5]
 
-    residuals = np.zeros(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
+    residuals = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
     polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
 
     if dtype.lower() in ['amplitude','amp']:
@@ -496,7 +493,7 @@ def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=F
                     all_chan = np.arange(vis.shape[1])
                     xlab = 'Channel'
                 else:
-                    all_chan = np.arange(freq[0],freq[-1],1) / 1e6
+                    all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
                     xlab = 'Frequency (MHz)'
 
                 if plot and infig is None:
@@ -884,7 +881,7 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         logger.info('Deriving bandpass metric for {0} {1}:'.format(target_type, target_name,))
 
         # get good axis limits from data for plotting amplitude
-        inc = vis.shape[1]/4
+        inc = vis.shape[1] // 4
         high = int(np.nanmedian(vis[:,0:inc,:,:].real)*1.3)
         low = int(np.nanmedian(vis[:,-inc:-1,:,:].real)*0.75)
         aylim=(low,high)
