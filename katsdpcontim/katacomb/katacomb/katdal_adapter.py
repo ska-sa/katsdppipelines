@@ -15,6 +15,7 @@ from katacomb import AIPSPath
 log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
+MAX_AIPS_PATH_LEN = 10
 
 def aips_timestamps(timestamps, midnight):
     """
@@ -468,9 +469,10 @@ class KatdalAdapter(object):
         dtype = kwargs.get('dtype', "AIPS")
 
         if name is None:
-            path, file = os.path.split(self.katdal.name)
-            name, ext = os.path.splitext(file)
-
+            name = self._katds.obs_params.get('capture_block_id',
+                                             self._katds.experiment_id)
+            if dtype == 'AIPS':
+                name = name[-MAX_AIPS_PATH_LEN:]
             if dtype == "FITS":
                 name += '.uvfits'
 
@@ -510,7 +512,7 @@ class KatdalAdapter(object):
     @property
     def name(self):
         """ Proxies :attr:`katdal.DataSet.name` """
-        return self._katds.name
+        return self._katds.name.encode()
 
     @property
     def experiment_id(self):

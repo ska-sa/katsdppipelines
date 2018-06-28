@@ -68,7 +68,8 @@ channels, but a separate FITS file is written for each channel.
 .. _FITS: http://fits.gsfc.nasa.gov/fits_documentation.html
 
 The input file format is detected by extension, so a Measurement Set *must*
-have the suffix ``.ms`` and a katdal file must have the suffix ``.h5``.
+have the suffix ``.ms`` and a katdal file must have the suffix ``.h5`` or
+``.rdb``.
 
 Each file format has additional Python package dependencies. Use ``pip install
 .[ms]`` to ensure support for Measurement Sets and ``pip install .[katdal]`` to
@@ -104,6 +105,12 @@ Input selection options
 
    Selects a range of channels to image. The channels are numbered from 0, and
    the stop channel is *excluded*.
+
+.. option:: --subtract <FILE>
+
+   A file containing a local sky model to subtract from the visibilities
+   (typically for continuum subtraction). The only file format currently
+   supported is a `katpoint`_ catalogue.
 
 .. option:: -i <KEY>=<VALUE>, --input-option <KEY>=<VALUE>
 
@@ -152,6 +159,8 @@ Input selection options
      can also be ``all`` or ``none``.
 
    To provide multiple key-value pairs, specify :option:`-i` multiple times.
+
+.. _katpoint: https://pypi.org/project/katpoint/
 
 Output image options
 ^^^^^^^^^^^^^^^^^^^^
@@ -245,7 +254,8 @@ Output options
 Normally only the output image is written, but it is also possible to write
 various intermediate products:
 
-.. option:: --write-weights <FILE>, --write-psf <FILE>, --write-grid <FILE>, --write-dirty <FILE>, --write-model <FILE>, --write-residuals <FILE>
+.. option:: --write-weights <FILE>, --write-psf <FILE>, --write-grid <FILE>,
+   --write-dirty <FILE>, --write-model <FILE>, --write-residuals <FILE>
 
    Write a FITS file with the corresponding intermediate results.
 
