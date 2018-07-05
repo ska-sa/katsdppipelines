@@ -5,6 +5,7 @@ botocore == 1.10.16
 bs4 == 0.0.1
 cerberus == 1.1
 dask
+defusedxml
 docutils
 fakeredis
 funcsigs == 0.4

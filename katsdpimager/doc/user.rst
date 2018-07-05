@@ -106,6 +106,12 @@ Input selection options
    Selects a range of channels to image. The channels are numbered from 0, and
    the stop channel is *excluded*.
 
+.. option:: --subtract <FILE>
+
+   A file containing a local sky model to subtract from the visibilities
+   (typically for continuum subtraction). The only file format currently
+   supported is a `katpoint`_ catalogue.
+
 .. option:: -i <KEY>=<VALUE>, --input-option <KEY>=<VALUE>
 
    Passes an option to an input backend. The MS backend supports the following
@@ -153,6 +159,8 @@ Input selection options
      can also be ``all`` or ``none``.
 
    To provide multiple key-value pairs, specify :option:`-i` multiple times.
+
+.. _katpoint: https://pypi.org/project/katpoint/
 
 Output image options
 ^^^^^^^^^^^^^^^^^^^^
@@ -220,6 +228,12 @@ Quality options
    value will reduce the cost of each CLEAN cycle, but too large a value may
    prevent CLEAN from converging.
 
+.. option:: --psf-limit <VALUE>
+
+   Maximum fraction of image to use for PSF. This restricts the size of the
+   PSF to a certain fraction of the image, if not already further constrained
+   by :option:`--psf-cutoff`.
+
 .. option:: --major-gain <VALUE>
 
    Fraction of the peak at the start of a major cycle that will be cleaned in
@@ -246,7 +260,8 @@ Output options
 Normally only the output image is written, but it is also possible to write
 various intermediate products:
 
-.. option:: --write-weights <FILE>, --write-psf <FILE>, --write-grid <FILE>, --write-dirty <FILE>, --write-model <FILE>, --write-residuals <FILE>
+.. option:: --write-weights <FILE>, --write-psf <FILE>, --write-grid <FILE>,
+   --write-dirty <FILE>, --write-model <FILE>, --write-residuals <FILE>
 
    Write a FITS file with the corresponding intermediate results.
 
