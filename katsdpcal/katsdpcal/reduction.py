@@ -876,21 +876,23 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
             else:
                 s.summarize(av_corr, target_name + '_nog_spec', nchans=1024, refant_only=True)
 
-        #data = (vis, s.auto_ant.tf.cross_pol.flags, s.auto_ant.tf.cross_pol.weights)
-
         logger.info('Deriving bandpass metric for {0}:'.format(target_name,))
 
+        #point to cross-correlation, xx & yy visibilities, weights & flags
+        my_data = s.cross_ant.tf.auto_pol
+        viz,weights,flags = my_data.vis,my_data.weights,my_data.flags
+
         # get good axis limits from data for plotting amplitude
-        inc = data[0].shape[1] // 4
-        high = int(np.nanmedian(data[0][:,0:inc,:,:].real)*1.3)
-        low = int(np.nanmedian(data[0][:,-inc:-1,:,:].real)*0.75)
+        inc = viz.shape[1] // 4
+        high = int(np.nanmedian(viz[:,0:inc,:,:].real)*1.3)
+        low = int(np.nanmedian(viz[:,-inc:-1,:,:].real)*0.75)
         aylim=(low,high)
         freqs = parameters['channel_freqs']
         plot = False
 
         # compute bandpass data quality metrics
-        amp_resid,amp_polys = bandpass_metrics(data[0].compute(),data[2].compute(),data[1].compute(),dtype='Amp',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=aylim)
-        phase_resid,phase_polys = bandpass_metrics(data[0].compute(),data[2].compute(),data[1].compute(),dtype='Phase',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
+        amp_resid,amp_polys = bandpass_metrics(viz.compute(),weights.compute(),flags.compute(),dtype='Amp',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=aylim)
+        phase_resid,phase_polys = bandpass_metrics(viz.compute(),weights.compute(),flags.compute(),dtype='Phase',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
 
         # take single bandpass metric as worst
         BP_amp_metric = np.max(amp_resid[:,:,:,3])
