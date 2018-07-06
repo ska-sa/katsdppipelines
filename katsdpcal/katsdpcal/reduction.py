@@ -878,7 +878,7 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
 
         #data = (vis, s.auto_ant.tf.cross_pol.flags, s.auto_ant.tf.cross_pol.weights)
 
-        logger.info('Deriving bandpass metric for {0} {1}:'.format(target_type, target_name,))
+        logger.info('Deriving bandpass metric for {0}:'.format(target_name,))
 
         # get good axis limits from data for plotting amplitude
         inc = data[0].shape[1] // 4
