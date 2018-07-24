@@ -1119,6 +1119,7 @@ class Sender(Task):
         if self.flags_interface_address is None:
             self.flags_interface_address = ''
         self.int_time = self.telstate_l0['int_time']
+        self.sync_time = self.telstate_l0['sync_time']
         self.n_chans = self.telstate_l0['n_chans'] // n_servers
         self.l0_bls = np.asarray(self.telstate_l0['bls_ordering'])
         self.channel_slice = parameters['channel_slice']
@@ -1213,7 +1214,8 @@ class Sender(Task):
                         np.take(flags, self.ordering, axis=1, out=out_flags)
                         ig['flags'].value = out_flags
                         idx = self.buffers['dump_indices'][slot]
-                        ig['timestamp'].value = first_timestamp + idx * self.int_time
+                        ig['timestamp'].value = (
+                            first_timestamp + idx * self.int_time + self.sync_time)
                         ig['dump_index'].value = idx
                         tx.send_heap(ig.get_heap(data='all', descriptors='all'))
                         now = time.time()
