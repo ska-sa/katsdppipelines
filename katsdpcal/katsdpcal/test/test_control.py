@@ -675,7 +675,9 @@ class TestCalDeviceServer(unittest.TestCase):
                 items = spead2.ItemGroup()
                 items.update(heap)
                 ts = items['timestamp'].value
-                assert_almost_equal(first_ts + j * self.telstate.sdp_l0test_int_time, ts)
+                expected_ts = (first_ts + j * self.telstate.sdp_l0test_int_time +
+                               self.telstate.sdp_l0test_sync_time)
+                assert_almost_equal(expected_ts, ts)
                 idx = items['dump_index'].value
                 assert_equal(j, idx)
                 assert_equal(i * self.n_channels // self.n_servers, items['frequency'].value)
