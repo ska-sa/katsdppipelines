@@ -1,11 +1,9 @@
 import time
 import logging
 import threading
-import os
 
 import numpy as np
 import dask.array as da
-import matplotlib.pyplot as plt
 
 from collections import defaultdict
 import katpoint
@@ -18,6 +16,7 @@ from . import solutions
 from . import pipelineprocs as pp
 from .scan import Scan
 from . import lsm_dir
+from . import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -298,253 +297,6 @@ def shared_solve(telstate, parameters, solution_store, bchan, echan,
             # We don't pass telstate, because we got the value from telstate
             save_solution(None, None, solution_store, soln)
         return soln
-
-def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False):
-
-    """Return residual statistics based on fitting a polynomial to a distribution.
-
-    Paramaters:
-    -----------
-    xdata : class:`np.ndarray` or `dask.array`
-        The x axis data
-    ydata : class:`np.ndarray` or `dask.array`
-        The y axis data
-
-    weights : class:`np.ndarray` or `dask.array`, optional
-        The x axis weights.
-    flags : class:`np.ndarray` or `dask.array`, optional
-        The x axis flags.
-    deg : int, optional
-        The degree of polynomial to fit
-    plot : bool, optional
-        Plot figure?
-    fig : class:`plt.figure`, optional
-        Use this existing figure.
-    xlab : string, optional
-        The x axis label
-    ylab : string, optional
-        The y axis label
-    xlim : tuple, optional
-        Limits to put on the x axis
-    ylim : tuple, optional
-        Limits to put on the y axis
-    logy : bool
-        Log the y axis?
-
-    Returns:
-    --------
-    red_chi_sq,nmad,nmad_model : class:`np.array`
-        red_chi_sq : float
-            The reduced chi squared
-        nmad : float
-            The normalised median absolute deviation
-        nmad_model : float
-            The normalised median absolute deviation from the model
-        None : NoneType
-            Place holder for reduced chi squared metric"""
-
-    indices = ~np.isnan(xdata) & ~np.isnan(ydata) & (flags == 0)
-    if weights is not None:
-        indices = indices & ~(weights == 0)
-        w = 1.0/weights[indices]
-
-    x = xdata[indices]
-    y = ydata[indices]
-
-    xlin = np.arange(np.min(x),np.max(x))
-    poly_paras = np.polyfit(x,y,deg,w=w)
-    poly = np.poly1d(poly_paras)
-    fit = poly(xlin)
-
-    chi_sq=np.sum((y-poly(x))**2)
-    DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
-
-    red_chi_sq = chi_sq/DOF
-    nmad = np.median(np.abs(y-np.median(y)))/0.6745
-    nmad_model = np.median(np.abs(y-poly(x)))/0.6745
-
-    if plot:
-        if fig is None:
-            fig = plt.figure()
-
-        plt.scatter(x,y,s=1)
-
-        if xlab is not None:
-            plt.xlabel(xlab)
-        if ylab is not None:
-            plt.ylabel(ylab)
-
-        if xlim is not None:
-            plt.xlim(*xlim)
-        if ylim is not None:
-            plt.ylim(*ylim)
-
-        if logy:
-            plt.yscale('log')
-
-    return np.array([red_chi_sq,nmad,nmad_model,None]),poly_paras
-
-
-def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=True):
-
-    """Compare two polynomials fits to x data by returning the reduced chi squared.
-
-    Paramaters:
-    -----------
-    xdata : class:`np.ndarray` or `dask.array`
-        The x axis data
-    poly1 : class `np.polyfit`
-        The first polynomial.
-    poly2 : class `np.polyfit`
-        The reference polynomial.
-    plot : bool, optional
-        Plot figure?
-    fig : class:`plt.figure`, optional
-        Use this existing figure.
-    plot_poly : bool, optional
-        Overlay the polynomial fit on the figure?
-    plot_ref : bool, optional
-        Overlay the reference polynomial fit on the figure?"""
-
-    xdata = xdata[~np.isnan(xdata)]
-    xlin = np.arange(np.min(xdata),np.max(xdata))
-
-    fit1 = np.poly1d(poly1)
-    fit2 = np.poly1d(poly2)
-
-    chi_sq=np.sum((fit1(xlin)-fit2(xlin))**2)
-    DOF=len(xdata)-len(poly1)-len(poly2)
-    red_chi_sq = chi_sq/DOF
-
-    if plot:
-        if fig is None:
-            fig = plt.figure()
-
-        if plot_poly:
-            plt.plot(xlin,fit1(xlin),c='r')
-        if plot_ref:
-            plt.plot(xlin,fit2(xlin),c='b',ls='--')
-
-    return red_chi_sq
-
-def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
-
-    """Calculate the bandpass metrics.
-
-    Paramaters:
-    -----------
-    vis : class:`np.ndarray` or `dask.array`
-        The visibilities. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    weights : class:`np.ndarray` or `dask.array`
-        The visibility weights. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    flags : class:`np.ndarray` or `dask.array`
-        The visibility flags. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    dtype : str, optional
-        'phase' | 'amplitude' (case-insensitive).
-    freqs : class:`np.ndarray` or `dask.array`, optional
-        A list of frequencies for each channel.
-    deg : int, optional
-        Degree of polynomial to fit.
-    plot : bool, optional
-        Write a matplotlib figure?
-    plot_poly : bool, optional
-        Overlay the polynomial on the plot?
-    plot_ref : bool, optional
-        Overlay the reference polynomial on the plot?
-    infig : class:`plt.figure`, optional
-        Use this existing figure.
-    ylim : tuple, optional
-        Limits to put on the y axis
-
-    Returns:
-    --------
-    residuals : class `np.array`
-        The residual metrics of the fit polynomials, with shape
-        (ntimestamps, npols, nbaselines, 4 [red_chi_sq,nmad,nmad_model,red_chi_sq_poly])
-    polys : class `np.array`
-        Array of `np.polyfit` objects, representing the polynomials fit to each element of input data, with shape
-        (ntimestamps, npols, nbaselines, deg+1)"""
-
-    #make smaller for testing / plotting
-    vis = vis[:,:,0:1,0:5]
-    weights = weights[:,:,0:1,0:5]
-    flags = flags[:,:,0:1,0:5]
-
-    residuals = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
-    polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
-
-    if dtype.lower() in ['amplitude','amp']:
-        vis = vis.real #np.absolute(data)
-        logy = False
-    elif dtype.lower() == 'phase':
-        vis = vis.imag #np.angle(data,deg=True)
-        logy = False
-    else:
-        print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
-        return
-
-    for time in range(vis.shape[0]):
-        for pol in range(vis.shape[2]):
-            for bline in range(vis.shape[3]):
-
-                data = vis[time,:,pol,bline]
-                data_w = weights[time,:,pol,bline]
-                data_f = flags[time,:,pol,bline]
-
-                if freqs is None:
-                    all_chan = np.arange(vis.shape[1])
-                    xlab = 'Channel'
-                else:
-                    all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
-                    xlab = 'Frequency (MHz)'
-
-                if plot and infig is None:
-                    fig = plt.figure(figsize=(10,5))
-                else:
-                    fig = infig
-
-                residuals[time,pol,bline],polys[time,pol,bline] = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
-
-                red_chi_sq = compare_poly(all_chan,polys[time,pol,bline],polys[0,pol,bline],plot_poly=plot_poly,plot=plot,fig=fig)
-                residuals[time,pol,bline,3] = red_chi_sq
-
-                if plot:
-                    if not os.path.exists('plots'):
-                        os.mkdir('plots')
-                    txt = 'Baseline {0}, Time {1:02d}, '.format(bline,time)
-                    if red_chi_sq == 0.0:
-                        txt += 'Reference fit'
-                    else:
-                        txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
-
-                    plt.title(txt)
-                    if infig is None:
-                        plt.savefig('plots/{0}-b{1}-p{2}-t{3}.png'.format(dtype,bline,pol,time))
-                        plt.close()
-
-    return residuals,polys
-
-def add_telstate_metric(metric,val,loc,s,ts,logger,parameters,dtype):
-
-    # get timestamps, (auto-)polarisation and baseline for metric
-    metric_ts = s.timestamps[loc[0][0]]
-    ref_ts = s.timestamps[0]
-    metric_pol = parameters['pol_ordering'][loc[1][0]] * 2
-    metric_bls = s.cross_ant.bls_lookup[loc[2][0]]
-    metric_bls_str = '{0}-{1}'.format(s.antennas[metric_bls[0]].name,s.antennas[metric_bls[1]].name)
-    loc_str = 'time {0}, pol {1}, baseline {2}'.format(metric_ts,metric_pol,metric_bls_str)
-
-    # add metric to telstate
-    ts.add('{0}_{1}_metric_val'.format(metric,dtype),val,ts=metric_ts)
-    ts.add('{0}_{1}_metric_status'.format(metric,dtype),val > 10,ts=metric_ts)
-    ts.add('{0}_{1}_metric_description'.format(metric,dtype),'Worst reduced chi squared value of all timestamps (polynomial fit to {0} at {1} compared to that of time {2}).'.format(dtype,loc_str,ref_ts))
-
-    # print metric from telstate for testing
-    logger.info('Printing metric from telstate')
-    print ts.get('{0}_{1}_metric_val'.format(metric,dtype))
-    print ts.get('{0}_{1}_metric_status'.format(metric,dtype))
-    print ts.get('{0}_{1}_metric_description'.format(metric,dtype))
-
 
 def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
     """
@@ -877,32 +629,13 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
             else:
                 s.summarize(av_corr, target_name + '_nog_spec', nchans=1024, refant_only=True)
 
-        logger.info('Deriving bandpass metric for {0}:'.format(target_name,))
+        #if target is BP calibrator, derive BP metrics on calibrated data
+        if 'bpcal' in taglist:
+            logger.info('Deriving bandpass metric for {0}:'.format(target_name,))
 
-        #point to cross-correlation, xx & yy visibilities, weights & flags
-        my_data = s.cross_ant.tf.auto_pol
-        viz,weights,flags = my_data.vis,my_data.weights,my_data.flags
-
-        # get good axis limits from data for plotting amplitude
-        inc = viz.shape[1] // 4
-        high = int(np.nanmedian(viz[:,0:inc,:,:].real)*1.3)
-        low = int(np.nanmedian(viz[:,-inc:-1,:,:].real)*0.75)
-        aylim=(low,high)
-        freqs = parameters['channel_freqs']
-        plot = False
-
-        # compute bandpass data quality metrics
-        amp_resid,amp_polys = bandpass_metrics(viz.compute(),weights.compute(),flags.compute(),dtype='Amp',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=aylim)
-        phase_resid,phase_polys = bandpass_metrics(viz.compute(),weights.compute(),flags.compute(),dtype='Phase',freqs=None,plot=plot,plot_poly=True,plot_ref=True,deg=3,ylim=(-10,10))
-
-        # take single bandpass metric as worst
-        BP_amp_metric = np.max(amp_resid[:,:,:,3])
-        BP_amp_metric_loc = np.where(amp_resid == BP_amp_metric)
-        add_telstate_metric('bp',BP_amp_metric,BP_amp_metric_loc,s,ts,logger,parameters,'amp')
-
-        BP_phase_metric = np.max(phase_resid[:,:,:,3])
-        BP_phase_metric_loc = np.where(phase_resid == BP_phase_metric)
-        add_telstate_metric('bp',BP_phase_metric,BP_phase_metric_loc,s,ts,logger,parameters,'phase')
-
+            #point to cross-antenna, xx & yy data
+            bp_data = s.cross_ant.tf.auto_pol
+            metrics.derive_metrics(bp_data.vis,bp_data.weights,bp_data.flags,s,ts,logger,parameters,deg=3,plot=False,metric_func=np.mean,metric_tol=10)
 
     return target_slices, av_corr
+

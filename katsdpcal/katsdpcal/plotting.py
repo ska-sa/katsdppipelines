@@ -640,3 +640,69 @@ def plot_corr_v_time(times, data, plottype='p', antenna_names=None, title=None, 
 
     fig.subplots_adjust(hspace=0.1)
     return fig
+
+
+def plot_bandpass(x,y,xlab,ylab,fig=None,logy=False):
+
+    """Plot bandpass data, either as amplitude, or phase, as a function of frequency channel.
+
+    Parameters
+    ----------
+    x : class `np.array`
+        The x-axis data.
+    y : class `np.array`
+        The y-axis data.
+    xlab : string
+        The x-axis label.
+    ylab : string
+        The y-axis label.
+    fig : class:`plt.figure`, optional
+        Use this existing figure.
+    logy : bool, optional
+        Log the y-axis."""
+
+    if fig is None:
+        fig = plt.figure(figsize=(FIG_X,FIG_Y))
+
+    plt.scatter(x,y,s=1)
+
+    if xlab is not None:
+        plt.xlabel(xlab)
+    if ylab is not None:
+        plt.ylabel(ylab)
+
+    if xlim is not None:
+        plt.xlim(*xlim)
+    if ylim is not None:
+        plt.ylim(*ylim)
+
+    if logy:
+        plt.yscale('log')
+
+    return fig
+
+def plot_polys(xlin,fit1,fit2,fig=None):
+
+    """Plot two input polynomials.
+
+    Parameters
+    ----------
+    xlin : class `np.array`
+        X-axis values at which to plot the polynomials. This should be derived from `np.arange`.
+    fit1 : class `np.poly1d`
+        The first polynomial.
+    fit2 : class `np.poly1d`
+        The second polynomial.
+    fig : class:`plt.figure`, optional
+        Use this existing figure."""
+
+    if fig is None:
+        fig = plt.figure(figsize=(FIG_X,FIG_Y))
+
+    if plot_poly:
+        plt.plot(xlin,fit1(xlin),c='r')
+    if plot_ref:
+        plt.plot(xlin,fit2(xlin),c='b',ls='--')
+
+    return fig
+
