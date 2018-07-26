@@ -278,7 +278,7 @@ def location_specs(s,ts,parameters,loc):
     pol : str
         Polarisation at location.
     bls_str : str
-        Baseline string, in the format 'm001-m002'""""
+        Baseline string, in the format 'm001-m002'"""
 
     time = s.timestamps[loc[0][0]]
     pol = parameters['pol_ordering'][loc[1][0]] * 2
@@ -304,11 +304,12 @@ def metric_description(s,ts,parameters,loc):
 
     Returns:
     --------
-    description"""
+    description : str
+        Metric description."""
 
     ref_time = s.timestamps[0]
 
-    if loc.size > 0:
+    if loc[0].size > 0:
         time,pol,bls = location_specs(s,ts,parameters,loc)
         description = '(polynomial fit to {0} at time {1}, pol {2}, baseline {3}, compared to that of time {4})'.format(dtype,time,pol,bls,ref_time)
 
