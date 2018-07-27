@@ -44,13 +44,13 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
     # take single bandpass metric as worst
     BP_amp_metric = metric_func(amp_resid[:,:,:,3])
     BP_amp_metric_loc = np.where(amp_resid == BP_amp_metric)
-    description = metric_description(s, ts, parameters, BP_amp_metric_loc)
-    add_telstate_metric('bp',BP_amp_metric,'amp',description,tolerance)
+    time,description = metric_description(s, ts, parameters, BP_amp_metric_loc)
+    add_telstate_metric('bp',BP_amp_metric,'amp',description,time,metric_tol,ts)
 
     BP_phase_metric = metric_func(phase_resid[:,:,:,3])
     BP_phase_metric_loc = np.where(phase_resid == BP_phase_metric)
-    description = metric_description(s, ts, parameters, BP_phase_metric_loc)
-    add_telstate_metric('bp',BP_phase_metric,'phase',description,tolerance)
+    time,description = metric_description(s, ts, parameters, BP_phase_metric_loc)
+    add_telstate_metric('bp',BP_phase_metric,'phase',description,time,metric_tol,ts)
 
 
 def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False):
@@ -304,6 +304,8 @@ def metric_description(s,ts,parameters,loc):
 
     Returns:
     --------
+    time : float
+        Timestamp at location.
     description : str
         Metric description."""
 
@@ -314,14 +316,15 @@ def metric_description(s,ts,parameters,loc):
         description = '(polynomial fit to {0} at time {1}, pol {2}, baseline {3}, compared to that of time {4})'.format(dtype,time,pol,bls,ref_time)
 
     else:
+        time = ref_time
         description = '(polynomial fit to all timestamps, compared to reference timestamp for each baseline at time {0})'.format(ref_time)
 
     description = 'Mean reduced chi squared value of all timestamps {0}'.format(description)
 
-    return description
+    return time,description
 
 
-def add_telstate_metric(metric,val,dtype,description,tolerance):
+def add_telstate_metric(metric,val,dtype,description,time,tolerance,ts):
 
     """Add metric to telstate.
 
@@ -335,8 +338,12 @@ def add_telstate_metric(metric,val,dtype,description,tolerance):
         Data type (e.g. 'phase').
     description : str
         Metric description.
+    time : float
+        Timestamp at location.
     tolerance : float
-        Metric tolerance value, below which, metric is flagged as bad."""
+        Metric tolerance value, below which, metric is flagged as bad.
+    ts : class: `katsdptelstate.TelescopeState`
+        Telescope state, scoped to the cal namespace within the capture block."""
 
     ts.add('{0}_{1}_metric_val'.format(metric,dtype),val,ts=time)
     ts.add('{0}_{1}_metric_status'.format(metric,dtype),val > tolerance,ts=time)
