@@ -642,7 +642,7 @@ def plot_corr_v_time(times, data, plottype='p', antenna_names=None, title=None, 
     return fig
 
 
-def plot_bandpass(x,y,xlab,ylab,fig=None,logy=False):
+def plot_bandpass(x,y,xlab='Channel',ylab='Data',fig=None,logy=False):
 
     """Plot bandpass data, either as amplitude, or phase, as a function of frequency channel.
 
@@ -652,9 +652,9 @@ def plot_bandpass(x,y,xlab,ylab,fig=None,logy=False):
         The x-axis data.
     y : class `np.array`
         The y-axis data.
-    xlab : string
+    xlab : string, optional
         The x-axis label.
-    ylab : string
+    ylab : string, optional
         The y-axis label.
     fig : class:`plt.figure`, optional
         Use this existing figure.
@@ -664,20 +664,21 @@ def plot_bandpass(x,y,xlab,ylab,fig=None,logy=False):
     if fig is None:
         fig = plt.figure(figsize=(FIG_X,FIG_Y))
 
-    plt.scatter(x,y,s=1)
+    if x is not None:
+        plt.scatter(x,y,s=1)
 
-    if xlab is not None:
-        plt.xlabel(xlab)
-    if ylab is not None:
-        plt.ylabel(ylab)
+        if xlab is not None:
+            plt.xlabel(xlab)
+        if ylab is not None:
+            plt.ylabel(ylab)
 
-    if xlim is not None:
-        plt.xlim(*xlim)
-    if ylim is not None:
-        plt.ylim(*ylim)
+        if xlim is not None:
+            plt.xlim(*xlim)
+        if ylim is not None:
+            plt.ylim(*ylim)
 
-    if logy:
-        plt.yscale('log')
+        if logy:
+            plt.yscale('log')
 
     return fig
 
@@ -706,3 +707,26 @@ def plot_polys(xlin,fit1,fit2,fig=None):
 
     return fig
 
+def save_bandpass(txt,infig,dtype,bline,pol,time):
+
+    """Title and save bandpass figure.
+
+    Parameters
+    ----------
+    txt : str
+        Title text.
+    infig : infig : class:`plt.figure`, optional
+        Use this existing figure. Input figure here to plot individual baselines (rather than overlay all).
+    dtype : str
+        'Amp' or 'Phase'
+    bline : str
+        Baseline, in the format 'm001-m002'.
+    pol : str
+        Polarisation, in the format 'hh,vv'.
+    time : float
+        Timestamp."""
+
+    plt.title(txt)
+    if infig is None:
+        plt.savefig('plots/{0}-b{1}-p{2}-t{3}.png'.format(dtype,bline,pol,time))
+        plt.close()

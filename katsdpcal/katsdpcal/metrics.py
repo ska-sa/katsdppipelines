@@ -38,8 +38,8 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
     aylim=(low,high)
 
     # compute bandpass data quality metrics
-    amp_resid,amp_polys = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),dtype='Amp',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=aylim)
-    phase_resid,phase_polys = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),dtype='Phase',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=(-10,10))
+    amp_resid,amp_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Amp',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=aylim)
+    phase_resid,phase_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Phase',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=(-10,10))
 
     # take single bandpass metric as worst
     BP_amp_metric = metric_func(amp_resid[:,:,:,3])
@@ -51,6 +51,113 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
     BP_phase_metric_loc = np.where(phase_resid == BP_phase_metric)
     time,description = metric_description(s, ts, parameters, BP_phase_metric_loc)
     add_telstate_metric('bp',BP_phase_metric,'phase',description,time,metric_tol,ts)
+
+def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=None,deg=3,ref_time=0,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
+
+    """Calculate the bandpass metrics, including....
+
+    Paramaters:
+    -----------
+    vis : class:`np.ndarray`
+        The visibilities. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
+    weights : class:`np.ndarray`
+        The visibility weights. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
+    flags : class:`np.ndarray`
+        The visibility flags. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
+    s : class: `Scan`
+        The scan.
+    ts : :class:`katsdptelstate.TelescopeState`
+        Telescope state, scoped to the cal namespace within the capture block.
+    parameters : dict
+        The pipeline parameters
+    dtype : str, optional
+        'phase' | 'amplitude' (case-insensitive).
+    freqs : class:`np.ndarray`, optional
+        A list of frequencies for each channel.
+    deg : int, optional
+        Degree of polynomial to fit.
+    ref_time : int, optional
+        Visibility index of timestamp axis to use for reference timestamp.
+    plot : bool, optional
+        Write a matplotlib figure?
+    plot_poly : bool, optional
+        Overlay the polynomial on the plot?
+    plot_ref : bool, optional
+        Overlay the reference polynomial on the plot?
+    infig : class:`plt.figure`, optional
+        Use this existing figure. Input figure generated from plotting.plot_bandpass(None,None) here to overlay all baselines.
+    ylim : tuple, optional
+        Limits to put on the y axis
+
+    Returns:
+    --------
+    residuals : class `np.array`
+        The residual metrics of the fit polynomials, with shape
+        (ntimestamps, npols, nbaselines, 4 [red_chi_sq,nmad,nmad_model,red_chi_sq_poly])
+    polys : class `np.array`
+        Array of `np.polyfit` objects, representing the polynomials fit to each element of input data, with shape
+        (ntimestamps, npols, nbaselines, deg+1).
+    fig : class `matplotlib.figure`
+        The figure (None if plot is False)."""
+
+    #make smaller for testing / plotting
+    vis = vis[:,:,0:1,0:5]
+    weights = weights[:,:,0:1,0:5]
+    flags = flags[:,:,0:1,0:5]
+
+    residuals = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
+    polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
+
+    if dtype.lower() in ['amplitude','amp']:
+        vis = vis.real #np.absolute(data)
+        logy = False
+    elif dtype.lower() == 'phase':
+        vis = vis.imag #np.angle(data,deg=True)
+        logy = False
+    else:
+        print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
+        return
+
+    for time in range(vis.shape[0]):
+        for pol in range(vis.shape[2]):
+            for bline in range(vis.shape[3]):
+
+                data = vis[time,:,pol,bline]
+                data_w = weights[time,:,pol,bline]
+                data_f = flags[time,:,pol,bline]
+
+                if freqs is None:
+                    all_chan = np.arange(vis.shape[1])
+                    xlab = 'Channel'
+                else:
+                    all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
+                    xlab = 'Frequency (MHz)'
+
+                if plot and infig is None:
+                    fig = plotting.plot_bandpass(None,None)
+                else:
+                    fig = infig
+
+                residuals[time,pol,bline],polys[time,pol,bline],fig = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
+
+                red_chi_sq,fig = compare_poly(all_chan,polys[time,pol,bline],polys[ref_time,pol,bline],plot_poly=plot_poly,plot=plot,fig=fig)
+                residuals[time,pol,bline,3] = red_chi_sq
+
+                if plot:
+                    loc = np.array([time,pol,bline])
+                    tstamp,corr,bls = location_specs(s,ts,parameters,loc)
+
+                    if not os.path.exists('plots'):
+                        os.mkdir('plots')
+                    txt = 'Baseline {0}, Time {1}, Pol, {2}: '.format(bls,tstamp,corr)
+                    if time == 0:
+                        txt += 'Reference fit'
+                    else:
+                        txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
+
+                    plotting.save_bandpass(txt,infig,dtype,bline,pol,time)
+
+    return residuals,polys,fig
 
 
 def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False):
@@ -95,7 +202,11 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
         nmad_model : float
             The normalised median absolute deviation from the model
         None : NoneType
-            Place holder for reduced chi squared metric"""
+            Place holder for reduced chi squared metric.
+    poly_paras : class `np.polyfit`
+        The fitted polynomial.
+    fig : class `matplotlib.figure`
+        The figure (None if plot is False)."""
 
     indices = ~np.isnan(xdata) & ~np.isnan(ydata) & (flags == 0)
     if weights is not None:
@@ -105,22 +216,27 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
     x = xdata[indices]
     y = ydata[indices]
 
-    xlin = np.arange(np.min(x),np.max(x))
-    poly_paras = np.polyfit(x,y,deg,w=w)
-    poly = np.poly1d(poly_paras)
-    fit = poly(xlin)
+    if x.size > 0 and y.size > 0:
+        xlin = np.arange(np.min(x),np.max(x))
+        poly_paras = np.polyfit(x,y,deg,w=w)
+        poly = np.poly1d(poly_paras)
+        fit = poly(xlin)
 
-    chi_sq=np.sum((y-poly(x))**2)
-    DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
+        chi_sq=np.sum((y-poly(x))**2)
+        DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
 
-    red_chi_sq = chi_sq/DOF
-    nmad = np.median(np.abs(y-np.median(y)))/0.6745
-    nmad_model = np.median(np.abs(y-poly(x)))/0.6745
+        red_chi_sq = chi_sq/DOF
+        nmad = np.median(np.abs(y-np.median(y)))/0.6745
+        nmad_model = np.median(np.abs(y-poly(x)))/0.6745
 
-    if plot:
-        plotting.plot_bandpass(x,y,xlab,ylab,fig=fig,logy=logy)
+        if plot:
+            fig = plotting.plot_bandpass(x,y,xlab,ylab,fig=fig,logy=logy)
+        else:
+            fig = None
 
-    return np.array([red_chi_sq,nmad,nmad_model,None]),poly_paras
+        return np.array([red_chi_sq,nmad,nmad_model,None]),poly_paras,fig
+    else:
+        return np.array([np.nan,np.nan,np.nan,None]),np.nan,None
 
 
 def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=True):
@@ -142,7 +258,14 @@ def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=Tr
     plot_poly : bool, optional
         Overlay the polynomial fit on the figure?
     plot_ref : bool, optional
-        Overlay the reference polynomial fit on the figure?"""
+        Overlay the reference polynomial fit on the figure?
+
+    Returns:
+    --------
+    red_chi_sq : float
+        Reduced chi squared between bot polynomials.
+    fig : class `matplotlib.figure`
+        The figure (None if plot is False)."""
 
     xdata = xdata[~np.isnan(xdata)]
     xlin = np.arange(np.min(xdata),np.max(xdata))
@@ -155,106 +278,11 @@ def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=Tr
     red_chi_sq = chi_sq/DOF
 
     if plot:
-        plotting.plot_polys(xlin,fit1,fit2,fig=fig)
-
-    return red_chi_sq
-
-def bandpass_metrics(vis,weights,flags,dtype='Amplitude',freqs=None,deg=3,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
-
-    """Calculate the bandpass metrics.
-
-    Paramaters:
-    -----------
-    vis : class:`np.ndarray`
-        The visibilities. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    weights : class:`np.ndarray`
-        The visibility weights. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    flags : class:`np.ndarray`
-        The visibility flags. Assumed to have shape (ntimes, nchannels, npols, nbaselines).
-    dtype : str, optional
-        'phase' | 'amplitude' (case-insensitive).
-    freqs : class:`np.ndarray`, optional
-        A list of frequencies for each channel.
-    deg : int, optional
-        Degree of polynomial to fit.
-    plot : bool, optional
-        Write a matplotlib figure?
-    plot_poly : bool, optional
-        Overlay the polynomial on the plot?
-    plot_ref : bool, optional
-        Overlay the reference polynomial on the plot?
-    infig : class:`plt.figure`, optional
-        Use this existing figure.
-    ylim : tuple, optional
-        Limits to put on the y axis
-
-    Returns:
-    --------
-    residuals : class `np.array`
-        The residual metrics of the fit polynomials, with shape
-        (ntimestamps, npols, nbaselines, 4 [red_chi_sq,nmad,nmad_model,red_chi_sq_poly])
-    polys : class `np.array`
-        Array of `np.polyfit` objects, representing the polynomials fit to each element of input data, with shape
-        (ntimestamps, npols, nbaselines, deg+1)"""
-
-    #make smaller for testing / plotting
-    vis = vis[:,:,0:1,0:5]
-    weights = weights[:,:,0:1,0:5]
-    flags = flags[:,:,0:1,0:5]
-
-    residuals = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
-    polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
-
-    if dtype.lower() in ['amplitude','amp']:
-        vis = vis.real #np.absolute(data)
-        logy = False
-    elif dtype.lower() == 'phase':
-        vis = vis.imag #np.angle(data,deg=True)
-        logy = False
+        fig = plotting.plot_polys(xlin,fit1,fit2,fig=fig)
     else:
-        print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
-        return
+        fig = None
 
-    for time in range(vis.shape[0]):
-        for pol in range(vis.shape[2]):
-            for bline in range(vis.shape[3]):
-
-                data = vis[time,:,pol,bline]
-                data_w = weights[time,:,pol,bline]
-                data_f = flags[time,:,pol,bline]
-
-                if freqs is None:
-                    all_chan = np.arange(vis.shape[1])
-                    xlab = 'Channel'
-                else:
-                    all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
-                    xlab = 'Frequency (MHz)'
-
-                if plot and infig is None:
-                    fig = plt.figure(figsize=(10,5))
-                else:
-                    fig = infig
-
-                residuals[time,pol,bline],polys[time,pol,bline] = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
-
-                red_chi_sq = compare_poly(all_chan,polys[time,pol,bline],polys[0,pol,bline],plot_poly=plot_poly,plot=plot,fig=fig)
-                residuals[time,pol,bline,3] = red_chi_sq
-
-                if plot:
-                    if not os.path.exists('plots'):
-                        os.mkdir('plots')
-                    txt = 'Baseline {0}, Time {1:02d}, '.format(bline,time)
-                    if red_chi_sq == 0.0:
-                        txt += 'Reference fit'
-                    else:
-                        txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
-
-                    plt.title(txt)
-                    if infig is None:
-                        plt.savefig('plots/{0}-b{1}-p{2}-t{3}.png'.format(dtype,bline,pol,time))
-                        plt.close()
-
-    return residuals,polys
+    return red_chi_sq,fig
 
 def location_specs(s,ts,parameters,loc):
 
@@ -346,5 +374,5 @@ def add_telstate_metric(metric,val,dtype,description,time,tolerance,ts):
         Telescope state, scoped to the cal namespace within the capture block."""
 
     ts.add('{0}_{1}_metric_val'.format(metric,dtype),val,ts=time)
-    ts.add('{0}_{1}_metric_status'.format(metric,dtype),val > tolerance,ts=time)
+    ts.add('{0}_{1}_metric_status'.format(metric,dtype),val < tolerance,ts=time)
     ts.add('{0}_{1}_metric_description'.format(metric,dtype),description,ts=time)
