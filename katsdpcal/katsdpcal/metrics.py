@@ -1,8 +1,7 @@
-import os
 import numpy as np
 from . import plotting
 
-def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_func=np.mean,metric_tol=10):
+def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,metric_tol=10,plot=False,plot_per='baseline'):
 
     """Derive quality metrics for the calibrated data of a bandpass calibrator. This compares low-order polynomial fits
     to the calibrated bandpass (amplitude and phase), comparing each timestamp of a single baseline to a reference timestamp
@@ -24,12 +23,14 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
         The pipeline parameters
     deg : int, optional
         Degree of polynomials to fit.
-    plot : bool, optional
-        Plot the data and fitting?
     metric_func : function, optional
         Function to apply to the distribution of residuals, which is np.mean by default.
     metric_tol : float, optional
-        If the value of metric_func is less than this tolerance, flag the metric as bad."""
+        If the value of metric_func is less than this tolerance, flag the metric as bad.
+    plot : bool, optional
+        Plot the data and fitting?
+    plot_per : str, optional
+        When plot is True, save plot for all data, every baseline, or every timestamp ('all' | 'baseline' | 'time')."""
 
     # get good axis limits from data for plotting amplitude
     inc = vis.shape[1] // 4
@@ -38,8 +39,8 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
     aylim=(low,high)
 
     # compute bandpass data quality metrics
-    amp_resid,amp_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Amp',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=aylim)
-    phase_resid,phase_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Phase',plot=plot,plot_poly=True,plot_ref=True,deg=deg,ylim=(-10,10))
+    amp_resid,amp_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Amp',deg=deg,plot=plot,plot_per=plot_per,ylim=aylim)
+    phase_resid,phase_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Phase',deg=deg,plot=plot,plot_per=plot_per,ylim=(-10,10))
 
     # take single bandpass metric as worst
     BP_amp_metric = metric_func(amp_resid[:,:,:,3])
@@ -52,7 +53,7 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,plot=False,metric_fun
     time,description = metric_description(s, ts, parameters, BP_phase_metric_loc)
     add_telstate_metric('bp',BP_phase_metric,'phase',description,time,metric_tol,ts)
 
-def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=None,deg=3,ref_time=0,plot=False,plot_poly=True,plot_ref=True,infig=None,ylim=None):
+def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=None,deg=3,ref_time=0,plot=False,plot_poly=True,plot_ref=True,plot_per='baseline',ylim=None):
 
     """Calculate the bandpass metrics, including....
 
@@ -84,8 +85,8 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
         Overlay the polynomial on the plot?
     plot_ref : bool, optional
         Overlay the reference polynomial on the plot?
-    infig : class:`plt.figure`, optional
-        Use this existing figure. Input figure generated from plotting.plot_bandpass(None,None) here to overlay all baselines.
+    plot_per : str, optional
+        When plot is True, save plot for all data, every baseline, or every timestamp ('all' | 'baseline' | 'time').
     ylim : tuple, optional
         Limits to put on the y axis
 
@@ -118,9 +119,12 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
         print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
         return
 
-    for time in range(vis.shape[0]):
+    if plot and plot_per.lower() == 'all':
+        fig = plotting.plot_bandpass(None,None)
+
+    for bline in range(vis.shape[3]):
         for pol in range(vis.shape[2]):
-            for bline in range(vis.shape[3]):
+            for time in range(vis.shape[0]):
 
                 data = vis[time,:,pol,bline]
                 data_w = weights[time,:,pol,bline]
@@ -133,10 +137,8 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
                     all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
                     xlab = 'Frequency (MHz)'
 
-                if plot and infig is None:
+                if plot and plot_per == 'time':
                     fig = plotting.plot_bandpass(None,None)
-                else:
-                    fig = infig
 
                 residuals[time,pol,bline],polys[time,pol,bline],fig = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
 
@@ -144,18 +146,26 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
                 residuals[time,pol,bline,3] = red_chi_sq
 
                 if plot:
-                    loc = np.array([time,pol,bline])
+                    loc = (np.array([time]),np.array([pol]),np.array([bline]))
                     tstamp,corr,bls = location_specs(s,ts,parameters,loc)
 
-                    if not os.path.exists('plots'):
-                        os.mkdir('plots')
-                    txt = 'Baseline {0}, Time {1}, Pol, {2}: '.format(bls,tstamp,corr)
-                    if time == 0:
-                        txt += 'Reference fit'
-                    else:
-                        txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
+                    if plot_per.lower() == 'time':
+                        txt = 'Baseline {0}, Time {1}, Pol {2}: '.format(bls,tstamp,corr)
+                        if time == ref_time:
+                            txt += 'Reference fit'
+                        else:
+                            txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
+                        plotting.save_bandpass(txt,dtype,bls,corr,time)
 
-                    plotting.save_bandpass(txt,infig,dtype,bline,pol,time)
+        if plot and plot_per.lower() == 'baseline':
+            txt = 'Baseline {0}, all time, all pol: '.format(bls)
+            txt += r'$\chi_{\rm red,worst}^2 = %s$' % '{0:.2f}'.format(np.nanmax(residuals[:,:,bline,3]))
+            plotting.save_bandpass(txt,dtype,bls,'all_pol','_all')
+
+    if plot and plot_per.lower() == 'all':
+        txt = 'All baselines, all time, all pol: '
+        txt += r'$\chi_{\rm red,worst}^2 = %s$' % '{0:.2f}'.format(np.nanmax(residuals[:,:,:,3]))
+        plotting.save_bandpass(txt,dtype,'all_baselines','all_pol','_all')
 
     return residuals,polys,fig
 
@@ -230,7 +240,7 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
         nmad_model = np.median(np.abs(y-poly(x)))/0.6745
 
         if plot:
-            fig = plotting.plot_bandpass(x,y,xlab,ylab,fig=fig,logy=logy)
+            fig = plotting.plot_bandpass(x,y,xlab,ylab,xlim,ylim,fig=fig,logy=logy)
         else:
             fig = None
 
@@ -278,7 +288,7 @@ def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=Tr
     red_chi_sq = chi_sq/DOF
 
     if plot:
-        fig = plotting.plot_polys(xlin,fit1,fit2,fig=fig)
+        fig = plotting.plot_polys(xlin,fit1,fit2,plot_poly,plot_ref,fig=fig)
     else:
         fig = None
 
@@ -311,7 +321,7 @@ def location_specs(s,ts,parameters,loc):
     time = s.timestamps[loc[0][0]]
     pol = parameters['pol_ordering'][loc[1][0]] * 2
     bline = s.cross_ant.bls_lookup[loc[2][0]]
-    bls_str = '{0}-{1}'.format(s.antennas[metric_bls[0]].name,s.antennas[metric_bls[1]].name)
+    bls_str = '{0}-{1}'.format(s.antennas[bline[0]].name,s.antennas[bline[1]].name)
 
     return time,pol,bls_str
 

@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import numpy as np
 import matplotlib.dates as md
@@ -642,7 +643,7 @@ def plot_corr_v_time(times, data, plottype='p', antenna_names=None, title=None, 
     return fig
 
 
-def plot_bandpass(x,y,xlab='Channel',ylab='Data',fig=None,logy=False):
+def plot_bandpass(x,y,xlab='Channel',ylab='Data',xlim=None,ylim=None,fig=None,logy=False):
 
     """Plot bandpass data, either as amplitude, or phase, as a function of frequency channel.
 
@@ -656,6 +657,10 @@ def plot_bandpass(x,y,xlab='Channel',ylab='Data',fig=None,logy=False):
         The x-axis label.
     ylab : string, optional
         The y-axis label.
+    xlim : tuple, optional
+        Limits to put on the x axis.
+    ylim : tuple, optional
+        Limits to put on the y axis.
     fig : class:`plt.figure`, optional
         Use this existing figure.
     logy : bool, optional
@@ -682,7 +687,7 @@ def plot_bandpass(x,y,xlab='Channel',ylab='Data',fig=None,logy=False):
 
     return fig
 
-def plot_polys(xlin,fit1,fit2,fig=None):
+def plot_polys(xlin,fit1,fit2,plot_poly=True,plot_ref=True,fig=None):
 
     """Plot two input polynomials.
 
@@ -694,6 +699,10 @@ def plot_polys(xlin,fit1,fit2,fig=None):
         The first polynomial.
     fit2 : class `np.poly1d`
         The second polynomial.
+    plot_poly : bool, optional
+        Overlay the polynomial on the plot?
+    plot_ref : bool, optional
+        Overlay the reference polynomial on the plot?
     fig : class:`plt.figure`, optional
         Use this existing figure."""
 
@@ -707,7 +716,7 @@ def plot_polys(xlin,fit1,fit2,fig=None):
 
     return fig
 
-def save_bandpass(txt,infig,dtype,bline,pol,time):
+def save_bandpass(txt,dtype,bline,pol,time):
 
     """Title and save bandpass figure.
 
@@ -724,9 +733,10 @@ def save_bandpass(txt,infig,dtype,bline,pol,time):
     pol : str
         Polarisation, in the format 'hh,vv'.
     time : float
-        Timestamp."""
+        Timestamp index."""
 
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
     plt.title(txt)
-    if infig is None:
-        plt.savefig('plots/{0}-b{1}-p{2}-t{3}.png'.format(dtype,bline,pol,time))
-        plt.close()
+    plt.savefig('plots/{0}-{1}-{2}-time{3}.png'.format(dtype,bline,pol,time))
+    plt.close()

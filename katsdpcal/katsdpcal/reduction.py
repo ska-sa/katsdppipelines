@@ -630,12 +630,13 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
                 s.summarize(av_corr, target_name + '_nog_spec', nchans=1024, refant_only=True)
 
         #if target is BP calibrator, derive BP metrics on calibrated data
-        if 'bpcal' in taglist:
+        cal_tags = ['bpcal','bfcal']
+        if any(k in cal_tags for k in taglist):
             logger.info('Deriving bandpass metric for {0}:'.format(target_name,))
 
             #point to cross-antenna, xx & yy data
             bp_data = s.cross_ant.tf.auto_pol
-            metrics.derive_metrics(bp_data.vis,bp_data.weights,bp_data.flags,s,ts,parameters,deg=3,plot=False,metric_func=np.mean,metric_tol=10)
+            metrics.derive_metrics(bp_data.vis,bp_data.weights,bp_data.flags,s,ts,parameters,deg=3,metric_func=np.mean,metric_tol=10,plot=False,plot_per='baseline')
 
             logger.info(ts.get('{0}_{1}_metric_val'.format('bp','amp')))
             logger.info(ts.get('{0}_{1}_metric_status'.format('bp','amp')))
