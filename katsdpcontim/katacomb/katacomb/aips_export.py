@@ -7,6 +7,8 @@ from katacomb import (uv_factory,
                     katdal_timestamps,
                     katdal_ant_name)
 
+import numpy as np
+
 log = logging.getLogger('katacomb')
 
 # AIPS Table entries follow this kind of schema where data
