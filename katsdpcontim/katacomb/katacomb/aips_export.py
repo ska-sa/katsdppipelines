@@ -103,14 +103,14 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
                 try:
-                    cctab = cf.tables["AIPS CC"]
+                    merged_cctab = cf.MergeCC()
                 except KeyError:
                     log.warn("No clean components in '%s'", clean_file)
                 else:
                     target = "target%d" % si
 
                     # Condition all rows up front
-                    rows = [_condition(r) for r in cctab.rows]
+                    rows = [_condition(r) for r in merged_cctab.rows]
 
                     # Extract description
                     description = targets[ti].description

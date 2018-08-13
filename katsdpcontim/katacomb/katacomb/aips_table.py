@@ -33,13 +33,12 @@ def _vectorise(value):
         return [value]
     return value
 
-
 class AIPSTableKeywords(object):
     def __init__(self, table, table_name):
         """
         Constructs an :class:`AIPSTableKeywords` object.
 
-        It behave like a dictionary.
+        It behaves like a dictionary.
         Keywords on the AIPS table configure certain properties
         associated with the table.
 

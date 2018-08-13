@@ -6,7 +6,9 @@ from pretty import pretty
 
 import FArray
 import Image
+import Table
 import TableList
+import TableUtil
 
 from katacomb import (AIPSTable,
                           AIPSHistory,
@@ -358,3 +360,30 @@ class ImageFacade(object):
 
         handle_obit_err("Error deleting Image file '%s'" % self.name, self._err)
         self._clear_img()
+
+    def MergeCC(self):
+        """
+        Merge the positionally coincidental clean components in the
+        attached CC table and attach the merged table.
+        """
+        err_msg = "Exception merging CC Table in '%s'" % self.name
+
+        cctab = self.tables["AIPS CC"]
+        init_nrow = cctab.nrow
+        #Create an empty table to hold the merged table
+        merged_cctab = self.img.NewTable(Table.READWRITE,
+                                         "AIPS CC",
+                                         cctab.version + 1,
+                                         self._err)
+        try:
+            TableUtil.PCCMerge(cctab._table, merged_cctab, self._err)
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
+        handle_obit_err("Error merging CC Table in '%s'" % self.name, self._err)
+
+        # Attach merged version of CC Table
+        self.attach_table("AIPS CC", cctab.version + 1)
+        merged_cctab = self.tables["AIPS CC"]
+        log.info("Merged %d CCs to %d for %s",
+             init_nrow, merged_cctab.nrow, self.name)
+        return merged_cctab
