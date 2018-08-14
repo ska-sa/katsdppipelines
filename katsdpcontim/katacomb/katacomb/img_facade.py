@@ -119,15 +119,13 @@ def img_factory(**kwargs):
     img = open_img(ofile, mode)
     return ImageFacade(img)
 
+# Force order to ra, dec, freq, stokes
+OBITIMAGEMF_ORDER = ['jlocr', 'jlocd', 'jlocf', 'jlocs']
 OBITIMAGEMF_CTYPE = ["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES"]
 
 def obit_image_mf_planes(imgf):
     """
     Generator returning SPECLNMF planes of an ObitImageMF AIPS Image.
-
-    The CTYPE of an ObitImageMF AIPS Image looks like
-    :code:`["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES", "", ""]` and
-    respectively correspond to the l, m, spectral logarithmic and stokes parameters.
 
     Parameters
     ----------
@@ -142,22 +140,17 @@ def obit_image_mf_planes(imgf):
     """
     desc = imgf.Desc.Dict
     inaxes = desc['inaxes']
-    ctype = [s.strip() for s in desc['ctype']]
 
-    if not ctype[:4] == OBITIMAGEMF_CTYPE:
-        raise ValueError("'%s' doesn't appear to be an ObitImageMF. "
-                        "Required CTYPE[:4] is '%s' "
-                        "but got '%s'.\n"
-                        "Descriptor is '%s'." % (
-                            imgf.aips_path, OBITIMAGEMF_CTYPE,
-                            ctype[:4], pretty(desc)))
+    # Make sure imgf is an ObitImageMF
+    imgf.checkMF()
 
-    l, m, speclnmf, stokes = inaxes[:4]
+    speclnmf = inaxes[desc['jlocf']]
+    nstokes = inaxes[desc['jlocs']]
 
-    for slnmf in range(1, speclnmf+1):
+    for slnmf in range(1, speclnmf + 1):
         imgs = []
 
-        for stokes in range(1, stokes+1):
+        for stokes in range(1, nstokes + 1):
             # Obit plane selects on axis 2 and onwards.
             # So we get the [l,m] axes by default.
             plane = [slnmf,stokes,1,1,1]
@@ -167,6 +160,35 @@ def obit_image_mf_planes(imgf):
         # Yield arrays stacked on stokes
         yield np.stack(imgs, axis=2)
 
+def obit_image_mf_rms(imgf):
+    """
+    Return the RMS in each image frequency plane of an ObitImageMF
+
+    Parameters
+    ----------
+    imgf : :class:`ImageFacade`
+        Image facade
+
+    Returns
+    -------
+    np.ndarray
+        RMS per plane per Stokes (nplanes,stokes)
+    """
+    # ObitImageMF?
+    imgf.checkMF()
+
+    desc = imgf.Desc.Dict
+    inaxes = desc['inaxes']
+    nimplanes = inaxes[desc['jlocf']]
+    nstokes = inaxes[desc['jlocs']]
+
+    rms = np.empty((nimplanes, nstokes,), dtype=np.float32)
+    for fplane in range (1, nimplanes + 1):
+        for stokes in range(1, nstokes + 1):
+            plane = [fplane, stokes, 1, 1, 1]
+            imgf.GetPlane(None, plane)
+            rms[fplane - 1, stokes - 1] = imgf.FArray.RMS
+    return rms
 
 class ImageFacade(object):
     def __init__(self, img, **kwargs):
@@ -345,7 +367,7 @@ class ImageFacade(object):
 
     @property
     def List(self):
-        return self.img.List
+        return self.img.Desc.List
 
     def Close(self):
         self.close()
@@ -387,3 +409,25 @@ class ImageFacade(object):
         log.info("Merged %d CCs to %d for %s",
              init_nrow, merged_cctab.nrow, self.name)
         return merged_cctab
+
+    def checkMF(self):
+        """
+        Raise ValueError if this image is not an ObitImageMF.
+
+        The CTYPE of an ObitImageMF AIPS Image looks like
+        :code:`["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES", "", ""]` and
+        respectively correspond to the l, m, spectral logarithmic and stokes parameters.
+        """
+
+        imdesc = self.Desc.Dict
+        ctype = [s.strip() for s in imdesc['ctype']]
+        # Order ctype by defined order
+        locs = [imdesc[label] for label in OBITIMAGEMF_ORDER]
+        ord_ctype = [ctype[loc] for loc in locs]
+        if not ord_ctype == OBITIMAGEMF_CTYPE:
+            raise ValueError("'%s' doesn't appear to be an ObitImageMF. "
+                             "Required ordered CTYPE is '%s' "
+                             "but got '%s'.\n"
+                             "Descriptor is '%s'." % (
+                             imgf.aips_path, OBITIMAGEMF_CTYPE,
+                             ord_ctype, pretty(imdesc)))
