@@ -120,7 +120,7 @@ def img_factory(**kwargs):
     return ImageFacade(img)
 
 # Force order to ra, dec, freq, stokes
-OBITIMAGEMF_ORDER = ['jlocr', 'jlocd', 'jlocf', 'jlocs']
+OBITIMAGEMF_ORDER = ["jlocr", "jlocd", "jlocf", "jlocs"]
 OBITIMAGEMF_CTYPE = ["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES"]
 
 def obit_image_mf_planes(imgf):
@@ -178,9 +178,9 @@ def obit_image_mf_rms(imgf):
     imgf.checkMF()
 
     desc = imgf.Desc.Dict
-    inaxes = desc['inaxes']
-    nimplanes = inaxes[desc['jlocf']]
-    nstokes = inaxes[desc['jlocs']]
+    inaxes = desc["inaxes"]
+    nimplanes = inaxes[desc["jlocf"]]
+    nstokes = inaxes[desc["jlocs"]]
 
     rms = np.empty((nimplanes, nstokes,), dtype=np.float32)
     for fplane in range (1, nimplanes + 1):
@@ -420,7 +420,7 @@ class ImageFacade(object):
         """
 
         imdesc = self.Desc.Dict
-        ctype = [s.strip() for s in imdesc['ctype']]
+        ctype = [s.strip() for s in imdesc["ctype"]]
         # Order ctype by defined order
         locs = [imdesc[label] for label in OBITIMAGEMF_ORDER]
         ord_ctype = [ctype[loc] for loc in locs]
