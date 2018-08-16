@@ -144,6 +144,8 @@ def obit_image_mf_planes(imgf):
     # Make sure imgf is an ObitImageMF
     imgf.checkMF()
 
+    l = inaxes[desc['jlocr']]
+    m = inaxes[desc['jlocd']]
     speclnmf = inaxes[desc['jlocf']]
     nstokes = inaxes[desc['jlocs']]
 
@@ -153,9 +155,9 @@ def obit_image_mf_planes(imgf):
         for stokes in range(1, nstokes + 1):
             # Obit plane selects on axis 2 and onwards.
             # So we get the [l,m] axes by default.
-            plane = [slnmf,stokes,1,1,1]
+            plane = [slnmf, stokes, 1, 1, 1]
             imgf.GetPlane(None, plane)
-            imgs.append(imgf.np_farray.reshape(l,m).copy())
+            imgs.append(imgf.np_farray.reshape(l, m).copy())
 
         # Yield arrays stacked on stokes
         yield np.stack(imgs, axis=2)
@@ -336,10 +338,6 @@ class ImageFacade(object):
 
         return np.frombuffer(buf, count=-1, dtype=np.float32)
 
-    @property
-    def tables(self):
-        return self._tables
-
     def Open(self, mode):
         err_msg = "Error opening Image file '%s'" % self.name
 
@@ -392,7 +390,7 @@ class ImageFacade(object):
 
         cctab = self.tables["AIPS CC"]
         init_nrow = cctab.nrow
-        #Create an empty table to hold the merged table
+        # Create an empty table to hold the merged table
         merged_cctab = self.img.NewTable(Table.READWRITE,
                                          "AIPS CC",
                                          cctab.version + 1,
@@ -429,5 +427,5 @@ class ImageFacade(object):
                              "Required ordered CTYPE is '%s' "
                              "but got '%s'.\n"
                              "Descriptor is '%s'." % (
-                             imgf.aips_path, OBITIMAGEMF_CTYPE,
+                             self.aips_path, OBITIMAGEMF_CTYPE,
                              ord_ctype, pretty(imdesc)))

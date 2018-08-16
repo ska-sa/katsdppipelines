@@ -208,14 +208,16 @@ def cc_to_katpoint(img, order=4):
         if np.mean(ccflux) <= 0.:
             continue
         ccflux = np.abs(ccflux)
-        kp_coeffs = fit_flux_model(planefreqs, ccflux, mt["reffreq"], planerms, cc["FLUX"], order=order)
+        kp_coeffs = fit_flux_model(planefreqs, ccflux, mt["reffreq"],
+                                   planerms, cc["FLUX"], order=order)
         kp_coeffs_str = " ".join([str(coeff) for coeff in kp_coeffs])
         kp_flux_model = "(%.2f %.2f %s)" % \
-                     (mt["startfreq"], mt["endfreq"], kp_coeffs_str)
+                        (mt["startfreq"], mt["endfreq"], kp_coeffs_str)
         l, m = np.deg2rad([cc["DELTAX"], cc["DELTAY"]])
         posn = katpoint.plane_to_sphere[mt["improj"]](mt["refra"], mt["refdec"], l, m)
         ra_d, dec_d = np.rad2deg(posn)
-        katpoint_rows.append("CC_%06d, radec, %s, %s, %s" % (ccnum, str(ra_d), str(dec_d), kp_flux_model))
+        katpoint_rows.append("CC_%06d, radec, %s, %s, %s" %
+                             (ccnum, str(ra_d), str(dec_d), kp_flux_model))
     return katpoint_rows
 
 
@@ -256,16 +258,16 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
         (iref*exp(args[0]*lnunu0 + args[1]*lnunu0**2) ...)
         """
         exponent = np.sum([arg * (lnunu0 ** (power + 1))
-                           for power, arg in enumerate(args)], axis = 0)
+                           for power, arg in enumerate(args)], axis=0)
         return iref * np.exp(exponent)
-        
+
     def cc_to_katpoint(nu0, iref, *args):
         """ Convert model from flux_model to katpoint FluxDensityModel.
         """
         nu1 = 1.e6
         r = np.log(nu1 / nu0)
         p = np.log(10.)
-        exponent = np.sum([arg * (r ** (power + 1)) 
+        exponent = np.sum([arg * (r ** (power + 1))
                            for power, arg in enumerate(args)])
         # Compute log of flux_model directly to avoid
         # exp of extreme values when extrapolating to 1MHz
@@ -288,7 +290,8 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
         try:
             popt, _ = curve_fit(flux_model, lnunu0, s, p0=init[:fitorder + 1], sigma=sigma)
         except RuntimeError:
-            log.warn("Fitting flux model of order %d to CC failed. Trying lower order fit."%(fitorder,))
+            log.warn("Fitting flux model of order %d to CC failed. Trying lower order fit." %
+                     (fitorder,))
         else:
             coeffs = np.pad(popt, (0, order - fitorder), "constant")
             return cc_to_katpoint(nu0, *coeffs)
