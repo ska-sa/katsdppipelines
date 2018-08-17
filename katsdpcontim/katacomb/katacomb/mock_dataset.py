@@ -76,6 +76,31 @@ DEFAULT_METADATA = {
     'experiment_id': 'mock',
 }
 
+def DEFAULT_WEIGHTS(shape, **kwargs):
+    obj = kwargs.get('obj')
+    # Dump space is linear space between scaled dump indices
+    start, stop = obj.dumps[[0,-1]]/ 1000.0
+    return np.linspace(start, stop,
+                       num=np.product(shape),
+                       endpoint=True,
+                       dtype=np.float32).reshape(shape)
+
+def DEFAULT_FLAGS(shape, **kwargs):
+    flags = np.zeros(shape, dtype=np.bool)
+    # Flag 10% of visibilities
+    nflagged = int(0.1*flags.size)
+    flags.ravel()[-nflagged:] = True
+    return flags
+
+
+def DEFAULT_VIS(shape, **kwargs):
+    obj = kwargs.get('obj')
+    # Visibilities of form (scan + dump*1j)
+    vis = np.empty(shape, dtype=np.complex64)
+    vis[:,:,:].real = np.full(shape, obj.scan_indices[0])
+    vis[:,:,:].imag = obj.dumps[:,None,None]
+    return vis
+
 _CORR_PRODUCT_LOOKUP = {
     ('h', 'h'): 0,
     ('h', 'v'): 1,
@@ -128,6 +153,19 @@ class MockDataSet(DataSet):
             Defaults to MeerKAT 32K L band
         dumps (optional): list of tuples
             List of (event, number of dumps, target) tuples
+        vis (optional): function
+            Function from which the visibility array is defined.
+            The function must take a shape tuple as its first argument
+            and also optionally take the MockDataSet instance as an
+            'obj' kwarg.
+            The function should create an ndarray of complex64 values
+            with the given shape.
+        weights (optional): function
+            Function from which the weights array is defined.
+            Similar to vis, will create an ndarray of float32 values.
+        flags (optional): function
+            Function from which the vis array is defined.
+            Similar to vis, will create an ndarray of boolean values.
         """
         super(MockDataSet, self).__init__(name='mock')
         self.observer = 'mock'
@@ -140,6 +178,10 @@ class MockDataSet(DataSet):
         subarray_defs = kwargs.get('subarrays', DEFAULT_SUBARRAYS)
         dump_defs = kwargs.get('dumps', DEFAULT_DUMPS)
         spw_defs = kwargs.get('spws', DEFAULT_SPWS)
+
+        self._vis_def = kwargs.get('vis', DEFAULT_VIS)
+        self._flags_def = kwargs.get('flags', DEFAULT_FLAGS)
+        self._weights_def = kwargs.get('weights', DEFAULT_WEIGHTS)
 
 
         self._create_metadata(metadata_defs)
@@ -417,21 +459,11 @@ class MockDataSet(DataSet):
 
     @property
     def weights(self):
-        # Dump space is linear space between scaled dump indices
-        start, stop = self.dumps[[0,-1]]/ 1000.0
-        return np.linspace(start, stop,
-                            num=np.product(self.shape),
-                            endpoint=True,
-                            dtype=np.float32).reshape(self.shape)
+        return self._weights_def(self.shape, obj=self)
 
     @property
     def flags(self):
-        flags = np.zeros(self.shape, dtype=np.bool)
-
-        # Flag 10% of visibilities
-        nflagged = int(0.1*flags.size)
-        flags.ravel()[-nflagged:] = True
-        return flags
+        return self._flags_def(self.shape, obj=self)
 
     def _corr_product_indices(self):
         """
@@ -494,8 +526,4 @@ class MockDataSet(DataSet):
 
     @property
     def vis(self):
-        # Visibilities of form (scan + dump*1j)
-        vis = np.empty(self.shape, dtype=np.complex64)
-        vis[:,:,:].real = np.full(self.shape, self.scan_indices[0])
-        vis[:,:,:].imag = self.dumps[:,None,None]
-        return vis
+        return self._vis_def(self.shape, obj=self)
