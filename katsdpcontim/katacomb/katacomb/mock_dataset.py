@@ -76,29 +76,27 @@ DEFAULT_METADATA = {
     'experiment_id': 'mock',
 }
 
-def DEFAULT_WEIGHTS(shape, **kwargs):
-    obj = kwargs.get('obj')
+def DEFAULT_WEIGHTS(dataset, **kwargs):
     # Dump space is linear space between scaled dump indices
-    start, stop = obj.dumps[[0,-1]]/ 1000.0
+    start, stop = dataset.dumps[[0,-1]]/ 1000.0
     return np.linspace(start, stop,
-                       num=np.product(shape),
+                       num=np.product(dataset.shape),
                        endpoint=True,
-                       dtype=np.float32).reshape(shape)
+                       dtype=np.float32).reshape(dataset.shape)
 
-def DEFAULT_FLAGS(shape, **kwargs):
-    flags = np.zeros(shape, dtype=np.bool)
+def DEFAULT_FLAGS(dataset, **kwargs):
+    flags = np.zeros(dataset.shape, dtype=np.bool)
     # Flag 10% of visibilities
     nflagged = int(0.1*flags.size)
     flags.ravel()[-nflagged:] = True
     return flags
 
 
-def DEFAULT_VIS(shape, **kwargs):
-    obj = kwargs.get('obj')
+def DEFAULT_VIS(dataset, **kwargs):
     # Visibilities of form (scan + dump*1j)
-    vis = np.empty(shape, dtype=np.complex64)
-    vis[:,:,:].real = np.full(shape, obj.scan_indices[0])
-    vis[:,:,:].imag = obj.dumps[:,None,None]
+    vis = np.empty(dataset.shape, dtype=np.complex64)
+    vis[:,:,:].real = np.full(dataset.shape, dataset.scan_indices[0])
+    vis[:,:,:].imag = dataset.dumps[:,None,None]
     return vis
 
 _CORR_PRODUCT_LOOKUP = {
@@ -154,18 +152,28 @@ class MockDataSet(DataSet):
         dumps (optional): list of tuples
             List of (event, number of dumps, target) tuples
         vis (optional): function
-            Function from which the visibility array is defined.
-            The function must take a shape tuple as its first argument
-            and also optionally take the MockDataSet instance as an
-            'obj' kwarg.
-            The function should create an ndarray of complex64 values
-            with the given shape.
+            Custom function defining the visibilities returned by
+            the MockDataSet instance.
+            The function must take a MockDataSet instance as its first
+            argument and should have the following signature:
+
+            .. code-block:: python
+                def my_vis(dataset, **kwargs):
+                    shape = dataset.shape
+                    my_data = kwargs['my_data']
+                    ...
+                    return np.array(..., dtype=np.complex64)
+
+            Data orthogonal to dataset can be passed in with ``functools.partial``
+
+            .. code-block:: python
+                ds = MockDataSet(vis=partial(my_vis, my_data={...}))
         weights (optional): function
             Function from which the weights array is defined.
-            Similar to vis, will create an ndarray of float32 values.
+            Similar to vis, should create an ndarray of float32 values.
         flags (optional): function
             Function from which the vis array is defined.
-            Similar to vis, will create an ndarray of boolean values.
+            Similar to vis, should create an ndarray of boolean values.
         """
         super(MockDataSet, self).__init__(name='mock')
         self.observer = 'mock'
@@ -459,11 +467,11 @@ class MockDataSet(DataSet):
 
     @property
     def weights(self):
-        return self._weights_def(self.shape, obj=self)
+        return self._weights_def(self)
 
     @property
     def flags(self):
-        return self._flags_def(self.shape, obj=self)
+        return self._flags_def(self)
 
     def _corr_product_indices(self):
         """
@@ -526,4 +534,4 @@ class MockDataSet(DataSet):
 
     @property
     def vis(self):
-        return self._vis_def(self.shape, obj=self)
+        return self._vis_def(self)
