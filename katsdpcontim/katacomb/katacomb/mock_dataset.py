@@ -158,6 +158,7 @@ class MockDataSet(DataSet):
             argument and should have the following signature:
 
             .. code-block:: python
+
                 def my_vis(dataset, **kwargs):
                     shape = dataset.shape
                     my_data = kwargs['my_data']
@@ -167,7 +168,9 @@ class MockDataSet(DataSet):
             Data orthogonal to dataset can be passed in with ``functools.partial``
 
             .. code-block:: python
+
                 ds = MockDataSet(vis=partial(my_vis, my_data={...}))
+
         weights (optional): function
             Function from which the weights array is defined.
             Similar to vis, should create an ndarray of float32 values.
