@@ -740,3 +740,72 @@ def save_bandpass(txt,dtype,bline,pol,time):
     plt.title(txt)
     plt.savefig('plots/{0}-{1}-{2}-time{3}.png'.format(dtype,bline,pol,time))
     plt.close()
+
+
+def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
+
+    """Plot a histogram summarising the various statistics of the quality metrics.
+
+    Parameters
+    ----------
+    data : class `np.array`
+        The data to plot.
+    xlab : string
+        The x-axis label.
+    upper_lim : float, optional
+        The upper limit of the historgram plot.
+    nbins : int, optional
+        The number of bins to plot
+    figname : str, optional
+        The name of the file to write to disc.
+    extn : str, optional
+        The extension of the file to write to disc."""
+
+    fig = plt.figure(figsize=(FIG_X,FIG_Y))
+    # plt.tick_params(labelsize=14)
+    # #plt.tight_layout()
+
+    #weights to normalise histogram area to one
+    weights = np.ones_like(data.reshape(data.size))/float(data.size)
+
+    #Histogram bins and upper limit (force < 100)
+    upper = np.max(data)
+    if upper > 100:
+        upper = upper_lim
+    edges = np.linspace(0,upper,(int(nbins)+1)
+
+    #Overlay percentiles between 20th-80th
+    ymax = plt.gca().get_ylim()[1]*0.2
+    percentiles = np.linspace(20,80,4)
+    txt = 'Percentiles:\n'
+    for perc in percentiles:
+        txt += '{0:.0f}{1}: {2:.1f}\n'.format(perc,"$^{th}$",np.percentile(data,perc))
+    plt.text(upper,ymax,txt,horizontalalignment='right',verticalalignment='top')
+
+    #Overlay basic stats
+    mn,mx,med,mean,std,sterr,nmad = get_stats(data)
+    txt = 'Max: {0:.2}\nMedian: {1:.2}\nMean: {2:.2}\nSTD: {3:.2}\nNMAD: {4:.2}'.format(mx,med,mean,std,nmad)
+    plt.text(upper/1.2,ymax,txt,horizontalalignment='right',verticalalignment='top')
+
+    #Overlay percentage of data plotted
+    plot_data = data[np.where(data < upper)]
+    perc_data = (plot_data.size / data.size)*100
+    label = '{0:.0f}% of data between 0 < {1} < {2}'.format(perc_data,xlab,upper)
+
+    #Plot and format historgram
+    plt.hist(data.reshape(data.size),bins=edges,weights=weights,log=True,label=label,color='b')
+    plt.xlabel(xlab,fontsize=16)
+    plt.ylabel('Fraction of timestamps',fontsize=16)
+
+    ylim0,ylim1 = plt.gca().get_ylim()
+    plt.plot([10]*20,np.linspace(ylim0,ylim1,20),color='r')
+    plt.text(11,9e-3,'Example metric: Mean value\ngood enough for your LSP',verticalalignment='bottom',rotation=90)
+
+    plt.ylim(ylim0,1)
+    plt.legend()
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+
+    plt.savefig('plots/{0}.{1}'.format(figname,extn))
+

@@ -56,6 +56,9 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,m
     time,description = metric_description(s, ts, parameters, BP_phase_metric_loc)
     add_telstate_metric('bp',BP_phase_metric,'phase',description,time,metric_tol,ts)
 
+    plot_all_hist(amp_resid,'Amp',extn='pdf')
+    plot_all_hist(phase_resid,'Phase',extn='pdf')
+
 def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=None,deg=3,ref_time=0,plot=False,plot_poly=True,plot_ref=True,plot_per='baseline',ylim=None):
 
     """Calculate the bandpass metrics, including....
@@ -388,3 +391,33 @@ def add_telstate_metric(metric,val,dtype,description,time,tolerance,ts):
     ts.add('{0}_{1}_metric_val'.format(metric,dtype),val,ts=time)
     ts.add('{0}_{1}_metric_status'.format(metric,dtype),val < tolerance,ts=time)
     ts.add('{0}_{1}_metric_description'.format(metric,dtype),description,ts=time)
+
+
+def plot_all_hist(data,label,extn='pdf',metric_axis=3,metric_func=np.max):
+
+    """Write four plots to disc, summarising quality metrics.
+
+    Parameters
+    ----------
+    data : class `np.array`
+        The data to plot.
+    label : string
+        Label to append to beginning of file name that is written to disc.
+    extn : str, optional
+        The extension of the file to write to disc.
+    metric_axis : int, optional
+        Axis of data that contains metric distribution.
+    metric_func : func
+        Function to apply to metric distribution and return as single metric.
+
+    Returns:
+    --------
+    metric : float
+        Single metric value of whole of metric distrubtion."""
+
+    plotting.plot_histogram(data[:,:,:,0],label + r' $\rm \chi_{red,data}^2$',upper_lim=1e2,nbins=40,figname=label+'_hist_data',extn=extn)
+    plotting.plot_histogram(data[:,:,:,1],label + r' NMAD$_{\rm model}$',upper_lim=1e1,nbins=40,figname=label+'_hist_nmad_model',extn=extn)
+    plotting.plot_histogram(data[:,:,:,2],label + ' NMAD',upper_lim=1e1,nbins=40,figname=label+'_hist_nmad',extn=extn)
+    plotting.plot_histogram(data[:,:,:,3],label + r' $\rm \chi_{red,poly}^2$',upper_lim=1e2,nbins=40,figname=label+'_hist_poly',extn=extn)
+    return metric_func(data[:,:,:,metric_axis])
+
