@@ -421,3 +421,49 @@ def plot_all_hist(data,label,extn='pdf',metric_axis=3,metric_func=np.max):
     plotting.plot_histogram(data[:,:,:,3],label + r' $\rm \chi_{red,poly}^2$',upper_lim=1e2,nbins=40,figname=label+'_hist_poly',extn=extn)
     return metric_func(data[:,:,:,metric_axis])
 
+
+def get_stats(data):
+
+    """Return the min, max, median, mean, standard deviation, standard error and
+    normalised median absolute deviation (NMAD) of the non-nan values in a list.
+
+    Arguments:
+    ----------
+    data : list-like (numpy.array or pandas.Series)
+        The data used to calculate the statistics.
+
+    Returns:
+    --------
+    min : float
+        The minimum.
+    max : float
+        The maximum.
+    med : float
+        The median.
+    mean : float
+        The mean.
+    std : float
+        The standard deviation.
+    err : float
+        The standard error.
+    nmad : float
+        The normalised mad
+
+    See Also
+    --------
+    numpy.array
+    pandas.Series"""
+
+    #remove nan indices, as these affect the calculations
+    values = data[~np.isnan(data)]
+
+    min = np.min(values)
+    max = np.max(values)
+    med = np.median(values)
+    mean = np.mean(values)
+    std = np.std(values)
+    sterr = std / np.sqrt(len(values))
+    nmad = np.median(np.abs(values-np.median(values)))/0.6745
+
+    return min,max,med,mean,std,sterr,nmad
+

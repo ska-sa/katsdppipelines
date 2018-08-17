@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import matplotlib.dates as md
+from metrics import get_stats
 
 from cycler import cycler
 # use Agg backend for when the pipeline is run without an X1 connection
@@ -772,7 +773,7 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
     upper = np.max(data)
     if upper > 100:
         upper = upper_lim
-    edges = np.linspace(0,upper,(int(nbins)+1)
+    edges = np.linspace(0,upper,(int(nbins)+1))
 
     #Overlay percentiles between 20th-80th
     ymax = plt.gca().get_ylim()[1]*0.2
