@@ -137,11 +137,11 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
                      clean_file, str(e))
 
 
-def cc_to_katpoint(img, order=4):
+def cc_to_katpoint(img, order=2):
     """
     Convert the AIPS CC table attached to img to a
     list of katpoint Target strings.
-    The CC table must be in tabulated form (with PARMS[3] = 20.)
+    The CC table must be in tabulated form (with PARMS[3] = 20.).
 
     Parameters
     ----------
@@ -203,8 +203,7 @@ def cc_to_katpoint(img, order=4):
         # 1) Skip any clean component whose mean flux density is < 0.
         # 2) Make sure the flux of the clean components is positive in every plane
         # This will ensure the fitted model is positive which is a requirement of the katpoint
-        # FluxDensityModel. It also removes weak negative components which are generally just
-        # at the level of the noise in individual coarse frequency planes.
+        # FluxDensityModel.
         if np.mean(ccflux) <= 0.:
             continue
         ccflux = np.abs(ccflux)
@@ -234,7 +233,7 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
 
     Finally convert the fitted parameters to a
     katpoint FluxDensityModel:
-    log10(S) = a + b*log10(nu) + c*log10(nu)**2
+    log10(S) = a + b*log10(nu) + c*log10(nu)**2 + ...
 
     Parameters
     ----------
@@ -262,7 +261,7 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
         return iref * np.exp(exponent)
 
     def cc_to_katpoint(nu0, iref, *args):
-        """ Convert model from flux_model to katpoint FluxDensityModel.
+        """ Convert model from Obit flux_model to katpoint FluxDensityModel.
         """
         nu1 = 1.e6
         r = np.log(nu1 / nu0)
