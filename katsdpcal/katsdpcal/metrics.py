@@ -33,10 +33,13 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,m
         When plot is True, save plot for all data, every baseline, or every timestamp ('all' | 'baseline' | 'time')."""
 
     # get good axis limits from data for plotting amplitude
-    inc = vis.shape[1] // 4
-    high = int(np.nanmedian(vis[:,0:inc,:,:].real)*1.3)
-    low = int(np.nanmedian(vis[:,-inc:-1,:,:].real)*0.75)
-    aylim=(low,high)
+    if plot:
+        inc = vis.shape[1] // 4
+        high = int(np.nanmedian(vis[:,0:inc,:,:].real)*1.3)
+        low = int(np.nanmedian(vis[:,-inc:-1,:,:].real)*0.75)
+        aylim=(low,high)
+    else:
+        aylim = None
 
     # compute bandpass data quality metrics
     amp_resid,amp_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Amp',deg=deg,plot=plot,plot_per=plot_per,ylim=aylim)
@@ -121,8 +124,12 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
 
     if plot and plot_per.lower() == 'all':
         fig = plotting.plot_bandpass(None,None)
+    else:
+        fig = None
 
     for bline in range(vis.shape[3]):
+        if plot and plot_per.lower() == 'baseline':
+            fig = plotting.plot_bandpass(None,None)
         for pol in range(vis.shape[2]):
             for time in range(vis.shape[0]):
 
@@ -137,11 +144,10 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
                     all_chan = np.arange(freq[0],freq[-1],1) / 1.0e6
                     xlab = 'Frequency (MHz)'
 
-                if plot and plot_per == 'time':
+                if plot and plot_per.lower() == 'time':
                     fig = plotting.plot_bandpass(None,None)
 
                 residuals[time,pol,bline],polys[time,pol,bline],fig = poly_residual(all_chan,data,weights=data_w,flags=data_f,xlab=xlab,ylab=dtype,deg=deg,ylim=ylim,logy=logy,plot=plot,fig=fig)
-
                 red_chi_sq,fig = compare_poly(all_chan,polys[time,pol,bline],polys[ref_time,pol,bline],plot_poly=plot_poly,plot=plot,fig=fig)
                 residuals[time,pol,bline,3] = red_chi_sq
 
@@ -155,17 +161,17 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
                             txt += 'Reference fit'
                         else:
                             txt += r'$\chi_{\rm red}^2 = %s$' % '{0:.2f}'.format(red_chi_sq)
-                        plotting.save_bandpass(txt,dtype,bls,corr,time)
+                        plotting.save_bandpass(txt,dtype,bls,corr,tstamp)
 
         if plot and plot_per.lower() == 'baseline':
             txt = 'Baseline {0}, all time, all pol: '.format(bls)
             txt += r'$\chi_{\rm red,worst}^2 = %s$' % '{0:.2f}'.format(np.nanmax(residuals[:,:,bline,3]))
-            plotting.save_bandpass(txt,dtype,bls,'all_pol','_all')
+            plotting.save_bandpass(txt,dtype,bls,'all_pol','_all{0}'.format(np.mean(s.timestamps[0])))
 
     if plot and plot_per.lower() == 'all':
         txt = 'All baselines, all time, all pol: '
         txt += r'$\chi_{\rm red,worst}^2 = %s$' % '{0:.2f}'.format(np.nanmax(residuals[:,:,:,3]))
-        plotting.save_bandpass(txt,dtype,'all_baselines','all_pol','_all')
+        plotting.save_bandpass(txt,dtype,'all_baselines','all_pol','all_{0}'.format(np.mean(s.timestamps[0])))
 
     return residuals,polys,fig
 
@@ -214,7 +220,7 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
         None : NoneType
             Place holder for reduced chi squared metric.
     poly_paras : class `np.polyfit`
-        The fitted polynomial.
+        The fitted polynomial parameters.
     fig : class `matplotlib.figure`
         The figure (None if plot is False)."""
 
@@ -227,10 +233,8 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
     y = ydata[indices]
 
     if x.size > 0 and y.size > 0:
-        xlin = np.arange(np.min(x),np.max(x))
         poly_paras = np.polyfit(x,y,deg,w=w)
         poly = np.poly1d(poly_paras)
-        fit = poly(xlin)
 
         chi_sq=np.sum((y-poly(x))**2)
         DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
@@ -241,8 +245,6 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
 
         if plot:
             fig = plotting.plot_bandpass(x,y,xlab,ylab,xlim,ylim,fig=fig,logy=logy)
-        else:
-            fig = None
 
         return np.array([red_chi_sq,nmad,nmad_model,None]),poly_paras,fig
     else:
@@ -283,7 +285,7 @@ def compare_poly(xdata,poly1,poly2,plot=True,fig=None,plot_poly=True,plot_ref=Tr
     fit1 = np.poly1d(poly1)
     fit2 = np.poly1d(poly2)
 
-    chi_sq=np.sum((fit1(xlin)-fit2(xlin))**2)
+    chi_sq=np.sum((fit1(xdata)-fit2(xdata))**2)
     DOF=len(xdata)-len(poly1)-len(poly2)
     red_chi_sq = chi_sq/DOF
 
