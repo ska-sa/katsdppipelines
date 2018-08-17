@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import matplotlib.dates as md
-from metrics import get_stats
+import metrics
 
 from cycler import cycler
 # use Agg backend for when the pipeline is run without an X1 connection
@@ -763,8 +763,8 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
         The extension of the file to write to disc."""
 
     fig = plt.figure(figsize=(FIG_X,FIG_Y))
-    # plt.tick_params(labelsize=14)
-    # #plt.tight_layout()
+    plt.tick_params(labelsize=14)
+    plt.tight_layout()
 
     #weights to normalise histogram area to one
     weights = np.ones_like(data.reshape(data.size))/float(data.size)
@@ -784,7 +784,7 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
     plt.text(upper,ymax,txt,horizontalalignment='right',verticalalignment='top')
 
     #Overlay basic stats
-    mn,mx,med,mean,std,sterr,nmad = get_stats(data)
+    mn,mx,med,mean,std,sterr,nmad = metrics.get_stats(data)
     txt = 'Max: {0:.2}\nMedian: {1:.2}\nMean: {2:.2}\nSTD: {3:.2}\nNMAD: {4:.2}'.format(mx,med,mean,std,nmad)
     plt.text(upper/1.2,ymax,txt,horizontalalignment='right',verticalalignment='top')
 
@@ -799,8 +799,6 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
     plt.ylabel('Fraction of timestamps',fontsize=16)
 
     ylim0,ylim1 = plt.gca().get_ylim()
-    plt.plot([10]*20,np.linspace(ylim0,ylim1,20),color='r')
-    plt.text(11,9e-3,'Example metric: Mean value\ngood enough for your LSP',verticalalignment='bottom',rotation=90)
 
     plt.ylim(ylim0,1)
     plt.legend()
