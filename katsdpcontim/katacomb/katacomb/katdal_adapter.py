@@ -111,6 +111,9 @@ def aips_uvw(uvw, refwave):
     (AIPS Memo 117, Going AIPS, Obitdoc) which state that UVW coordinates
     should be in lightseconds.
 
+    AIPS uvw convention is ant2 - ant1 for visibilities in mvfv3 and mvfv4
+    files so we need to negate the output of katdal to convert to AIPS.
+
     Parameters
     ----------
     uvw : np.ndarray
@@ -123,7 +126,7 @@ def aips_uvw(uvw, refwave):
     np.ndarray
         AIPS UVW coordinates in wavelengths at the reference frequency
     """
-    return uvw / refwave
+    return -1. * uvw / refwave
 
 def katdal_uvw(uvw, refwave):
     """
@@ -143,7 +146,7 @@ def katdal_uvw(uvw, refwave):
     np.ndarray
         katdal UVW coordinates, in metres
     """
-    return refwave * uvw
+    return -1.0 * refwave * uvw
 
 def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
