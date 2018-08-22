@@ -83,6 +83,8 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
             log.warn("Export of calibration solutions from '%s' failed.\n%s",
                      uv_file, str(e))
 
+AIPS_TO_STOKES = ["I", "Q", "U", "V"]
+NUM_KATPOINT_PARMS = 10
 
 def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
     """
@@ -129,7 +131,8 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
                     data = {'description': description, 'components': katpoint_rows}
 
                     # Store them in telstate
-                    key = telstate.SEPARATOR.join((target, "clean_components"))
+                    stokes = AIPS_TO_STOKES[int(cf.Desc.Dict["crval"][cf.Desc.Dict["jlocs"]]) - 1]
+                    key = telstate.SEPARATOR.join([target, "clean_components_%s" % stokes])
                     telstate.add(key, data, immutable=True)
 
         except Exception as e:
@@ -163,6 +166,7 @@ def cc_to_katpoint(img, order=2):
         jlocr = imdescdict["jlocr"]
         jlocd = imdescdict["jlocd"]
         jlocf = imdescdict["jlocf"]
+        jlocs = imdescdict["jlocs"]
         nspec = imlistdict["NSPEC"][2][0]
         meta = {}
         meta["nimterms"] = imlistdict["NTERM"][2][0]
@@ -177,6 +181,7 @@ def cc_to_katpoint(img, order=2):
         meta["endfreq"] = imlistdict["FREH%04d" % (nspec)][2][0]/1.e6
         # Assume projection can be found from ctype 'RA--XXX' where XXX is the projection
         meta["improj"] = imdescdict["ctype"][jlocr].strip()[-3:]
+        meta["stok"] = int(imdescdict["crval"][jlocs])
         return meta
 
     cctab = img.tables["AIPS CC"]
@@ -199,16 +204,8 @@ def cc_to_katpoint(img, order=2):
             raise ValueError("Clean Components are not in tabulated form for %s" % (img.aips_path))
         # PARMS[4:] are the tabulated CC flux densities in each image plane.
         ccflux = cc["PARMS"][4:][fitmask]
-        # Condition the clean components:
-        # 1) Skip any clean component whose mean flux density is < 0.
-        # 2) Make sure the flux of the clean components is positive in every plane
-        # This will ensure the fitted model is positive which is a requirement of the katpoint
-        # FluxDensityModel.
-        if np.mean(ccflux) <= 0.:
-            continue
-        ccflux = np.abs(ccflux)
         kp_coeffs = fit_flux_model(planefreqs, ccflux, mt["reffreq"],
-                                   planerms, cc["FLUX"], order=order)
+                                   planerms, cc["FLUX"], stokes=mt["stok"], order=order)
         kp_coeffs_str = " ".join([str(coeff) for coeff in kp_coeffs])
         kp_flux_model = "(%.2f %.2f %s)" % \
                         (mt["startfreq"], mt["endfreq"], kp_coeffs_str)
@@ -220,7 +217,7 @@ def cc_to_katpoint(img, order=2):
     return katpoint_rows
 
 
-def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
+def fit_flux_model(nu, s, nu0, sigma, sref, stokes=1, order=2):
     """
     Fit a flux model of given order from Eqn 2. of
     the Obit Development Memo #38, Cotton (2014)
@@ -238,52 +235,24 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
     Parameters
     ----------
     nu : np.ndarray
-        Frequencies to fit
+        Frequencies to fit in Hz
     s : np.ndarray
-        Flux densities to fit
+        Flux densities to fit in Jy
     nu0 : float
-        Reference frequency in same units as nu
+        Reference frequency in Hz
     sigma : np.ndarray
         Errors of s
     sref : float
         Initial guess for the value of s at nu0
-    order : int
+    stokes : int (optional)
+        Stokes of image (in AIPSish 1=I, 2=Q, 3=U, 4=V)
+    order : int (optional)
         The desired order of the fitted flux model (1: SI, 2: SI + Curvature ...)
     """
 
-    def flux_model(lnunu0, iref, *args):
-        """
-        Compute model:
-        (iref*exp(args[0]*lnunu0 + args[1]*lnunu0**2) ...)
-        """
-        exponent = np.sum([arg * (lnunu0 ** (power + 1))
-                           for power, arg in enumerate(args)], axis=0)
-        return iref * np.exp(exponent)
-
-    def cc_to_katpoint(nu0, iref, *args):
-        """ Convert model from Obit flux_model to katpoint FluxDensityModel.
-        """
-        nu1 = 1.e6
-        r = np.log(nu1 / nu0)
-        p = np.log(10.)
-        exponent = np.sum([arg * (r ** (power + 1))
-                           for power, arg in enumerate(args)])
-        # Compute log of flux_model directly to avoid
-        # exp of extreme values when extrapolating to 1MHz
-        lsnu1 = np.log(iref) + exponent
-        a0 = lsnu1 / p
-        kpmodel = [a0]
-        n = len(args)
-        for idx in range(1, n + 1):
-            coeff = np.poly1d([binom(j, idx) * args[j - 1]
-                               for j in range(n, idx - 1, -1)])
-            betai = coeff(r)
-            ai = betai * p ** (idx - 1)
-            kpmodel.append(ai)
-        return kpmodel
-
-    init_si = np.log(nu[0] / nu[-1]) / np.log(s[0] / s[-1])
-    init = [sref, init_si] + [0] * (order - 1)
+    if order > 3:
+        raise ValueError("katpoint flux models are only supported up to 3rd order.")
+    init = [sref, -0.7] + [0] * (order - 1)
     lnunu0 = np.log(nu/nu0)
     for fitorder in range(order, -1, -1):
         try:
@@ -293,7 +262,45 @@ def fit_flux_model(nu, s, nu0, sigma, sref, order=2):
                      (fitorder,))
         else:
             coeffs = np.pad(popt, (0, order - fitorder), "constant")
-            return cc_to_katpoint(nu0, *coeffs)
+            return obit_to_katpoint(nu0, stokes, *coeffs)
     # Give up and return the weighted mean
     coeffs = [np.average(s, weights=1./(sigma**2))] + [0] * order
-    return cc_to_katpoint(nu0, *coeffs)
+    return obit_to_katpoint(nu0, stokes, *coeffs)
+
+
+def flux_model(lnunu0, iref, *args):
+    """
+    Compute model:
+    (iref*exp(args[0]*lnunu0 + args[1]*lnunu0**2) ...)
+    """
+    exponent = np.sum([arg * (lnunu0 ** (power + 1))
+                       for power, arg in enumerate(args)], axis=0)
+    return iref * np.exp(exponent)
+
+def obit_to_katpoint(nu0, stokes, iref, *args):
+    """ Convert model from Obit flux_model to katpoint FluxDensityModel.
+    """
+    kpmodel = [0.] * NUM_KATPOINT_PARMS
+    # +/- component?
+    sign = np.sign(iref)
+    nu1 = 1.e6
+    r = np.log(nu1 / nu0)
+    p = np.log(10.)
+    exponent = np.sum([sign * arg * (r ** (power + 1))
+                       for power, arg in enumerate(args)])
+    # Compute log of flux_model directly to avoid
+    # exp of extreme values when extrapolating to 1MHz
+    lsnu1 = np.log(sign * iref) + exponent
+    a0 = lsnu1 / p
+    kpmodel[0] = a0
+    n = len(args)
+    for idx in range(1, n + 1):
+        coeff = np.poly1d([binom(j, idx) * args[j - 1]
+                           for j in range(n, idx - 1, -1)])
+        betai = coeff(r)
+        ai = betai * p ** (idx - 1)
+        kpmodel[idx] = ai
+    # Set Stokes +/- based on sign of iref
+    # I, Q, U, V are last 4 elements of kpmodel
+    kpmodel[stokes - 5] = sign
+    return kpmodel
