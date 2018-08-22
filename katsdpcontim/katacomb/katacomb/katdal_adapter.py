@@ -126,7 +126,7 @@ def aips_uvw(uvw, refwave):
     np.ndarray
         AIPS UVW coordinates in wavelengths at the reference frequency
     """
-    return -1. * uvw / refwave
+    return  -uvw / refwave
 
 def katdal_uvw(uvw, refwave):
     """
@@ -146,7 +146,7 @@ def katdal_uvw(uvw, refwave):
     np.ndarray
         katdal UVW coordinates, in metres
     """
-    return -1.0 * refwave * uvw
+    return refwave * -uvw
 
 def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
