@@ -83,8 +83,10 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
             log.warn("Export of calibration solutions from '%s' failed.\n%s",
                      uv_file, str(e))
 
+
 AIPS_TO_STOKES = ["I", "Q", "U", "V"]
 NUM_KATPOINT_PARMS = 10
+
 
 def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
     """
@@ -220,11 +222,11 @@ def cc_to_katpoint(img, order=2):
 def fit_flux_model(nu, s, nu0, sigma, sref, stokes=1, order=2):
     """
     Fit a flux model of given order from Eqn 2. of
-    the Obit Development Memo #38, Cotton (2014)
+    Obit Development Memo #38, Cotton (2014)
     (ftp.cv.nrao.edu/NRAO-staff/bcotton/Obit/CalModel.pdf):
     s_nu = s_nu0 * exp(a0*ln(nu/nu0) + a1*ln(nu/nu0)**2 + ...)
 
-    Very rarely, the highest order fit fails, in which case fall
+    Very rarely, the requested fit fails, in which case fall
     back to a lower order, iterating until zeroth order. If all
     else fails return the weighted mean of the components.
 
@@ -251,7 +253,7 @@ def fit_flux_model(nu, s, nu0, sigma, sref, stokes=1, order=2):
     """
 
     if order > 3:
-        raise ValueError("katpoint flux models are only supported up to 3rd order.")
+        raise ValueError("katpoint flux density models are only supported up to 3rd order.")
     init = [sref, -0.7] + [0] * (order - 1)
     lnunu0 = np.log(nu/nu0)
     for fitorder in range(order, -1, -1):
@@ -276,6 +278,7 @@ def flux_model(lnunu0, iref, *args):
     exponent = np.sum([arg * (lnunu0 ** (power + 1))
                        for power, arg in enumerate(args)], axis=0)
     return iref * np.exp(exponent)
+
 
 def obit_to_katpoint(nu0, stokes, iref, *args):
     """ Convert model from Obit flux_model to katpoint FluxDensityModel.
