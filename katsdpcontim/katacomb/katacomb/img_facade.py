@@ -142,7 +142,7 @@ def obit_image_mf_planes(imgf):
     inaxes = desc['inaxes']
 
     # Make sure imgf is an ObitImageMF
-    imgf.checkMF()
+    imgf._requireObitImageMF()
 
     l = inaxes[desc['jlocr']]
     m = inaxes[desc['jlocd']]
@@ -177,7 +177,7 @@ def obit_image_mf_rms(imgf):
         RMS per plane per Stokes (nplanes,stokes)
     """
     # ObitImageMF?
-    imgf.checkMF()
+    imgf._requireObitImageMF()
 
     desc = imgf.Desc.Dict
     inaxes = desc["inaxes"]
@@ -408,24 +408,25 @@ class ImageFacade(object):
              init_nrow, merged_cctab.nrow, self.name)
         return merged_cctab
 
-    def checkMF(self):
+    def isObitImageMF(self):
         """
-        Raise ValueError if this image is not an ObitImageMF.
+        Check if this image is an ObitImageMF.
 
         The CTYPE of an ObitImageMF AIPS Image looks like
         :code:`["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES", "", ""]` and
         respectively correspond to the l, m, spectral logarithmic and stokes parameters.
         """
-
         imdesc = self.Desc.Dict
         ctype = [s.strip() for s in imdesc["ctype"]]
         # Order ctype by defined order
         locs = [imdesc[label] for label in OBITIMAGEMF_ORDER]
         ord_ctype = [ctype[loc] for loc in locs]
-        if not ord_ctype == OBITIMAGEMF_CTYPE:
+        return ord_ctype == OBITIMAGEMF_CTYPE
+
+    def _requireObitImageMF(self):
+        """Raise ValueError if this is not an ObitImageMF
+        """
+        if not self.isObitImageMF():
             raise ValueError("'%s' doesn't appear to be an ObitImageMF. "
-                             "Required ordered CTYPE is '%s' "
-                             "but got '%s'.\n"
                              "Descriptor is '%s'." % (
-                             self.aips_path, OBITIMAGEMF_CTYPE,
-                             ord_ctype, pretty(imdesc)))
+                             self.aips_path, pretty(self.Desc.Dict)))
