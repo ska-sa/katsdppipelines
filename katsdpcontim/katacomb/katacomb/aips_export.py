@@ -111,11 +111,8 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
     # (4) Write them to telstate
 
     targets = kat_adapter.katdal.catalogue.targets
-
     it = enumerate(zip(clean_files, target_indices))
     for si, (clean_file, ti) in it:
-        print "Here"
-        print clean_file
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
                 if "AIPS CC" not in cf.tables:
@@ -133,8 +130,7 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
                     data = {'description': description, 'components': katpoint_rows}
 
                     # Store them in telstate
-                    stokes = AIPS_TO_STOKES[int(cf.Desc.Dict["crval"][cf.Desc.Dict["jlocs"]]) - 1]
-                    key = telstate.SEPARATOR.join([target, "clean_components_%s" % stokes])
+                    key = telstate.SEPARATOR.join([target, "clean_components"])
                     telstate.add(key, data, immutable=True)
 
         except Exception as e:

@@ -186,8 +186,8 @@ class TestContinuumPipeline(unittest.TestCase):
             pipeline.execute()
 
             # Get the fitted CCs from telstate
-            fit_cc = ts.get('target0_clean_components_I')
-            ts.delete('target0_clean_components_I')
+            fit_cc = ts.get('target0_clean_components')
+            ts.delete('target0_clean_components')
 
             all_ccs = katpoint.Catalogue(fit_cc['components'])
             # Should have one merged and fitted component
@@ -227,8 +227,8 @@ class TestContinuumPipeline(unittest.TestCase):
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
-        fit_cc = ts.get('target0_clean_components_I')
-        ts.delete('target0_clean_components_I')
+        fit_cc = ts.get('target0_clean_components')
+        ts.delete('target0_clean_components')
         all_ccs = katpoint.Catalogue(fit_cc['components'])
         # We should have 2 merged clean components for two source positions
         self.assertEqual(len(all_ccs), 2)
