@@ -16,7 +16,7 @@ from katacomb.mock_dataset import (MockDataSet,
                                    DEFAULT_TIMESTAMPS)
 
 from katacomb import ContinuumPipeline
-from katacomb.aips_export import fit_flux_model, flux_model
+from katacomb.aips_export import fit_flux_model, obit_flux_model
 from katacomb.util import parse_python_assigns
 
 
@@ -92,31 +92,30 @@ class TestContinuumPipeline(unittest.TestCase):
     def test_cc_fitting(self):
         """Check CC fitting with increasing order and conversion to katpoint models
         """
-        input_freqs = np.linspace(1.e6, 100.e6, 10)
-        lnunu0 = np.log(input_freqs / input_freqs[0])
+        input_freqs = np.linspace(100.e6, 500.e6, 10)
+        lnunu0 = np.log(input_freqs / input_freqs[5])
         input_cc_tab = np.ones((4, 10), dtype=np.float)
-        input_cc_tab[0] = flux_model(lnunu0, 10.)
-        input_cc_tab[1] = flux_model(lnunu0, -10., -0.7)
-        input_cc_tab[2] = flux_model(lnunu0, 2., 0.1, 0.01)
-        input_cc_tab[3] = flux_model(lnunu0, -0.5, -0.5, 0.01, 0.05)
+        input_cc_tab[0] = obit_flux_model(lnunu0, 10.)
+        input_cc_tab[1] = obit_flux_model(lnunu0, -10., -0.7)
+        input_cc_tab[2] = obit_flux_model(lnunu0, 2., 0.1, 0.01)
+        input_cc_tab[3] = obit_flux_model(lnunu0, -0.5, -0.5, 0.01, 0.05)
         input_sigma = np.ones(10, dtype=np.float) * 0.1
         for order in range(4):
             cc_tab = input_cc_tab[order]
             kp_model = fit_flux_model(input_freqs, cc_tab, input_freqs[0],
                                       input_sigma, cc_tab[0], order=order)
             # Check the flux densities of the input and fitted models
-            kp_flux_model = katpoint.FluxDensityModel(1., 100., kp_model)
+            kp_flux_model = katpoint.FluxDensityModel(100., 500., kp_model)
             np.testing.assert_allclose(kp_flux_model.flux_density(input_freqs/1.e6), cc_tab)
 
     def test_cc_export(self):
         """Check CC models returned by MFImage
         """
-        def vis(dataset, **kwargs):
+        def vis(dataset, sources=None):
             """Compute visibilities for a list of katpoint Targets
-            with flux density models. These are passed via kwargs["sources"]
+            with flux density models. These are passed via sources
             """
             pc = dataset.catalogue.targets[0]
-            sources = kwargs["sources"]
             out_vis = np.zeros(dataset.shape, dtype=np.complex64)
             wl = constants.c / dataset.freqs
             # uvw in wavelengths for each channel
@@ -125,16 +124,18 @@ class TestContinuumPipeline(unittest.TestCase):
             for target in sources:
                 flux_freq = target.flux_density(dataset.freqs/1.e6)
                 lmn = np.array(pc.lmn(*target.radec()))
-                # Cartesian
+                n = lmn[2]
                 lmn[2] -= 1.
+                # uvw_wl has shape (uvw, ntimes, nchannels, nbl), move uvw to 
+                # the last axis before np.dot
                 exponent = -2j * np.pi * np.dot(np.moveaxis(uvw_wl, 0, -1), lmn)
-                out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent)
-            return out_vis.astype(np.complex64)
+                out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent) / n
+            return out_vis
 
-        def weights(dataset, **kwargs):
+        def weights(dataset):
             return np.ones(dataset.shape, dtype=np.float32)
 
-        def flags(dataset, **kwargs):
+        def flags(dataset):
             return np.zeros(dataset.shape, dtype=np.bool)
 
         nchan = 128
@@ -229,6 +230,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Check the positions of the clean components
         # These will be ordered by decreasing flux density of the inputs
         for model, cc in zip(offax_cat.targets, all_ccs.targets):
+            print cc.radec(), model.radec()
             # Position should be accurate to within a 5" pixel
             self.assertAlmostEqual(cc.radec()[0], model.radec()[0], 3)
             self.assertAlmostEqual(cc.radec()[1], model.radec()[1], 3)

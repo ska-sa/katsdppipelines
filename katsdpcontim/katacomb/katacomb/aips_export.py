@@ -116,9 +116,7 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
     for si, (clean_file, ti) in it:
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
-                try:
-                    cf.tables["AIPS CC"]
-                except KeyError:
+                if "AIPS CC" not in cf.tables:
                     log.warn("No clean components in '%s'", clean_file)
                 else:
                     target = "target%d" % si
@@ -153,7 +151,7 @@ def cc_to_katpoint(img, order=2):
     img : :class:`ImageFacade`
         Obit MFImage with attached tabulated CC table
     order : int
-        The desired order of the katpoint FluxDensityModel
+        The desired polynomial order of the katpoint FluxDensityModel
 
     Returns
     -------
@@ -189,16 +187,37 @@ def cc_to_katpoint(img, order=2):
     cctab = img.tables["AIPS CC"]
     # Condition all rows up front
     ccrows = [_condition(r) for r in cctab.rows]
-    mt = get_metadata(img)
+    
+    imlistdict = img.List.Dict
+    imdescdict = img.Desc.Dict
+    jlocr = imdescdict["jlocr"]
+    jlocd = imdescdict["jlocd"]
+    jlocf = imdescdict["jlocf"]
+    jlocs = imdescdict["jlocs"]
+    nspec = imlistdict["NSPEC"][2][0]
+    nimterms = imlistdict["NTERM"][2][0]
+    reffreq = imdescdict["crval"][jlocf]
+    refra = np.deg2rad(imdescdict["crval"][jlocr])
+    refdec = np.deg2rad(imdescdict["crval"][jlocd])
+    # Center frequencies of the image planes
+    planefreqs = np.array([imlistdict["FREQ%04d" % (freqid + 1)][2][0]
+                                      for freqid in range(nspec)])
+    # Start and end frequencies of the frequency range
+    startfreq = imlistdict["FREL0001"][2][0]
+    endfreq = imlistdict["FREH%04d" % (nspec)][2][0]
+    # Assume projection can be found from ctype 'RA--XXX' where XXX is the projection
+    improj = imdescdict["ctype"][jlocr].strip()[-3:]
+    stok = int(imdescdict["crval"][jlocs])
+
     # RMS of coarse frequency plane images for fitting sigma
     planerms = obit_image_mf_rms(img)
     # Only one stokes per image for MFImage output so can assume Stokes has length 1
     # Drop first NTERM planes as these are spectral fit images
-    planerms = planerms[mt["nimterms"]:, 0]
+    planerms = planerms[nimterms:, 0]
     # Mask planes with zero RMS (these are completely flagged frequency ranges in the images)
     fitmask = planerms > 0.
     planerms = planerms[fitmask]
-    planefreqs = mt["planefreqs"][fitmask]
+    planefreqs = planefreqs[fitmask]
     katpoint_rows = []
     for ccnum, cc in enumerate(ccrows):
         # PARMS[3] must be 20. for tabulated CCs
@@ -206,13 +225,13 @@ def cc_to_katpoint(img, order=2):
             raise ValueError("Clean Components are not in tabulated form for %s" % (img.aips_path))
         # PARMS[4:] are the tabulated CC flux densities in each image plane.
         ccflux = cc["PARMS"][4:][fitmask]
-        kp_coeffs = fit_flux_model(planefreqs, ccflux, mt["reffreq"],
-                                   planerms, cc["FLUX"], stokes=mt["stok"], order=order)
+        kp_coeffs = fit_flux_model(planefreqs, ccflux, reffreq,
+                                   planerms, cc["FLUX"], stokes=stok, order=order)
         kp_coeffs_str = " ".join([str(coeff) for coeff in kp_coeffs])
-        kp_flux_model = "(%.2f %.2f %s)" % \
-                        (mt["startfreq"], mt["endfreq"], kp_coeffs_str)
+        kp_flux_model = "(%r %r %s)" % \
+                        (startfreq/1.e6, endfreq/1.e6, kp_coeffs_str)
         l, m = np.deg2rad([cc["DELTAX"], cc["DELTAY"]])
-        posn = katpoint.plane_to_sphere[mt["improj"]](mt["refra"], mt["refdec"], l, m)
+        posn = katpoint.plane_to_sphere[improj](refra, refdec, l, m)
         ra_d, dec_d = np.rad2deg(posn)
         katpoint_rows.append("CC_%06d, radec, %s, %s, %s" %
                              (ccnum, str(ra_d), str(dec_d), kp_flux_model))
@@ -258,19 +277,19 @@ def fit_flux_model(nu, s, nu0, sigma, sref, stokes=1, order=2):
     lnunu0 = np.log(nu/nu0)
     for fitorder in range(order, -1, -1):
         try:
-            popt, _ = curve_fit(flux_model, lnunu0, s, p0=init[:fitorder + 1], sigma=sigma)
+            popt, _ = curve_fit(obit_flux_model, lnunu0, s, p0=init[:fitorder + 1], sigma=sigma)
         except RuntimeError:
             log.warn("Fitting flux model of order %d to CC failed. Trying lower order fit." %
                      (fitorder,))
         else:
-            coeffs = np.pad(popt, (0, order - fitorder), "constant")
-            return obit_to_katpoint(nu0, stokes, *coeffs)
+            coeffs = np.pad(popt, ((0, order - fitorder),), "constant")
+            return obit_flux_model_to_katpoint(nu0, stokes, *coeffs)
     # Give up and return the weighted mean
     coeffs = [np.average(s, weights=1./(sigma**2))] + [0] * order
-    return obit_to_katpoint(nu0, stokes, *coeffs)
+    return obit_flux_model_to_katpoint(nu0, stokes, *coeffs)
 
 
-def flux_model(lnunu0, iref, *args):
+def obit_flux_model(lnunu0, iref, *args):
     """
     Compute model:
     (iref*exp(args[0]*lnunu0 + args[1]*lnunu0**2) ...)
@@ -280,7 +299,7 @@ def flux_model(lnunu0, iref, *args):
     return iref * np.exp(exponent)
 
 
-def obit_to_katpoint(nu0, stokes, iref, *args):
+def obit_flux_model_to_katpoint(nu0, stokes, iref, *args):
     """ Convert model from Obit flux_model to katpoint FluxDensityModel.
     """
     kpmodel = [0.] * NUM_KATPOINT_PARMS
@@ -289,7 +308,7 @@ def obit_to_katpoint(nu0, stokes, iref, *args):
     nu1 = 1.e6
     r = np.log(nu1 / nu0)
     p = np.log(10.)
-    exponent = np.sum([sign * arg * (r ** (power + 1))
+    exponent = np.sum([arg * (r ** (power + 1))
                        for power, arg in enumerate(args)])
     # Compute log of flux_model directly to avoid
     # exp of extreme values when extrapolating to 1MHz
@@ -304,6 +323,8 @@ def obit_to_katpoint(nu0, stokes, iref, *args):
         ai = betai * p ** (idx - 1)
         kpmodel[idx] = ai
     # Set Stokes +/- based on sign of iref
+    # or zero in the unlikely event that iref is zero
     # I, Q, U, V are last 4 elements of kpmodel
-    kpmodel[stokes - 5] = sign
+    if iref != 0.:
+        kpmodel[stokes - 5] = sign
     return kpmodel

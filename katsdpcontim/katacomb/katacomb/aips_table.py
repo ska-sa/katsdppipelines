@@ -33,6 +33,7 @@ def _vectorise(value):
         return [value]
     return value
 
+
 class AIPSTableKeywords(object):
     def __init__(self, table, table_name):
         """
