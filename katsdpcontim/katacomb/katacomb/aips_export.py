@@ -114,6 +114,8 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
 
     it = enumerate(zip(clean_files, target_indices))
     for si, (clean_file, ti) in it:
+        print "Here"
+        print clean_file
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
                 if "AIPS CC" not in cf.tables:
@@ -158,31 +160,6 @@ def cc_to_katpoint(img, order=2):
     list of strings
         One katpoint Target string per element
     """
-
-    def get_metadata(img):
-        """ Extract relevant metadata from img for CC conversion. """
-        imlistdict = img.List.Dict
-        imdescdict = img.Desc.Dict
-        jlocr = imdescdict["jlocr"]
-        jlocd = imdescdict["jlocd"]
-        jlocf = imdescdict["jlocf"]
-        jlocs = imdescdict["jlocs"]
-        nspec = imlistdict["NSPEC"][2][0]
-        meta = {}
-        meta["nimterms"] = imlistdict["NTERM"][2][0]
-        meta["reffreq"] = imdescdict["crval"][jlocf]
-        meta["refra"] = np.deg2rad(imdescdict["crval"][jlocr])
-        meta["refdec"] = np.deg2rad(imdescdict["crval"][jlocd])
-        # Center frequencies of the image planes
-        meta["planefreqs"] = np.array([imlistdict["FREQ%04d" % (freqid + 1)][2][0]
-                                       for freqid in range(nspec)])
-        # Start and end frequencies of the frequency range
-        meta["startfreq"] = imlistdict["FREL0001"][2][0]/1.e6
-        meta["endfreq"] = imlistdict["FREH%04d" % (nspec)][2][0]/1.e6
-        # Assume projection can be found from ctype 'RA--XXX' where XXX is the projection
-        meta["improj"] = imdescdict["ctype"][jlocr].strip()[-3:]
-        meta["stok"] = int(imdescdict["crval"][jlocs])
-        return meta
 
     cctab = img.tables["AIPS CC"]
     # Condition all rows up front
