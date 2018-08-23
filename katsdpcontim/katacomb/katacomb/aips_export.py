@@ -187,7 +187,7 @@ def cc_to_katpoint(img, order=2):
     cctab = img.tables["AIPS CC"]
     # Condition all rows up front
     ccrows = [_condition(r) for r in cctab.rows]
-    
+
     imlistdict = img.List.Dict
     imdescdict = img.Desc.Dict
     jlocr = imdescdict["jlocr"]
@@ -201,7 +201,7 @@ def cc_to_katpoint(img, order=2):
     refdec = np.deg2rad(imdescdict["crval"][jlocd])
     # Center frequencies of the image planes
     planefreqs = np.array([imlistdict["FREQ%04d" % (freqid + 1)][2][0]
-                                      for freqid in range(nspec)])
+                           for freqid in range(nspec)])
     # Start and end frequencies of the frequency range
     startfreq = imlistdict["FREL0001"][2][0]
     endfreq = imlistdict["FREH%04d" % (nspec)][2][0]

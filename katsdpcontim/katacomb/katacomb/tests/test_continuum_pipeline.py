@@ -107,6 +107,12 @@ class TestContinuumPipeline(unittest.TestCase):
             # Check the flux densities of the input and fitted models
             kp_flux_model = katpoint.FluxDensityModel(100., 500., kp_model)
             np.testing.assert_allclose(kp_flux_model.flux_density(input_freqs/1.e6), cc_tab)
+        # Check a target with zero flux
+        cc_tab = np.zeros(10)
+        kp_model = fit_flux_model(input_freqs, cc_tab, input_freqs[0],
+                                  input_sigma, cc_tab[0], order=0)
+        kp_flux_model = katpoint.FluxDensityModel(100., 500., kp_model)
+        np.testing.assert_array_equal(kp_flux_model.flux_density(input_freqs/1.e6), cc_tab)
 
     def test_cc_export(self):
         """Check CC models returned by MFImage
@@ -126,9 +132,9 @@ class TestContinuumPipeline(unittest.TestCase):
                 lmn = np.array(pc.lmn(*target.radec()))
                 n = lmn[2]
                 lmn[2] -= 1.
-                # uvw_wl has shape (uvw, ntimes, nchannels, nbl), move uvw to 
+                # uvw_wl has shape (uvw, ntimes, nchannels, nbl), move uvw to
                 # the last axis before np.dot
-                exponent = -2j * np.pi * np.dot(np.moveaxis(uvw_wl, 0, -1), lmn)
+                exponent = 2j * np.pi * np.dot(np.moveaxis(uvw_wl, 0, -1), lmn)
                 out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent) / n
             return out_vis
 
@@ -229,8 +235,9 @@ class TestContinuumPipeline(unittest.TestCase):
 
         # Check the positions of the clean components
         # These will be ordered by decreasing flux density of the inputs
+        # Position should be accurate to within a 5" pixel
+        delta_dec = np.deg2rad(5./3600.)
         for model, cc in zip(offax_cat.targets, all_ccs.targets):
-            print cc.radec(), model.radec()
-            # Position should be accurate to within a 5" pixel
-            self.assertAlmostEqual(cc.radec()[0], model.radec()[0], 3)
-            self.assertAlmostEqual(cc.radec()[1], model.radec()[1], 3)
+            delta_ra = delta_dec/np.cos(model.radec()[1])
+            self.assertAlmostEqual(cc.radec()[0], model.radec()[0], delta=delta_ra)
+            self.assertAlmostEqual(cc.radec()[1], model.radec()[1], delta=delta_dec)

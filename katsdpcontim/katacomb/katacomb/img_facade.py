@@ -397,8 +397,8 @@ class ImageFacade(object):
                                          self._err)
         try:
             TableUtil.PCCMerge(cctab._table, merged_cctab, self._err)
-        except Exception as e:
-            raise (e(err_msg), None, sys.exc_info()[2])
+        except Exception:
+            raise (Exception(err_msg), None, sys.exc_info()[2])
         handle_obit_err(err_msg, self._err)
 
         # Attach merged version of CC Table
