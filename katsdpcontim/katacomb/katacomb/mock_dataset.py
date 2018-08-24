@@ -76,7 +76,7 @@ DEFAULT_METADATA = {
     'experiment_id': 'mock',
 }
 
-def DEFAULT_WEIGHTS(dataset, **kwargs):
+def DEFAULT_WEIGHTS(dataset):
     # Dump space is linear space between scaled dump indices
     start, stop = dataset.dumps[[0,-1]]/ 1000.0
     return np.linspace(start, stop,
@@ -84,7 +84,7 @@ def DEFAULT_WEIGHTS(dataset, **kwargs):
                        endpoint=True,
                        dtype=np.float32).reshape(dataset.shape)
 
-def DEFAULT_FLAGS(dataset, **kwargs):
+def DEFAULT_FLAGS(dataset):
     flags = np.zeros(dataset.shape, dtype=np.bool)
     # Flag 10% of visibilities
     nflagged = int(0.1*flags.size)
@@ -92,7 +92,7 @@ def DEFAULT_FLAGS(dataset, **kwargs):
     return flags
 
 
-def DEFAULT_VIS(dataset, **kwargs):
+def DEFAULT_VIS(dataset):
     # Visibilities of form (scan + dump*1j)
     vis = np.empty(dataset.shape, dtype=np.complex64)
     vis[:,:,:].real = np.full(dataset.shape, dataset.scan_indices[0])
@@ -154,22 +154,26 @@ class MockDataSet(DataSet):
         vis (optional): function
             Custom function defining the visibilities returned by
             the MockDataSet instance.
+
             The function must take a MockDataSet instance as its first
             argument and should have the following signature:
 
             .. code-block:: python
 
-                def my_vis(dataset, **kwargs):
-                    shape = dataset.shape
-                    my_data = kwargs['my_data']
-                    ...
-                    return np.array(..., dtype=np.complex64)
+                def my_vis(dataset):
+                    return np.zeros(dataset.shape, dtype=np.complex64)
 
-            Data orthogonal to dataset can be passed in with ``functools.partial``
+            If you wish to pass in data orthogonal to dataset ``functools.partial``
+            can be used to construct a ``callable`` with the correct signature.
 
             .. code-block:: python
 
-                ds = MockDataSet(vis=partial(my_vis, my_data={...}))
+                def my_vis(dataset, my_data):
+                    shape = dataset.shape
+                    ...
+                    return np.array(..., dtype=np.complex64)
+
+                ds = MockDataSet(vis=partial(my_vis, my_data=...))
 
         weights (optional): function
             Function from which the weights array is defined.

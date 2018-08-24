@@ -117,7 +117,7 @@ class TestContinuumPipeline(unittest.TestCase):
     def test_cc_export(self):
         """Check CC models returned by MFImage
         """
-        def vis(dataset, sources=None):
+        def vis(dataset, sources):
             """Compute visibilities for a list of katpoint Targets
             with flux density models. These are passed via sources
             """
