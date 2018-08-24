@@ -30,6 +30,7 @@ redis
 requests
 ruamel.yaml == 0.15.35
 ruamel.ordereddict == 0.4.13
+scipy
 six
 toolz
 webencodings == 0.5.1

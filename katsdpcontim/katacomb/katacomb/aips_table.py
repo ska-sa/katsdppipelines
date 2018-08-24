@@ -39,7 +39,7 @@ class AIPSTableKeywords(object):
         """
         Constructs an :class:`AIPSTableKeywords` object.
 
-        It behave like a dictionary.
+        It behaves like a dictionary.
         Keywords on the AIPS table configure certain properties
         associated with the table.
 

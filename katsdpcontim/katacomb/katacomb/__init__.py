@@ -25,7 +25,8 @@ from uv_facade import (UVFacade,
 from img_facade import (ImageFacade,
                         open_img,
                         img_factory,
-                        obit_image_mf_planes)
+                        obit_image_mf_planes,
+                        obit_image_mf_rms)
 from uv_export import (uv_export,
                         uv_history_obs_description,
                         uv_history_selection)
