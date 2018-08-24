@@ -763,7 +763,6 @@ def plot_histogram(data,xlab,upper_lim=100.0,nbins=40,figname='hist',extn='png')
         The extension of the file to write to disc."""
 
     fig = plt.figure(figsize=(FIG_X,FIG_Y))
-    plt.tight_layout()
 
     #weights to normalise histogram area to one
     weights = np.ones_like(data.reshape(data.size))/float(data.size)
@@ -805,5 +804,6 @@ def plot_histogram(data,xlab,upper_lim=100.0,nbins=40,figname='hist',extn='png')
     if not os.path.exists('plots'):
         os.mkdir('plots')
 
+    plt.tight_layout()
     plt.savefig('plots/{0}.{1}'.format(figname,extn))
 

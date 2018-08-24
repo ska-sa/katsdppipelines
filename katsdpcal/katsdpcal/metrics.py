@@ -107,11 +107,6 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
     fig : class `matplotlib.figure`
         The figure (None if plot is False)."""
 
-    #make smaller for testing / plotting
-    vis = vis[:,:,0:1,0:5]
-    weights = weights[:,:,0:1,0:5]
-    flags = flags[:,:,0:1,0:5]
-
     residuals = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],4))
     polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
 

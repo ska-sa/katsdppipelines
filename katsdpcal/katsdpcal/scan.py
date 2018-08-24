@@ -15,6 +15,7 @@ import katpoint
 
 from . import calprocs, calprocs_dask, inplace
 from .solutions import CalSolution, CalSolutions
+from . import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -626,6 +627,27 @@ class Scan(object):
         inplace.rename(self.auto_ant.orig.cross_pol.vis)
         self.cross_ant.reset_chunked()
         self.auto_ant.reset_chunked()
+
+    # ---------------------------------------------------------------------------------------------
+    # quality metrics
+
+    @logsolutiontime
+    def derive_metrics(bp_data,s,ts,parameters):
+
+        """Derive quality metrics for the calibrated data of a bandpass calibrator.
+
+        Paramaters:
+        -----------
+        bp_data : class:`np.ndarray`
+            The data of the bandpass calibrator, including visiblities, weights and flags.
+        s : class: `Scan`
+            The scan.
+        ts : :class:`katsdptelstate.TelescopeState`
+            Telescope state, scoped to the cal namespace within the capture block.
+        parameters : dict
+            The pipeline parameters"""
+
+        metrics.derive_metrics(bp_data.vis,bp_data.weights,bp_data.flags,s,ts,parameters,deg=3,metric_func=np.mean,metric_tol=10,plot=False,plot_per='baseline')
 
     # ---------------------------------------------------------------------------------------------
     # interpolation
