@@ -84,7 +84,6 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
                      uv_file, str(e))
 
 
-AIPS_TO_STOKES = ["I", "Q", "U", "V"]
 NUM_KATPOINT_PARMS = 10
 
 
@@ -207,7 +206,7 @@ def cc_to_katpoint(img, order=2):
         posn = katpoint.plane_to_sphere[improj](refra, refdec, l, m)
         ra_d, dec_d = np.rad2deg(posn)
         katpoint_rows.append("CC_%06d, radec, %s, %s, %s" %
-                             (ccnum, str(ra_d), str(dec_d), kp_flux_model))
+                             (ccnum, ra_d, dec_d, kp_flux_model))
     return katpoint_rows
 
 
@@ -298,6 +297,5 @@ def obit_flux_model_to_katpoint(nu0, stokes, iref, *args):
     # Set Stokes +/- based on sign of iref
     # or zero in the unlikely event that iref is zero
     # I, Q, U, V are last 4 elements of kpmodel
-    if iref != 0.:
-        kpmodel[stokes - 5] = sign
+    kpmodel[stokes - 5] = sign
     return kpmodel

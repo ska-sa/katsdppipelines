@@ -473,8 +473,10 @@ class KatdalAdapter(object):
                                              self._katds.experiment_id)
             if dtype == 'AIPS':
                 name = name[-MAX_AIPS_PATH_LEN:]
-            if dtype == "FITS":
+            elif dtype == "FITS":
                 name += '.uvfits'
+            else:
+                raise ValueError('Invalid dtype %s' % dtype)
 
         return AIPSPath(name=name, **kwargs)
 
