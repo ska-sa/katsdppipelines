@@ -9,6 +9,7 @@ import numpy as np
 import dask.array as da
 from scipy.constants import c as light_speed
 import scipy.interpolate
+import numba
 
 from katdal.h5datav3 import FLAG_NAMES
 import katpoint
@@ -632,7 +633,8 @@ class Scan(object):
     # quality metrics
 
     @logsolutiontime
-    def derive_metrics(bp_data,s,ts,parameters):
+    @numba.jit(nopython=True, nogil=True, cache=True)
+    def derive_metrics(self,bp_data,s,ts,parameters):
 
         """Derive quality metrics for the calibrated data of a bandpass calibrator.
 
