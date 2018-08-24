@@ -56,8 +56,8 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,m
     time,description = metric_description(s, ts, parameters, BP_phase_metric_loc)
     add_telstate_metric('bp',BP_phase_metric,'phase',description,time,metric_tol,ts)
 
-    plot_all_hist(amp_resid,'Amp',extn='pdf')
-    plot_all_hist(phase_resid,'Phase',extn='pdf')
+    plot_all_hist(amp_resid,'Amp',extn='png')
+    plot_all_hist(phase_resid,'Phase',extn='png')
 
 def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=None,deg=3,ref_time=0,plot=False,plot_poly=True,plot_ref=True,plot_per='baseline',ylim=None):
 
@@ -393,7 +393,7 @@ def add_telstate_metric(metric,val,dtype,description,time,tolerance,ts):
     ts.add('{0}_{1}_metric_description'.format(metric,dtype),description,ts=time)
 
 
-def plot_all_hist(data,label,extn='pdf',metric_axis=3,metric_func=np.max):
+def plot_all_hist(data,label,extn='png',metric_axis=3,metric_func=np.max):
 
     """Write four plots to disc, summarising quality metrics.
 

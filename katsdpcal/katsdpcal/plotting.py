@@ -743,7 +743,7 @@ def save_bandpass(txt,dtype,bline,pol,time):
     plt.close()
 
 
-def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
+def plot_histogram(data,xlab,upper_lim=100.0,nbins=40,figname='hist',extn='png'):
 
     """Plot a histogram summarising the various statistics of the quality metrics.
 
@@ -763,15 +763,14 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
         The extension of the file to write to disc."""
 
     fig = plt.figure(figsize=(FIG_X,FIG_Y))
-    plt.tick_params(labelsize=14)
     plt.tight_layout()
 
     #weights to normalise histogram area to one
     weights = np.ones_like(data.reshape(data.size))/float(data.size)
 
-    #Histogram bins and upper limit (force < 100)
+    #Histogram bins and upper limit (force < upper_lim)
     upper = np.max(data)
-    if upper > 100:
+    if upper > upper_lim:
         upper = upper_lim
     edges = np.linspace(0,upper,(int(nbins)+1))
 
@@ -790,13 +789,13 @@ def plot_histogram(data,xlab,upper_lim=100,nbins=40,figname='hist',extn='pdf'):
 
     #Overlay percentage of data plotted
     plot_data = data[np.where(data < upper)]
-    perc_data = (plot_data.size / data.size)*100
+    perc_data = (plot_data.size / (data.size + 0.0))*100
     label = '{0:.0f}% of data between 0 < {1} < {2}'.format(perc_data,xlab,upper)
 
     #Plot and format historgram
     plt.hist(data.reshape(data.size),bins=edges,weights=weights,log=True,label=label,color='b')
-    plt.xlabel(xlab,fontsize=16)
-    plt.ylabel('Fraction of timestamps',fontsize=16)
+    plt.xlabel(xlab)
+    plt.ylabel('Fraction of timestamps')
 
     ylim0,ylim1 = plt.gca().get_ylim()
 
