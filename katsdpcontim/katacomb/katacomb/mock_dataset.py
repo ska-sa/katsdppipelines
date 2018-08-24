@@ -522,23 +522,5 @@ class MockDataSet(DataSet):
         return index
 
     @property
-    def u(self):
-        """ U coordinate """
-        # Defers to u property on the super object
-        return DataSet.u.fget(self)
-
-    @property
-    def v(self):
-        """ V coordinate """
-        # Defers to u property on the super object
-        return DataSet.v.fget(self)
-
-    @property
-    def w(self):
-        """ W coordinate """
-        # Defers to u property on the super object
-        return DataSet.w.fget(self)
-
-    @property
     def vis(self):
         return self._vis_def(self)
