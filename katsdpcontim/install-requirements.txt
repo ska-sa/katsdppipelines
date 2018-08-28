@@ -4,6 +4,8 @@ beautifulsoup4 == 4.6.0
 botocore == 1.10.16
 bs4 == 0.0.1
 cerberus == 1.1
+certifi
+chardet
 dask
 defusedxml
 docutils
@@ -12,6 +14,7 @@ funcsigs == 0.4
 future
 h5py
 html5lib == 1.0.1
+idna
 ipaddress
 jmespath == 0.9.3
 katversion
@@ -34,6 +37,7 @@ scipy
 six
 toolz
 webencodings == 0.5.1
+urllib3
 git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
 git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
 git+ssh://git@github.com/ska-sa/katdal@master#egg=katdal
