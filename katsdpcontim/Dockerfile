@@ -59,8 +59,8 @@ COPY --chown=kat:kat obit.patch /tmp/obit.patch
 # Now downgrade to kat
 USER kat
 
-# Obit r587
-ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/81983e814af7cd625483fd7f44a5f97a53ca60fb
+# Obit r588
+ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/62d49e5e7c04cd230cb545389b19cc05b431d7b8
 
 # Download Obit tarball and untar
 RUN mkdir -p $OBIT_BASE_PATH && \
