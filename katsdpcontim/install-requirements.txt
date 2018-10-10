@@ -9,6 +9,7 @@ chardet
 dask
 defusedxml
 docutils
+enum34
 fakeredis
 funcsigs == 0.4
 future
@@ -18,8 +19,10 @@ idna
 ipaddress
 jmespath == 0.9.3
 katversion
+llvmlite
 netifaces
 nose
+numba
 numpy
 pluggy == 0.6.0
 pretty == 0.1
@@ -34,6 +37,7 @@ requests
 ruamel.yaml == 0.15.35
 ruamel.ordereddict == 0.4.13
 scipy
+singledispatch
 six
 toolz
 webencodings == 0.5.1
