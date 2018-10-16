@@ -49,7 +49,6 @@ RUN chmod uog+x /run.sh
 
 # Add obit setup and aips login to bashrc
 RUN touch /root/.bashrc && \
-    cat /bin/setup_obit.sh >> /root/.bashrc && \
     echo ". $AIPS_BASE_PATH/LOGIN.SH" >> /root/.bashrc
 
 # Add Xdefaults
@@ -70,7 +69,7 @@ ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/
 RUN chown -R root:root /home/kat
 
 # Configure Obit/AIPS disks
-RUN . /bin/setup_obit.sh && cfg_aips_disks.py
+RUN cfg_aips_disks.py
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
