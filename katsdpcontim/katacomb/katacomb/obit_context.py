@@ -8,6 +8,9 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
+import katacomb
+from katacomb import get_config
+
 log = logging.getLogger('katacomb')
 
 # Single obit context class
@@ -20,16 +23,13 @@ class ObitContext(object):
     the Obit error stack and Obit System
     """
 
-    def __init__(self):
+    def __init__(self, cfg=get_config()):
         """
         Constructor
 
         Largely derived from
         https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
         """
-
-        from configuration import get_config
-        cfg = get_config()
 
         self.err = err = OErr.OErr()
         self.obitsys = OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
@@ -60,7 +60,7 @@ class ObitContext(object):
 
 
 @contextmanager
-def obit_context():
+def obit_context(cfg=get_config()):
     """
     Creates a global Obit Context, initialising the AIPS system
     and creating error stacks.
@@ -79,7 +79,7 @@ def obit_context():
             raise ValueError("Obit Context already exists")
 
         log.info("Creating Obit Context")
-        __obit_context = ObitContext()
+        __obit_context = ObitContext(cfg)
 
         yield
     finally:

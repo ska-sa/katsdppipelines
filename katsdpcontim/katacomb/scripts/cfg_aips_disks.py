@@ -6,7 +6,8 @@ from os.path import join as pjoin
 import shutil
 
 import katacomb
-from katacomb.configuration import get_config
+from katacomb import get_config
+from katacomb.util import setup_aips_disks
 
 logging.getLogger('').handlers = [] # Remove handlers on the root logger
 
@@ -85,24 +86,6 @@ def rewrite_netsp(cfg):
 
     # Remove the copy
     os.remove(backup)
-
-def setup_aips_disks(cfg):
-    """
-    Ensure that each AIPS disk (directory) exists.
-    Creates a SPACE file within the disk.
-    """
-
-    for url, aipsdir in cfg.obit.aipsdirs + cfg.obit.fitsdirs:
-        # Create directory if it doesn't exist
-        if not os.path.exists(aipsdir):
-            log.info("Creating AIPS Disk '%s'", aipsdir)
-            os.makedirs(aipsdir)
-
-        # Create SPACE file
-        space = pjoin(aipsdir, 'SPACE')
-
-        with open(space, 'a'):
-            os.utime(space, None)
 
 def link_obit_data(cfg):
     """

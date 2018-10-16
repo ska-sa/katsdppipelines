@@ -33,13 +33,15 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         uv_history_obs_description,
                         uv_history_selection,
                         export_calibration_solutions,
-                        export_clean_components)
+                        export_clean_components,
+                        get_config)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
                         get_and_merge_args,
                         log_exception,
                         post_process_args,
-                        fractional_bandwidth)
+                        fractional_bandwidth,
+                        setup_aips_disks)
 
 log = logging.getLogger('katacomb')
 
@@ -50,9 +52,11 @@ def create_parser():
     parser.add_argument("katdata",
                         help="Katdal observation file")
 
-    parser.add_argument("-d", "--disk",
-                        default=1, type=int,
-                        help="AIPS disk")
+    parser.add_argument("-w", "--workdir",
+                        default=None, type=str,
+                        help="Location of scratch space. An AIPS disk (called aipsdisk) "
+                             "will be created in this space and logfiles of Obit "
+                             "tasks will be written here.")
 
     parser.add_argument("--nvispio", default=1024, type=int)
 
@@ -132,6 +136,16 @@ post_process_args(args, katdata)
 uvblavg_args = get_and_merge_args(args.config + '/uvblavg.yaml', args.uvblavg)
 mfimage_args = get_and_merge_args(args.config + '/mfimage.yaml', args.mfimage)
 
+# Set up configuration object and logfiles from args.scratch
+if args.workdir is not None:
+    aipsdirs = [pjoin(args.workdir, 'aipsdisk')]
+    cfg = get_config(aipsdirs=aipsdirs)
+    setup_aips_disks(cfg)
+    uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
+    mfimage_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_MFImage.log'))
+else:
+    cfg = get_config()
+
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID
 telstate = TelescopeState(args.telstate)
@@ -145,7 +159,7 @@ pipeline = ContinuumPipeline(katdata, ts_view,
                             uvblavg_params=uvblavg_args,
                             mfimage_params=mfimage_args,
                             nvispio=args.nvispio,
-                            disk=args.disk)
+                            config=cfg)
 
 # Execute it
 pipeline.execute()

@@ -11,6 +11,7 @@ from katacomb.aips_parser import obit_config_from_aips
 from katacomb.configuration import get_config
 
 import ObitTask
+import OSystem
 
 log = logging.getLogger('katacomb')
 
@@ -253,12 +254,8 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         file_kwargs.update(kwargs)
         kwargs = file_kwargs
 
-    # Override user number and directories
-    # from global configuration
-    global_cfg = get_config()
-    kwargs['user'] = global_cfg.aips.userno
-    kwargs['AIPSdirs'] = [dir for url, dir in global_cfg.obit.aipsdirs]
-    kwargs['FITSdirs'] = [dir for url, dir in global_cfg.obit.fitsdirs]
+    # Override user number from global configuration
+    kwargs['user'] = OSystem.PGetAIPSuser()
 
     # Obit ignores these options
     for k in ('nFITS', 'nAIPS', 'AIPSuser'):
@@ -326,3 +323,22 @@ def fmt_bytes(nbytes):
         nbytes /= 1024.0
 
     return "%.1f%s" % (nbytes, 'TB')
+
+def setup_aips_disks(cfg):
+    """
+    Ensure that each AIPS and FITS disk (directory) exists.
+    Creates a SPACE file within the aips disks.
+    """
+
+    for url, aipsdir in cfg.obit.aipsdirs + cfg.obit.fitsdirs:
+        # Create directory if it doesn't exist
+        if not os.path.exists(aipsdir):
+            log.info("Creating AIPS Disk '%s'", aipsdir)
+            os.makedirs(aipsdir)
+
+    for url, aipsdir in cfg.obit.aipsdirs:
+        # Create SPACE file
+        space = os.path.join(aipsdir, 'SPACE')
+
+        with open(space, 'a'):
+            os.utime(space, None)

@@ -76,7 +76,6 @@ def validate_configuration(configuration):
     import attr
 
     cfg = config_validator().validated(configuration)
-
     def _dicts_to_attrs(key, value):
         """ Recursively convert any dictionaries to attr classes """
 
@@ -93,8 +92,21 @@ def validate_configuration(configuration):
     return _dicts_to_attrs("main", cfg)
 
 
-def get_config():
+def get_config(aipsdirs=[], fitsdirs=[]):
     """
-    Get the configuration
+    Get a configuration, optionally specify lists
+    of aipsdisks and fitsdisks.
+
+    Parameters
+    ----------
+    aipsdirs: list (optional)
+        list of path locations of aipsdisks
+    fitsdirs: list (optional)
+        list of path loactions of fitsdisks
     """
-    return validate_configuration({})
+    cfg_dict = {'obit': {}, 'aips': {}}
+    if len(aipsdirs) > 0:
+        cfg_dict['obit']['aipsdirs'] = [(None, disk) for disk in aipsdirs]
+    if len(fitsdirs) > 0:
+        cfg_dict['obit']['fitsdirs'] = [(None, disk) for disk in fitsdirs]
+    return validate_configuration(cfg_dict)
