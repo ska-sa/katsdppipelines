@@ -36,6 +36,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
+                        get_and_merge_args,
                         log_exception,
                         post_process_args,
                         fractional_bandwidth)
@@ -82,10 +83,7 @@ def create_parser():
 
 
     parser.add_argument("-ba", "--uvblavg",
-                        # Averaging FOV is 1.0, turn on frequency averaging,
-                        # average eight channels together. Average a maximum
-                        # integration time of 2 minutes
-                        default="FOV=1.0; avgFreq=1; chAvg=8; maxInt=2.0",
+                        default="",
                         type=log_exception(log)(parse_python_assigns),
                         help="UVBLAVG task parameter assignment statement. "
                              "Should only contain python "
@@ -95,13 +93,9 @@ def create_parser():
 
 
     parser.add_argument("-mf", "--mfimage",
-                        # FOV of 1.2 degrees, 5000 Clean cycles,
-                        # 3 phase self-cal loops with a solution interval
-                        # of four minutes
-                        default="FOV=1.2; Niter=5000; "
-                                "maxPSCLoop=3; minFluxPSC=0.0; solPInt=4.0",
+                        default="",
                         type=log_exception(log)(parse_python_assigns),
-                        help="MFIMAGE task parameter assignment statement. "
+                        help="MFImage task parameter assignment statement. "
                              "Should only contain python "
                              "assignment statements to python "
                              "literals, separated by semi-colons. "
@@ -118,6 +112,12 @@ def create_parser():
                              "'clean' => Output CLEAN files. "
                              "'mfimage' => Output MFImage files. ")
 
+    parser.add_argument("--config",
+                        default="/obitconf",
+                        type=str,
+                        help="Directory containing default configuration "
+                             ".yaml files for mfimage and uvblavg. ")
+
 
     return parser
 
@@ -127,6 +127,10 @@ args = create_parser().parse_args()
 katdata = katdal.open(args.katdata)
 
 post_process_args(args, katdata)
+
+# Get defaults for uvblavg and mfimage and merge user supplied ones
+uvblavg_args = get_and_merge_args(args.config + '/uvblavg.yaml', args.uvblavg)
+mfimage_args = get_and_merge_args(args.config + '/mfimage.yaml', args.mfimage)
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID
@@ -138,8 +142,8 @@ ts_view = telstate.view(view)
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
                             katdal_select=args.select,
-                            uvblavg_params=args.uvblavg,
-                            mfimage_params=args.mfimage,
+                            uvblavg_params=uvblavg_args,
+                            mfimage_params=mfimage_args,
                             nvispio=args.nvispio,
                             disk=args.disk)
 

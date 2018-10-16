@@ -1,8 +1,10 @@
 import ast
 import functools
 import logging
+import os
 
 from pretty import pretty
+import yaml
 import six
 
 from katacomb.aips_parser import obit_config_from_aips
@@ -53,6 +55,33 @@ _BUILTIN_WHITELIST = frozenset(['slice'])
 _missing = _BUILTIN_WHITELIST.difference(dir(__builtin__))
 if len(_missing) > 0:
     raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
+
+def get_and_merge_args(config_file, args):
+    """
+    Make a dictionary out of a '.yaml' config file
+    and merge it with user supplied dictionary in args.
+
+    Parameters
+    ----------
+    config_file: str
+        Path to configuration YAML file.
+    args: dict
+        Dictionary of arguments to add to configuration.
+
+    Returns
+    -------
+    dict
+        Dictionary containing configuration parameters.
+    """
+
+    if not os.path.exists(config_file):
+        log.warn("Specified configuration file %s not found. "
+                 "Using Obit default parameters.", config_file)
+        out_args = {}
+    else:
+        out_args = yaml.load(open(config_file))
+    out_args.update(args)
+    return out_args
 
 
 def parse_python_assigns(assign_str):

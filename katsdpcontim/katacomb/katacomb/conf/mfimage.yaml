@@ -1,0 +1,36 @@
+# Default configuration options for MFImage
+Stokes: 'I'              # Stokes to process
+norder: 1                # Maximum order of spectral terms
+Alpha: 0.0               # Spectral Index to correct
+maxFBW: 0.05             # Max. fractional IF center bandwidth
+FOV: 1.1                 # Radius of field to image (deg)
+xCells: 0.0              # Image cell spacing in X in asec.
+yCells: 0.0              # Image cell spacing in Y in asec.
+Robust: -1.5             # Robustness power: -5 -> pure uniform weights, 5 => natural
+doLast: True             # Do last Clean after selfcal?
+doComRes: False          # Force common resolution in frequency
+doFull: True             # Make full field (flattened) image?
+doRestore: True          # Restore CCs to images?
+doFit: True              # Fit spectrum to CLEANed planes??
+Catalog: 'AllSkyVZ.FIT'  # Outlier catalog name
+CatDisk: 1               # Catalog FITS disk number
+OutlierDist: 2.5         # Maximum distance to add outliers (deg)
+OutlierFlux: 0.005       # Minimum estimated outlier flux density (Jy)
+OutlierSI: -0.7          # Spectral index to estimate flux density
+minFlux: 0.0002          # Minimum Clean component (Jy)
+Niter: 40000             # Maximum # of I CLEAN comp.
+autoCen: 0.5             # Auto center min flux density
+PBCor: False             # Apply Frequency PB Corr?
+antSize: 13.5            # Diameter of ant. for PBCor (m)
+maxPSCLoop: 1            # Max. number of phase selfcal loops
+minFluxPSC: 0.0002       # Min. peak phase self cal (Jy)
+solPInt: 1.0             # phase SC Solution interval (min)
+solPType: 'L1'           # phase SC Soln. Type: '  ', 'L1', 
+solPMode: 'P'            # phase SC Soln. Mode:'A&P', 'P', 'P!A','DELA'
+maxASCLoop: 0            # Max. number of amp&ph selfcal loops
+minFluxASC: 0.01         # Min. peak A&P self cal (Jy)
+solAInt: 2.0             # A&P SC Solution interval (min)
+solAType: 'L1'           # A&P SC Soln. Type: '  ', 'L1', 
+solAMode: 'A&P'          # A&P SC Soln. Mode:'A&P', 'P', 'P!A',
+refAnt: 0                # SC Reference antenna
+
