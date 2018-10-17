@@ -9,6 +9,6 @@
 
 source $HOME/.bashrc
 USER=root vncserver -nolisten tcp -localhost -geometry 1440x900
-cfg_aips_disks.py /usr/local/AIPS
+cfg_aips_disks.py
 echo 'Standard OBIT task configuration files are available in /obitconf'
 echo 'Run aips headless with \"aips da=all notv tvok tpok\"'

@@ -92,7 +92,7 @@ def validate_configuration(configuration):
     return _dicts_to_attrs("main", cfg)
 
 
-def get_config(aipsdirs=[], fitsdirs=[]):
+def get_config(aipsdirs=None, fitsdirs=None):
     """
     Get a configuration, optionally specify lists
     of aipsdisks and fitsdisks.
@@ -105,8 +105,8 @@ def get_config(aipsdirs=[], fitsdirs=[]):
         list of path loactions of fitsdisks
     """
     cfg_dict = {'obit': {}, 'aips': {}}
-    if len(aipsdirs) > 0:
+    if aipsdirs:
         cfg_dict['obit']['aipsdirs'] = [(None, disk) for disk in aipsdirs]
-    if len(fitsdirs) > 0:
+    if fitsdirs:
         cfg_dict['obit']['fitsdirs'] = [(None, disk) for disk in fitsdirs]
     return validate_configuration(cfg_dict)

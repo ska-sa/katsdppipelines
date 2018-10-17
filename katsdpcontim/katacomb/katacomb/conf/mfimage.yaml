@@ -3,7 +3,7 @@ Stokes: 'I'              # Stokes to process
 norder: 1                # Maximum order of spectral terms
 Alpha: 0.0               # Spectral Index to correct
 maxFBW: 0.05             # Max. fractional IF center bandwidth
-FOV: 1.1                 # Radius of field to image (deg)
+FOV: 1.0                 # Radius of field to image (deg)
 xCells: 0.0              # Image cell spacing in X in asec.
 yCells: 0.0              # Image cell spacing in Y in asec.
 Robust: -1.5             # Robustness power: -5 -> pure uniform weights, 5 => natural
@@ -33,4 +33,4 @@ solAInt: 2.0             # A&P SC Solution interval (min)
 solAType: 'L1'           # A&P SC Soln. Type: '  ', 'L1', 
 solAMode: 'A&P'          # A&P SC Soln. Mode:'A&P', 'P', 'P!A',
 refAnt: 0                # SC Reference antenna
-
+Reuse: 20.0              # Number of sigma to reuse CCs

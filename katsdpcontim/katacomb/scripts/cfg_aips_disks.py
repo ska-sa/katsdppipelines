@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import argparse
 import glob
 import logging
 import os
@@ -117,10 +118,30 @@ def link_obit_data(cfg):
                 log.warn("Unable to link '{}' to '{}'\n"
                          "{}".format(link_name, data_file, e))
 
-if __name__ == "__main__":
-    cfg = get_config()
+def create_parser():
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(formatter_class=formatter_class)
 
-    setup_aips_disks(cfg)
-    rewrite_dadevs(cfg)
-    rewrite_netsp(cfg)
-    link_obit_data(cfg)
+    parser.add_argument("-a", "--aipsdisks",
+                        default=None, type=str,
+                        help="Comma separated list of paths to aipsdisks.")
+
+    parser.add_argument("-f", "--fitsdisks",
+                        default=None, type=str,
+                        help="Comma separated list of paths to fitsdisks.")
+
+    return parser
+
+
+args = create_parser().parse_args()
+
+if args.aipsdisks:
+    args.aipsdisks = args.aipsdisks.split(',')
+if args.fitsdisks:
+    args.fitsdisks = args.fitsdisks.split(',')
+
+cfg = get_config(aipsdirs=args.aipsdisks, fitsdirs=args.fitsdisks)
+setup_aips_disks(cfg)
+rewrite_dadevs(cfg)
+rewrite_netsp(cfg)
+link_obit_data(cfg)

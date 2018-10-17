@@ -58,7 +58,7 @@ def create_parser():
                              "will be created in this space and logfiles of Obit "
                              "tasks will be written here.")
 
-    parser.add_argument("--nvispio", default=1024, type=int)
+    parser.add_argument("--nvispio", default=10240, type=int)
 
     parser.add_argument("-cbid", "--capture-block-id",
                         default=None, type=str,
