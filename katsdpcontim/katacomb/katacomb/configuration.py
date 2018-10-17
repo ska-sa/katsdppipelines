@@ -76,6 +76,7 @@ def validate_configuration(configuration):
     import attr
 
     cfg = config_validator().validated(configuration)
+
     def _dicts_to_attrs(key, value):
         """ Recursively convert any dictionaries to attr classes """
 

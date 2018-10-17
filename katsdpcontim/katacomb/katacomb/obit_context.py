@@ -8,7 +8,6 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
-import katacomb
 from katacomb import get_config
 
 log = logging.getLogger('katacomb')

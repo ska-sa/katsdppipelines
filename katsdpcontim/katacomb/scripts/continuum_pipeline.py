@@ -138,7 +138,7 @@ mfimage_args = get_and_merge_args(args.config + '/mfimage.yaml', args.mfimage)
 
 # Set up configuration object and logfiles from args.scratch
 if args.workdir is not None:
-    aipsdirs = [pjoin(args.workdir, 'aipsdisk')]
+    aipsdirs = [pjoin(args.workdir, args.capture_block_id + '_aipsdisk')]
     cfg = get_config(aipsdirs=aipsdirs)
     setup_aips_disks(cfg)
     uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
