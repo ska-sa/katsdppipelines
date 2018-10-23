@@ -81,7 +81,7 @@ def get_and_merge_args(config_file, args):
                  "Using Obit default parameters.", config_file)
         out_args = {}
     else:
-        out_args = yaml.load(open(config_file))
+        out_args = yaml.safe_load(open(config_file))
     out_args.update(args)
     return out_args
 

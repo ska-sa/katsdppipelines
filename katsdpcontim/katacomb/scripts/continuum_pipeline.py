@@ -117,7 +117,7 @@ def create_parser():
                              "'mfimage' => Output MFImage files. ")
 
     parser.add_argument("--config",
-                        default="/obitconf",
+                        default=os.path.sep + "obitconf",
                         type=str,
                         help="Directory containing default configuration "
                              ".yaml files for mfimage and uvblavg. ")
@@ -133,8 +133,8 @@ katdata = katdal.open(args.katdata)
 post_process_args(args, katdata)
 
 # Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(args.config + '/uvblavg.yaml', args.uvblavg)
-mfimage_args = get_and_merge_args(args.config + '/mfimage.yaml', args.mfimage)
+uvblavg_args = get_and_merge_args(pjoin(args.config,'/uvblavg.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(args.config,'/mfimage.yaml'), args.mfimage)
 
 # Set up configuration object and logfiles from args.scratch
 if args.workdir is not None:
