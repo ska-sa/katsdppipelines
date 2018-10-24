@@ -345,13 +345,20 @@ class ContinuumPipeline(object):
         # FORTRAN indexing
         merge_firstVis = 1
 
-        # Export each scan individually,
-        # baseline averaging and merging it
-        # into the final observation file
-        for si, _, aips_source in self.ka.scans():
+        # Scan indices
+        scan_indices = [int(si) for si in self.ka.scan_indices]
+
+        # Export each scan individually, baseline averaging and merging it
+        # into the final observation file.
+        # NOTE: Loop over scan indices here rather than using the ka.scans
+        # generator to avoid a conflict with the loop over ka.scans in uv_export.
+        for si in scan_indices:
+            # Select the current scan
+            self.ka.select(scans=si)
             # Get path, with sequence based on scan index
             scan_path = self.uv_merge_path.copy(aclass='raw', seq=int(si))
             # Get the AIPS source for logging purposes
+            aips_source = self.ka.catalogue[self.ka.target_indices[0]]
             aips_source_name = aips_source["SOURCE"][0].strip()
 
             log.info("Creating '%s'", scan_path)
@@ -361,6 +368,7 @@ class ContinuumPipeline(object):
                             nvispio=self.nvispio,
                             table_cmds=global_table_cmds,
                             desc=global_desc) as uvf:
+
                 uv_export(self.ka, uvf)
 
             # Retrieve the single scan index.

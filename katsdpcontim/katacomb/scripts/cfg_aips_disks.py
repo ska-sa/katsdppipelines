@@ -124,11 +124,11 @@ def create_parser():
     parser = argparse.ArgumentParser(formatter_class=formatter_class)
 
     parser.add_argument("-a", "--aipsdisks",
-                        default=None, type=[ds.strip() for ds in disk_str.split(',')],
+                        default=None, type=lambda s: [ds.strip() for ds in s.split(',')],
                         help="Comma separated list of paths to aipsdisks.")
 
     parser.add_argument("-f", "--fitsdisks",
-                        default=None, type=[ds.strip() for ds in disk_str.split(',')],
+                        default=None, type=lambda s: [ds.strip() for ds in s.split(',')],
                         help="Comma separated list of paths to fitsdisks.")
 
     return parser
