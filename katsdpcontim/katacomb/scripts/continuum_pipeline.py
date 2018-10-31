@@ -25,6 +25,7 @@ import katdal
 from katsdptelstate import TelescopeState
 
 import katacomb
+import katacomb.configuration as kc
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         ContinuumPipeline,
                         task_factory,
@@ -33,8 +34,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         uv_history_obs_description,
                         uv_history_selection,
                         export_calibration_solutions,
-                        export_clean_components,
-                        get_config)
+                        export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
                         get_and_merge_args,
@@ -132,19 +132,23 @@ katdata = katdal.open(args.katdata)
 
 post_process_args(args, katdata)
 
+print args.config
 # Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(pjoin(args.config,'/uvblavg.yaml'), args.uvblavg)
-mfimage_args = get_and_merge_args(pjoin(args.config,'/mfimage.yaml'), args.mfimage)
+uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
 
-# Set up configuration object and logfiles from args.scratch
+print uvblavg_args
+
+# Set up configuration and logfiles from args.scratch
 if args.workdir is not None:
-    aipsdirs = [pjoin(args.workdir, args.capture_block_id + '_aipsdisk')]
-    cfg = get_config(aipsdirs=aipsdirs)
-    setup_aips_disks(cfg)
+    aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
+    kc.set_config(aipsdirs=aipsdirs)
+    setup_aips_disks()
     uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
     mfimage_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_MFImage.log'))
 else:
-    cfg = get_config()
+    # Use default configuration
+    kc.set_config()
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID
@@ -158,8 +162,7 @@ pipeline = ContinuumPipeline(katdata, ts_view,
                             katdal_select=args.select,
                             uvblavg_params=uvblavg_args,
                             mfimage_params=mfimage_args,
-                            nvispio=args.nvispio,
-                            config=cfg)
+                            nvispio=args.nvispio)
 
 # Execute it
 pipeline.execute()

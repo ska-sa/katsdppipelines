@@ -7,7 +7,8 @@ from pretty import pretty
 import yaml
 import six
 
-from katacomb.aips_parser import obit_config_from_aips
+import katacomb.configuration as kc
+from katacomb import obit_config_from_aips
 
 import ObitTask
 import OSystem
@@ -58,6 +59,25 @@ def post_process_args(args, kat_adapter):
     return args
 
 
+
+def recursive_merge(source, destination):
+    """
+    Recursively merge dictionary in source with dictionary in
+    desination. Return the merged dictionaries.
+    Stolen from:
+    https://stackoverflow.com/questions/20656135/python-deep-merge-dictionary-data
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            recursive_merge(value, node)
+        else:
+            destination[key] = value
+
+    return destination
+
+
 def get_and_merge_args(config_file, args):
     """
     Make a dictionary out of a '.yaml' config file
@@ -82,7 +102,7 @@ def get_and_merge_args(config_file, args):
         out_args = {}
     else:
         out_args = yaml.safe_load(open(config_file))
-    out_args.update(args)
+    recursive_merge(args, out_args)
     return out_args
 
 
@@ -328,19 +348,19 @@ def fmt_bytes(nbytes):
     return "%.1f%s" % (nbytes, 'TB')
 
 
-def setup_aips_disks(cfg):
+def setup_aips_disks():
     """
     Ensure that each AIPS and FITS disk (directory) exists.
     Creates a SPACE file within the aips disks.
     """
-
-    for url, aipsdir in cfg.obit.aipsdirs + cfg.obit.fitsdirs:
+    cfg = kc.get_config()
+    for url, aipsdir in cfg['aipsdirs'] + cfg['fitsdirs']:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
             log.info("Creating AIPS Disk '%s'", aipsdir)
             os.makedirs(aipsdir)
 
-    for url, aipsdir in cfg.obit.aipsdirs:
+    for url, aipsdir in cfg['aipsdirs']:
         # Create SPACE file
         space = os.path.join(aipsdir, 'SPACE')
 

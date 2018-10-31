@@ -370,6 +370,53 @@ This is achieved by running the ``cfg_aips_disks.py`` script which:
 - modifies ``DADEVS.LIST`` and ``NETSP`` in the AIPS installation.
 - Creates soft links in the Obit data directory into the FITS area.
 
+Running the Production Container
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``continuum_pipeline.py`` script will need some scratch space mounted
+for writing log files from the Obit tasks :code:`MFImage` and :code:`UVBLAvg` and
+for creating a temporary AIPS disk area. A typical 1K channel, 12hr, 64 antenna observation
+will need no more than approximately 200GB of space for storing the UV data in AIPS disk
+format and for temporary facet images. The location of this scratch space is specified
+when running ``continuum_pipeline.py`` via the -w parameter. An AIPS disk will be created
+in this space with name ``<CB_ID>_aipsdisk``. Log files will be written here as well with
+name ``<CB_ID>_<taskname>.log``. Ideally the scratch space should be mounted into the
+container from an external disk area so that the logfiles can be monitored wile the
+script is running. Any external area will have to have write permission for the kat user.
+
+There are config files for baseline dependant averaging (``uvblavg.yaml``) and imaging
+(``mfimage.yaml``), which containe default parameters to be passed to these tasks during script
+execution. The files are stored inside the container in the ``/obitconf`` directory and by
+default will be read from there. Thes files can be overridden by changing the location
+that the script will search for the files (ie. ``/scratch``) using the --config parameter
+to tell the script where to look for the files at run time.
+
+Default parameters for :code:`MFImage` and :code:`UVBLAvg` as well as a user defined
+:code:`katdal.select` statement can be overridden via the command line arguments ``--uvblavg``,
+``--mfimage`` and ``--select``. Use ``continuum-pipeline.py --help`` for instructions on how
+to use these.
+
+Output CLEAN component models and self-calibration solutions are written to telstate.
+To specify a telstate address to write to use the ``--telstate`` option. The user may need to
+expose the relevant ports as well when running the docker container.
+
+:code:`continuum_pipeline.py` will need any mvf format object that can be opened
+via the :code:`katdal.open()` method.
+
+An example of running the production container that works on ``imgr_com_3`` is below. This
+mounts external NVMe space into the container as ``/scratch`` and tells the script to make its
+AIPS disk area and place its log files there. The script will be run on a `.rdb` file which is
+copied to the /scratch1 area prior to running the container. The --select option is used to
+chop the first and last 5 per-cent of the channels and only select tracks and cross correlations.
+The --uvblavg option is used to average the data down to 1024 channels from the 4096 in the dataset.
+
+.. code-block::
+
+  $ docker run -v /scratch1:/scratch sdp-docker-registry.kat.ac.za:5000/katsdpcontim:latest \
+    continuum_pipeline.py /scratch/1533675778_sdp_l0.rdb -w /scratch \
+    --select "scans='track'; corrprods='cross'; channels=slice(205,3892)" \
+    --uvblavg "avgFreq=1; chAvg=4"
+
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Bill Cotton's Continuum Imaging Pipeline Parameters

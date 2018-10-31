@@ -1,7 +1,9 @@
-import collections
-
+import logging
 import os
+import threading
 from os.path import join as pjoin
+
+log = logging.getLogger('katacomb')
 
 
 def config_validator():
@@ -14,100 +16,53 @@ def config_validator():
 
     from cerberus import Validator
 
-    # Create the aips schema and defaults
+    # Create the schema and defaults
+    obitroot = pjoin(os.sep, 'home', 'kat', 'Obit')
+    obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
+    # (url, dir) tuples, where None means localhost
     aipsroot = pjoin(os.sep, 'home', 'kat', 'AIPS')
+    fitsdirs = [(None, pjoin(aipsroot, 'FITS'))]
+    aipsdirs = [(None, pjoin(aipsroot, 'DATA', 'LOCALHOST_1')),
+                (None, pjoin(aipsroot, 'DATA', 'LOCALHOST_2'))]
 
-    aips_schema = {
+    schema = {
+        'obitroot': {'type': 'string', 'default': obitroot},
+        'obitexec': {'type': 'string', 'default': obitexec},
+        'fitsdirs': {'type': 'list', 'default': fitsdirs},
+        'aipsdirs': {'type': 'list', 'default': aipsdirs},
         'aipsroot': {'type': 'string', 'default': aipsroot},
         'aipsversion': {'type': 'string', 'default': '31DEC16'},
         'da00': {'type': 'string', 'default': pjoin(aipsroot, 'DA00')},
         'userno': {'type': 'integer', 'default': 105},
     }
 
-    # Create the obit schema and defaults
-    obitroot = pjoin(os.sep, 'home', 'kat', 'Obit')
-    obitexec = pjoin(obitroot, 'ObitSystem', 'Obit')
-    # (url, dir) tuples, where None means localhost
-    fitsdirs = [(None, pjoin(aipsroot, 'FITS'))]
-    aipsdirs = [(None, pjoin(aipsroot, 'DATA', 'LOCALHOST_1')),
-                (None, pjoin(aipsroot, 'DATA', 'LOCALHOST_2'))]
-
-    obit_schema = {
-        'obitroot': {'type': 'string', 'default': obitroot},
-        'obitexec': {'type': 'string', 'default': obitexec},
-        'fitsdirs': {'type': 'list', 'default': fitsdirs},
-        'aipsdirs': {'type': 'list', 'default': aipsdirs},
-    }
-
-    schema = {
-        'aips': {
-            'type': 'dict',
-            'schema': aips_schema,
-            'default': Validator(aips_schema).validated({}),
-        },
-        'obit': {
-            'type': 'dict',
-            'schema': obit_schema,
-            'default': Validator(obit_schema).validated({}),
-        }
-    }
-
     return Validator(schema)
 
 
-def validate_configuration(configuration):
-    """
-    Validate the supplied configuration dictionary,
-    and return an object containing the configuration
-
-    Parameters
-    ----------
-    configuration: dict
-        User supplied configuration dictionary
-
-    Returns
-    -------
-    object
-        Returns an object with attributes created
-        from the key value pairs on `configuration`.
-        This process is applied recursively to any
-        dictionaries within `configuration`.
-    """
-    import attr
-
-    cfg = config_validator().validated(configuration)
-
-    def _dicts_to_attrs(key, value):
-        """ Recursively convert any dictionaries to attr classes """
-
-        # Handle dictionaries
-        if isinstance(value, collections.Mapping):
-            # Make an attribute class and instance for this key,
-            # with value's keys as attributes
-            skey = "{}_section".format(key)
-            klass = attr.make_class(skey, value.keys(), frozen=True)
-            return klass(*(_dicts_to_attrs(k, v) for k, v in value.items()))
-
-        return value
-
-    return _dicts_to_attrs("main", cfg)
+__cfg_lock = threading.Lock()
+__default_cfg = config_validator().validated({})
+__active_cfg = {}
 
 
-def get_config(aipsdirs=None, fitsdirs=None):
-    """
-    Get a configuration, optionally specify lists
-    of aipsdisks and fitsdisks.
+def set_config(cfg={}, **kwargs):
+    # Set active configuration.
+    from katacomb.util import recursive_merge
 
-    Parameters
-    ----------
-    aipsdirs: list (optional)
-        list of path locations of aipsdisks
-    fitsdirs: list (optional)
-        list of path loactions of fitsdisks
-    """
-    cfg_dict = {'obit': {}, 'aips': {}}
-    if aipsdirs:
-        cfg_dict['obit']['aipsdirs'] = [(None, disk) for disk in aipsdirs]
-    if fitsdirs:
-        cfg_dict['obit']['fitsdirs'] = [(None, disk) for disk in fitsdirs]
-    return validate_configuration(cfg_dict)
+    global __active_cfg
+
+    with __cfg_lock:
+        __active_cfg = __default_cfg.copy()
+        recursive_merge(cfg, __active_cfg)
+        recursive_merge(kwargs, __active_cfg)
+        __active_cfg = config_validator().validated(__active_cfg)
+
+
+def get_config():
+    # Get active configuration
+    with __cfg_lock:
+        return __active_cfg
+
+
+def reset_config():
+    # Reset active configuration to defaults
+    set_config(cfg={})

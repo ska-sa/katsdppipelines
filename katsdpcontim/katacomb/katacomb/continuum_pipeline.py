@@ -12,8 +12,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       uv_history_obs_description,
                       uv_history_selection,
                       export_calibration_solutions,
-                      export_clean_components,
-                      get_config)
+                      export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import fractional_bandwidth
 
@@ -62,9 +61,6 @@ class ContinuumPipeline(object):
             4. `'clean'` Per source, CLEAN images produced by MFImage.
             5. `'mfimage'` Per source, UV data files produced by MFImage.
 
-        config (optional) : object
-            Configuration object to use with obit_context.
-            Defaults to get_config defaults.
         nvispio (optional) : integer
             Number of AIPS visibilities per IO operation.
             Defaults to 10240.
@@ -75,7 +71,6 @@ class ContinuumPipeline(object):
 
         self.nvispio = kwargs.pop("nvispio", 10240)
         self.disk = 1
-        self.config = kwargs.pop("config", get_config())
         self.katdal_select = kwargs.pop("katdal_select", {})
         self.uvblavg_params = kwargs.pop("uvblavg_params", {})
         self.mfimage_params = kwargs.pop("mfimage_params", {})
@@ -85,7 +80,7 @@ class ContinuumPipeline(object):
 
     def execute(self):
         """ Execute the Continuum Pipeline """
-        with obit_context(cfg=self.config):
+        with obit_context():
             try:
                 result_tuple = self._export_and_merge_scans()
                 uv_sources, target_indices, uv_files, clean_files = result_tuple

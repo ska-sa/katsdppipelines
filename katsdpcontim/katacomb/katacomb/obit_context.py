@@ -8,7 +8,7 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
-from katacomb import get_config
+import katacomb.configuration as kc
 
 log = logging.getLogger('katacomb')
 
@@ -22,7 +22,7 @@ class ObitContext(object):
     the Obit error stack and Obit System
     """
 
-    def __init__(self, cfg=get_config()):
+    def __init__(self):
         """
         Constructor
 
@@ -30,23 +30,30 @@ class ObitContext(object):
         https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
         """
 
+        # Get the current configuration (or default if it is not set)
+        cfg = kc.get_config()
+        if cfg == {}:
+            log.warn("No configuration set for Obit context. Using default.")
+            kc.reset_config()
+            cfg = kc.get_config()
+
         self.err = err = OErr.OErr()
-        self.obitsys = OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
+        self.obitsys = OSystem.OSystem("Pipeline", 1, cfg['userno'],
                                        0, [" "], 0, [" "],
                                        True, False, err)
         OErr.printErrMsg(err, "Error starting Obit System")
 
         # Setup AIPS userno
-        AIPS.userno = cfg.aips.userno
+        AIPS.userno = cfg['userno']
 
         # Setup Obit Environment
-        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg.aips.aipsroot,
-                                AIPS_VERSION=cfg.aips.aipsversion,
-                                OBIT_EXEC=cfg.obit.obitexec,
-                                DA00=cfg.aips.da00,
+        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg['aipsroot'],
+                                AIPS_VERSION=cfg['aipsversion'],
+                                OBIT_EXEC=cfg['obitexec'],
+                                DA00=cfg['da00'],
                                 ARCH="LINUX",
-                                aipsdirs=cfg.obit.aipsdirs,
-                                fitsdirs=cfg.obit.fitsdirs)
+                                aipsdirs=cfg['aipsdirs'],
+                                fitsdirs=cfg['fitsdirs'])
 
     def close(self):
         """
@@ -59,7 +66,7 @@ class ObitContext(object):
 
 
 @contextmanager
-def obit_context(cfg=get_config()):
+def obit_context():
     """
     Creates a global Obit Context, initialising the AIPS system
     and creating error stacks.
@@ -78,7 +85,7 @@ def obit_context(cfg=get_config()):
             raise ValueError("Obit Context already exists")
 
         log.info("Creating Obit Context")
-        __obit_context = ObitContext(cfg)
+        __obit_context = ObitContext()
 
         yield
     finally:
