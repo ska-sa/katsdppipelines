@@ -688,6 +688,7 @@ def plot_bandpass(x,y,xlab='Channel',ylab='Data',xlim=None,ylim=None,fig=None,lo
 
     return fig
 
+#TODO: Fix fit1(xlin)
 def plot_polys(xlin,fit1,fit2,plot_poly=True,plot_ref=True,fig=None):
 
     """Plot two input polynomials.

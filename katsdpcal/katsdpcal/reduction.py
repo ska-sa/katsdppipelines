@@ -658,7 +658,7 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
 
             #point to cross-antenna, xx & yy data
             bp_data = s.cross_ant.tf.auto_pol
-            s.derive_metrics(bp_data,s,ts,parameters)
+            s.derive_bp_metrics(bp_data,s,ts,parameters)
 
     return target_slices, av_corr
 

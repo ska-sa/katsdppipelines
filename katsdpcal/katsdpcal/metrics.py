@@ -42,8 +42,8 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,m
         aylim = None
 
     # compute bandpass data quality metrics
-    amp_resid,amp_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Amp',deg=deg,plot=plot,plot_per=plot_per,ylim=aylim)
-    phase_resid,phase_polys,fig = bandpass_metrics(vis.compute(),weights.compute(),flags.compute(),s,ts,parameters,dtype='Phase',deg=deg,plot=plot,plot_per=plot_per,ylim=(-10,10))
+    amp_resid,amp_polys,fig = bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amp',deg=deg,plot=plot,plot_per=plot_per,ylim=aylim)
+    phase_resid,phase_polys,fig = bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Phase',deg=deg,plot=plot,plot_per=plot_per,ylim=(-10,10))
 
     # take single bandpass metric as worst
     BP_amp_metric = metric_func(amp_resid[:,:,:,3])
@@ -111,10 +111,10 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
     polys = np.ndarray(shape=(vis.shape[0],vis.shape[2],vis.shape[3],deg+1))
 
     if dtype.lower() in ['amplitude','amp']:
-        vis = vis.real #np.absolute(data)
+        vis = np.absolute(vis)
         logy = False
     elif dtype.lower() == 'phase':
-        vis = vis.imag #np.angle(data,deg=True)
+        vis = np.angle(vis,deg=True)
         logy = False
     else:
         print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
@@ -173,6 +173,39 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
 
     return residuals,polys,fig
 
+def polynomial(x,coefficients):
+
+    y = 0.0
+    for i in range(len(coefficients)):
+        y += coefficients[-i-1]*x**i
+    return y
+
+def get_valid_indices(xdata,ydata,weights,flags):
+
+    indices = ~np.isnan(ydata) & (flags == 0)
+    if weights is not None:
+        indices = indices & ~(weights == 0)
+        weights = 1.0/weights[indices]
+
+    return xdata[indices],ydata[indices],weights
+
+def fit_poly(x,y,w,deg):
+
+    poly_paras = np.polyfit(x,y,deg,w=w)
+    poly = np.poly1d(poly_paras)
+
+    return poly,poly_paras
+
+def poly_stats(x,y,deg,poly):
+
+    chi_sq=np.sum((y-poly(x))**2)
+    DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
+
+    red_chi_sq = chi_sq/DOF
+    nmad = np.median(np.abs(y-np.median(y)))/0.6745
+    nmad_model = np.median(np.abs(y-poly(x)))/0.6745
+
+    return red_chi_sq,nmad,nmad_model
 
 def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,xlab=None,ylab=None,xlim=None,ylim=None,logy=False):
 
@@ -222,24 +255,11 @@ def poly_residual(xdata,ydata,weights=None,flags=None,deg=3,plot=True,fig=None,x
     fig : class `matplotlib.figure`
         The figure (None if plot is False)."""
 
-    indices = ~np.isnan(xdata) & ~np.isnan(ydata) & (flags == 0)
-    if weights is not None:
-        indices = indices & ~(weights == 0)
-        w = 1.0/weights[indices]
-
-    x = xdata[indices]
-    y = ydata[indices]
+    x,y,w = get_valid_indices(xdata, ydata, weights, flags)
 
     if x.size > 0 and y.size > 0:
-        poly_paras = np.polyfit(x,y,deg,w=w)
-        poly = np.poly1d(poly_paras)
-
-        chi_sq=np.sum((y-poly(x))**2)
-        DOF=len(x)-(deg+1) #polynomial has deg+1 free parameters
-
-        red_chi_sq = chi_sq/DOF
-        nmad = np.median(np.abs(y-np.median(y)))/0.6745
-        nmad_model = np.median(np.abs(y-poly(x)))/0.6745
+        poly,poly_paras = fit_poly(x, y, w, deg)
+        red_chi_sq,nmad,nmad_model = poly_stats(x, y, deg, poly)
 
         if plot:
             fig = plotting.plot_bandpass(x,y,xlab,ylab,xlim,ylim,fig=fig,logy=logy)
