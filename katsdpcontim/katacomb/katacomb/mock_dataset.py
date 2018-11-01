@@ -7,8 +7,8 @@ import six
 from six.moves import range
 from ephem.stars import stars
 
-from katdal.dataset import (DataSet, Subarray,
-                        SpectralWindow)
+from katdal.dataset import DataSet, Subarray
+from katdal import SpectralWindow
 from katdal.h5datav3 import VIRTUAL_SENSORS, SENSOR_PROPS
 
 from katdal.sensordata import SensorCache
