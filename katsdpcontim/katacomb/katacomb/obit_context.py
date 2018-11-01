@@ -30,12 +30,8 @@ class ObitContext(object):
         https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
         """
 
-        # Get the current configuration (or default if it is not set)
+        # Get the current configuration
         cfg = kc.get_config()
-        if cfg == {}:
-            log.warn("No configuration set for Obit context. Using default.")
-            kc.reset_config()
-            cfg = kc.get_config()
 
         self.err = err = OErr.OErr()
         self.obitsys = OSystem.OSystem("Pipeline", 1, cfg['userno'],

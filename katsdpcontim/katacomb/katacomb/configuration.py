@@ -41,8 +41,7 @@ def config_validator():
 
 __cfg_lock = threading.Lock()
 __default_cfg = config_validator().validated({})
-__active_cfg = {}
-
+__active_cfg = __default_cfg.copy()
 
 def set_config(cfg={}, **kwargs):
     # Set active configuration.

@@ -385,11 +385,10 @@ container from an external disk area so that the logfiles can be monitored wile 
 script is running. Any external area will have to have write permission for the kat user.
 
 There are config files for baseline dependant averaging (``uvblavg.yaml``) and imaging
-(``mfimage.yaml``), which containe default parameters to be passed to these tasks during script
+(``mfimage.yaml``), which contain default parameters to be passed to these tasks during script
 execution. The files are stored inside the container in the ``/obitconf`` directory and by
-default will be read from there. Thes files can be overridden by changing the location
-that the script will search for the files (ie. ``/scratch``) using the --config parameter
-to tell the script where to look for the files at run time.
+default will be read from there. This location can be overridden by supplying a
+--config parameter (ie. ``/scratch``) to tell the script where to look for the files at run time.
 
 Default parameters for :code:`MFImage` and :code:`UVBLAvg` as well as a user defined
 :code:`katdal.select` statement can be overridden via the command line arguments ``--uvblavg``,
@@ -400,7 +399,7 @@ Output CLEAN component models and self-calibration solutions are written to tels
 To specify a telstate address to write to use the ``--telstate`` option. The user may need to
 expose the relevant ports as well when running the docker container.
 
-:code:`continuum_pipeline.py` will need any mvf format object that can be opened
+:code:`continuum_pipeline.py` will take any mvf format object that can be opened
 via the :code:`katdal.open()` method.
 
 An example of running the production container that works on ``imgr_com_3`` is below. This

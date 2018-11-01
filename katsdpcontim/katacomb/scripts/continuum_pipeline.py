@@ -132,23 +132,17 @@ katdata = katdal.open(args.katdata)
 
 post_process_args(args, katdata)
 
-print args.config
 # Get defaults for uvblavg and mfimage and merge user supplied ones
 uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
 mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
 
-print uvblavg_args
-
-# Set up configuration and logfiles from args.scratch
+# Set up configuration and logfiles from args.workdir
 if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
     kc.set_config(aipsdirs=aipsdirs)
     setup_aips_disks()
     uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
     mfimage_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_MFImage.log'))
-else:
-    # Use default configuration
-    kc.set_config()
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID
