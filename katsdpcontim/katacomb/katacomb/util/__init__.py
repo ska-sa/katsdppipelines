@@ -1,16 +1,28 @@
 import ast
 import functools
 import logging
+import os
 
 from pretty import pretty
+import yaml
 import six
 
-from katacomb.aips_parser import obit_config_from_aips
-from katacomb.configuration import get_config
+import katacomb.configuration as kc
+from katacomb import obit_config_from_aips
 
 import ObitTask
+import OSystem
+
+import __builtin__
+
+# builtin function whitelist
+_BUILTIN_WHITELIST = frozenset(['slice'])
+_missing = _BUILTIN_WHITELIST.difference(dir(__builtin__))
+if len(_missing) > 0:
+    raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
 
 log = logging.getLogger('katacomb')
+
 
 def post_process_args(args, kat_adapter):
     """
@@ -42,17 +54,56 @@ def post_process_args(args, kat_adapter):
             log.warn("No capture block ID was specified or "
                      "found in katdal. "
                      "Using experiment_id '%s' instead.",
-                        kat_adapter.experiment_id)
+                     kat_adapter.experiment_id)
 
     return args
 
-import __builtin__
 
-# builtin function whitelist
-_BUILTIN_WHITELIST = frozenset(['slice'])
-_missing = _BUILTIN_WHITELIST.difference(dir(__builtin__))
-if len(_missing) > 0:
-    raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
+
+def recursive_merge(source, destination):
+    """
+    Recursively merge dictionary in source with dictionary in
+    desination. Return the merged dictionaries.
+    Stolen from:
+    https://stackoverflow.com/questions/20656135/python-deep-merge-dictionary-data
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            recursive_merge(value, node)
+        else:
+            destination[key] = value
+
+    return destination
+
+
+def get_and_merge_args(config_file, args):
+    """
+    Make a dictionary out of a '.yaml' config file
+    and merge it with user supplied dictionary in args.
+
+    Parameters
+    ----------
+    config_file: str
+        Path to configuration YAML file.
+    args: dict
+        Dictionary of arguments to add to configuration.
+
+    Returns
+    -------
+    dict
+        Dictionary containing configuration parameters.
+    """
+
+    if not os.path.exists(config_file):
+        log.warn("Specified configuration file %s not found. "
+                 "Using Obit default parameters.", config_file)
+        out_args = {}
+    else:
+        out_args = yaml.safe_load(open(config_file))
+    recursive_merge(args, out_args)
+    return out_args
 
 
 def parse_python_assigns(assign_str):
@@ -82,7 +133,6 @@ def parse_python_assigns(assign_str):
         assignment results.
     """
 
-
     if not assign_str:
         return {}
 
@@ -94,7 +144,7 @@ def parse_python_assigns(assign_str):
             if func_name not in _BUILTIN_WHITELIST:
                 raise ValueError("Function '%s' in '%s' is not builtin. "
                                  "Available builtins: '%s'"
-                                    % (func_name, assign_str, list(_BUILTIN_WHITELIST)))
+                                 % (func_name, assign_str, list(_BUILTIN_WHITELIST)))
 
             # Recursively pass arguments through this same function
             if stmt_value.args is not None:
@@ -104,8 +154,8 @@ def parse_python_assigns(assign_str):
 
             # Recursively pass keyword arguments through this same function
             if stmt_value.keywords is not None:
-                kwargs = {kw.arg : _eval_value(kw.value) for kw
-                                          in stmt_value.keywords}
+                kwargs = {kw.arg: _eval_value(kw.value) for kw
+                          in stmt_value.keywords}
             else:
                 kwargs = {}
 
@@ -155,7 +205,7 @@ def parse_python_assigns(assign_str):
                                      "assignment %d of expression '%s' failed. "
                                      "The number of tuple elements did not match "
                                      "the number of values."
-                                        % (values, i, assign_str))
+                                     % (values, i, assign_str))
 
                 # Unpack
                 for variable, value in zip(target.elts, elements):
@@ -164,8 +214,8 @@ def parse_python_assigns(assign_str):
                 raise TypeError("'%s' types are not supported"
                                 "as assignment targets." % type(target))
 
-
     return variables
+
 
 def log_exception(logger):
     """ Decorator that wraps the passed log object and logs exceptions """
@@ -182,6 +232,7 @@ def log_exception(logger):
         return wrapper
 
     return decorator
+
 
 def task_factory(name, aips_cfg_file=None, **kwargs):
     """
@@ -224,12 +275,8 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         file_kwargs.update(kwargs)
         kwargs = file_kwargs
 
-    # Override user number and directories
-    # from global configuration
-    global_cfg = get_config()
-    kwargs['user'] = global_cfg.aips.userno
-    kwargs['AIPSdirs'] = [dir for url, dir in global_cfg.obit.aipsdirs]
-    kwargs['FITSdirs'] = [dir for url, dir in global_cfg.obit.fitsdirs]
+    # Override user number from global configuration
+    kwargs['user'] = OSystem.PGetAIPSuser()
 
     # Obit ignores these options
     for k in ('nFITS', 'nAIPS', 'AIPSuser'):
@@ -252,6 +299,7 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
 
     return task
 
+
 def fractional_bandwidth(uv_desc):
     """
     Returns the fractional bandwidth, given a uv descriptor dictionary
@@ -270,7 +318,7 @@ def fractional_bandwidth(uv_desc):
         ctypes = uv_desc['ctype']
     except KeyError:
         raise KeyError("The following UV descriptor is missing "
-                        "a 'ctype': %s" % pretty(uv_desc))
+                       "a 'ctype': %s" % pretty(uv_desc))
 
     ctypes = [ct.strip() for ct in ctypes]
 
@@ -278,7 +326,7 @@ def fractional_bandwidth(uv_desc):
         freq_idx = ctypes.index('FREQ')
     except ValueError:
         raise ValueError("The following UV descriptor is missing "
-                        "FREQ in it's 'ctype' field: %s" % pretty(uv_desc))
+                         "FREQ in it's 'ctype' field: %s" % pretty(uv_desc))
 
     freq_crval = uv_desc['crval'][freq_idx]
     freq_cdelt = uv_desc['cdelt'][freq_idx]
@@ -289,11 +337,32 @@ def fractional_bandwidth(uv_desc):
 
     return 2.0*(f2 - f1) / (f2 + f1)
 
+
 def fmt_bytes(nbytes):
     """ Returns a human readable string, given the number of bytes """
-    for x in ['B','KB','MB','GB']:
+    for x in ['B', 'KB', 'MB', 'GB']:
         if nbytes < 1024.0:
             return "%3.1f%s" % (nbytes, x)
         nbytes /= 1024.0
 
     return "%.1f%s" % (nbytes, 'TB')
+
+
+def setup_aips_disks():
+    """
+    Ensure that each AIPS and FITS disk (directory) exists.
+    Creates a SPACE file within the aips disks.
+    """
+    cfg = kc.get_config()
+    for url, aipsdir in cfg['aipsdirs'] + cfg['fitsdirs']:
+        # Create directory if it doesn't exist
+        if not os.path.exists(aipsdir):
+            log.info("Creating AIPS Disk '%s'", aipsdir)
+            os.makedirs(aipsdir)
+
+    for url, aipsdir in cfg['aipsdirs']:
+        # Create SPACE file
+        space = os.path.join(aipsdir, 'SPACE')
+
+        with open(space, 'a'):
+            os.utime(space, None)

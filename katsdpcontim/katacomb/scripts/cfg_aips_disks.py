@@ -1,12 +1,13 @@
 #!/usr/bin/env python
+import argparse
 import glob
 import logging
 import os
 from os.path import join as pjoin
 import shutil
 
-import katacomb
-from katacomb.configuration import get_config
+import katacomb.configuration as kc
+from katacomb.util import setup_aips_disks
 
 logging.getLogger('').handlers = [] # Remove handlers on the root logger
 
@@ -21,18 +22,19 @@ def create_logger():
 
 log = create_logger()
 
-def rewrite_dadevs(cfg):
+def rewrite_dadevs():
     """
     Rewrite ``cfg.aips.aipsroot/DA00/DADEVS.LIST`` to reference
     the AIPS directories specified in our configuration
     """
-    dadevs_list = pjoin(cfg.aips.da00, 'DADEVS.LIST')
-    backup = pjoin(cfg.aips.da00, '.DADEVS.LIST.BAK')
+    cfg = kc.get_config()
+    dadevs_list = pjoin(cfg['da00'], 'DADEVS.LIST')
+    backup = pjoin(cfg['da00'], '.DADEVS.LIST.BAK')
 
     if not os.path.exists(dadevs_list):
         log.warn("Could not find '%s' for modification. "
                          "Check your AIPS directory root '%s'.",
-                                dadevs_list, cfg.aips.aipsroot)
+                                dadevs_list, cfg['aipsroot'])
 
         return
 
@@ -47,25 +49,26 @@ def rewrite_dadevs(cfg):
                 wf.write(line)
 
         # Write out AIPS directories
-        for url, aipsdir in cfg.obit.aipsdirs:
+        for url, aipsdir in cfg['aipsdirs']:
             log.info("Adding AIPS Disk '%s' to '%s'", aipsdir, dadevs_list)
             wf.write("-  " + aipsdir + '\n')
 
     # Remove the copy
     os.remove(backup)
 
-def rewrite_netsp(cfg):
+def rewrite_netsp():
     """
     Rewrite `cfg.aips.aipsroot.da00/DA00/NETSP` to reference
     the AIPS directories specified in our configuration
     """
-    netsp = pjoin(cfg.aips.da00, 'NETSP')
-    backup = pjoin(cfg.aips.da00, '.NETSP.BAK')
+    cfg = kc.get_config()
+    netsp = pjoin(cfg['da00'], 'NETSP')
+    backup = pjoin(cfg['da00'], '.NETSP.BAK')
 
     if not os.path.exists(netsp):
         log.warn("Could not find '%s' for modification. "
                  "Check your AIPS directory root '%s'.",
-                            netsp, cfg.aips.aipsroot)
+                            netsp, cfg['aipsroot'])
         return
 
     # Make a copy of the original
@@ -79,39 +82,22 @@ def rewrite_netsp(cfg):
                 wf.write(line)
 
         # Write out AIPS Directory parameters
-        for url, aipsdir in cfg.obit.aipsdirs:
+        for url, aipsdir in cfg['aipsdirs']:
             log.info("Adding AIPS Disk '%s to '%s'", aipsdir, netsp)
             wf.write(aipsdir + ' 365.0    0    0    0    0    0    0    0    0\n')
 
     # Remove the copy
     os.remove(backup)
 
-def setup_aips_disks(cfg):
-    """
-    Ensure that each AIPS disk (directory) exists.
-    Creates a SPACE file within the disk.
-    """
-
-    for url, aipsdir in cfg.obit.aipsdirs + cfg.obit.fitsdirs:
-        # Create directory if it doesn't exist
-        if not os.path.exists(aipsdir):
-            log.info("Creating AIPS Disk '%s'", aipsdir)
-            os.makedirs(aipsdir)
-
-        # Create SPACE file
-        space = pjoin(aipsdir, 'SPACE')
-
-        with open(space, 'a'):
-            os.utime(space, None)
-
-def link_obit_data(cfg):
+def link_obit_data():
     """
     Creates soft links to Obit data files within FITS directories
     """
 
+    cfg = kc.get_config()
     # Directory in which Obit data file are located
-    obit_data_glob = pjoin(cfg.obit.obitroot, 'ObitSystem', 'Obit',
-                                                'share', 'data', '*')
+    obit_data_glob = pjoin(cfg['obitroot'], 'ObitSystem',
+                           'Obit', 'share', 'data', '*')
     # Data files we wish to symlink
     data_files = glob.glob(obit_data_glob)
 
@@ -119,7 +105,7 @@ def link_obit_data(cfg):
     filenames = [os.path.split(f)[1] for f in data_files]
 
     # In each FITS dir, create a link to each data file
-    for url, fitsdir in cfg.obit.fitsdirs:
+    for url, fitsdir in cfg['fitsdirs']:
         # Fully expand link paths
         link_names = [pjoin(fitsdir, f) for f in filenames]
 
@@ -134,10 +120,28 @@ def link_obit_data(cfg):
                 log.warn("Unable to link '{}' to '{}'\n"
                          "{}".format(link_name, data_file, e))
 
-if __name__ == "__main__":
-    cfg = get_config()
 
-    setup_aips_disks(cfg)
-    rewrite_dadevs(cfg)
-    rewrite_netsp(cfg)
-    link_obit_data(cfg)
+def create_parser():
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(formatter_class=formatter_class)
+
+    parser.add_argument("-a", "--aipsdisks",
+                        default=None,
+                        type=lambda s: [(None, ds.strip()) for ds in s.split(',')],
+                        help="Comma separated list of paths to aipsdisks.")
+
+    parser.add_argument("-f", "--fitsdisks",
+                        default=None,
+                        type=lambda s: [(None, ds.strip()) for ds in s.split(',')],
+                        help="Comma separated list of paths to fitsdisks.")
+
+    return parser
+
+
+args = create_parser().parse_args()
+
+kc.set_config(aipsdirs=args.aipsdisks, fitsdirs=args.fitsdisks)
+setup_aips_disks()
+rewrite_dadevs()
+rewrite_netsp()
+link_obit_data()

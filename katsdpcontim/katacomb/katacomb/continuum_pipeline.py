@@ -1,30 +1,27 @@
 from copy import deepcopy
 import logging
 import multiprocessing
-from pretty import pretty, pprint
+from pretty import pretty
 
 import six
 
-log = logging.getLogger('katacomb')
-
-import katacomb
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
-                        task_factory,
-                        uv_factory,
-                        uv_export,
-                        uv_history_obs_description,
-                        uv_history_selection,
-                        export_calibration_solutions,
-                        export_clean_components)
+                      task_factory,
+                      uv_factory,
+                      uv_export,
+                      uv_history_obs_description,
+                      uv_history_selection,
+                      export_calibration_solutions,
+                      export_clean_components)
 from katacomb.aips_path import next_seq_nr
-from katacomb.util import (parse_python_assigns,
-                        log_exception,
-                        post_process_args,
-                        fractional_bandwidth)
+from katacomb.util import fractional_bandwidth
+
+log = logging.getLogger('katacomb')
 
 # Standard MFImage output classes for UV and CLEAN images
 UV_CLASS = "MFImag"
 IMG_CLASS = "IClean"
+
 
 class ContinuumPipeline(object):
     """
@@ -64,10 +61,6 @@ class ContinuumPipeline(object):
             4. `'clean'` Per source, CLEAN images produced by MFImage.
             5. `'mfimage'` Per source, UV data files produced by MFImage.
 
-        disk (optional) : integer
-            AIPS disk on which to store AIPS UV data
-            and CLEAN images.
-            Defaults to 1.
         nvispio (optional) : integer
             Number of AIPS visibilities per IO operation.
             Defaults to 10240.
@@ -77,7 +70,7 @@ class ContinuumPipeline(object):
         self.telstate = telstate
 
         self.nvispio = kwargs.pop("nvispio", 10240)
-        self.disk = kwargs.pop("disk", 1)
+        self.disk = 1
         self.katdal_select = kwargs.pop("katdal_select", {})
         self.uvblavg_params = kwargs.pop("uvblavg_params", {})
         self.mfimage_params = kwargs.pop("mfimage_params", {})
@@ -96,7 +89,7 @@ class ContinuumPipeline(object):
 
                 export_calibration_solutions(uv_files, self.ka, self.telstate)
                 export_clean_components(clean_files, target_indices,
-                                            self.ka, self.telstate)
+                                        self.ka, self.telstate)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
             finally:
@@ -124,7 +117,7 @@ class ContinuumPipeline(object):
         blavg_kwargs.update(self.uvblavg_params)
 
         log.info("Time-dependent baseline averaging "
-                "'%s' to '%s'", scan_path, blavg_path)
+                 "'%s' to '%s'", scan_path, blavg_path)
 
         blavg = task_factory("UVBlAvg", **blavg_kwargs)
         blavg.go()
@@ -151,19 +144,19 @@ class ContinuumPipeline(object):
         # (3) FQ table rows
 
         descriptor_keys = ('inaxes', 'cdelt', 'crval', 'naxis', 'crota', 'crpix',
-                        'ilocu', 'ilocv', 'ilocw', 'ilocb', 'iloct', 'ilocsu',
-                        'jlocc', 'jlocs', 'jlocf', 'jlocif', 'jlocr', 'jlocd')
+                           'ilocu', 'ilocv', 'ilocw', 'ilocb', 'iloct', 'ilocsu',
+                           'jlocc', 'jlocs', 'jlocf', 'jlocif', 'jlocr', 'jlocd')
 
-        diff = { k: (merge_desc[k], blavg_desc[k]) for k in descriptor_keys
-                                    if not merge_desc[k] == blavg_desc[k] }
+        diff = {k: (merge_desc[k], blavg_desc[k]) for k in descriptor_keys
+                if not merge_desc[k] == blavg_desc[k]}
 
         if len(diff) > 0:
             raise ValueError("merge and averaged UV descriptors differ "
                              "on the following keys:\n%s" % pretty(diff))
 
-        diff = { k: (merge_fq_kw[k], blavg_fq_kw[k])
-                    for k in blavg_fq_kw.keys()
-                    if not merge_fq_kw[k] == blavg_fq_kw[k]}
+        diff = {k: (merge_fq_kw[k], blavg_fq_kw[k])
+                for k in blavg_fq_kw.keys()
+                if not merge_fq_kw[k] == blavg_fq_kw[k]}
 
         if len(diff) > 0:
             raise ValueError("merge and averaged FQ table keywords differ "
@@ -172,13 +165,13 @@ class ContinuumPipeline(object):
         if not len(merge_fq_rows) == len(blavg_fq_rows):
             raise ValueError("merge (%d) and averaged (%d) FQ "
                              "number of rows differ"
-                                % (len(merge_fq_rows), len(blavg_fq_rows)))
+                             % (len(merge_fq_rows), len(blavg_fq_rows)))
 
         diff = [("row %d" % r, {k: (mr[k], br[k]) for k in br.keys()
-                                                if not mr[k] == br[k]})
-                            for r, (mr, br)
-                            in enumerate(zip(merge_fq_rows, blavg_fq_rows))]
-        diff = [(r,d) for r, d in diff if len(d) > 0]
+                if not mr[k] == br[k]})
+                for r, (mr, br)
+                in enumerate(zip(merge_fq_rows, blavg_fq_rows))]
+        diff = [(r, d) for r, d in diff if len(d) > 0]
 
         if len(diff) > 0:
             raise ValueError("merge and averaged FQ rows "
@@ -203,7 +196,6 @@ class ContinuumPipeline(object):
             return merge_uvf
 
         blavg_desc = blavg_uvf.Desc.Dict
-        blavg_nvis = blavg_desc['nvis']
 
         log.info("Creating '%s'",  self.uv_merge_path)
 
@@ -220,10 +212,10 @@ class ContinuumPipeline(object):
 
         # Create the UV object
         merge_uvf = uv_factory(aips_path=self.uv_merge_path,
-                                mode="w",
-                                nvispio=self.nvispio,
-                                table_cmds=blavg_table_cmds,
-                                desc=blavg_desc)
+                               mode="w",
+                               nvispio=self.nvispio,
+                               table_cmds=blavg_table_cmds,
+                               desc=blavg_desc)
 
         # Write history
         uv_history_obs_description(self.ka, merge_uvf)
@@ -235,11 +227,10 @@ class ContinuumPipeline(object):
         return merge_uvf
 
     def _copy_scan_to_merge(self, merge_firstVis,
-            merge_uvf, blavg_uvf, nx_row):
+                            merge_uvf, blavg_uvf, nx_row):
         """
         Copy scan data to merged UV file
         """
-
 
         # Record the starting visibility
         # for this scan in the merge file
@@ -292,13 +283,12 @@ class ContinuumPipeline(object):
         uv_sources = [s["SOURCE"][0].strip() for s in self.ka.uv_source_rows]
 
         uv_files = [AIPSPath(name=s, disk=self.disk,
-                             aclass=UV_CLASS, atype="UV")
-                                        for s in uv_sources]
+                    aclass=UV_CLASS, atype="UV")
+                    for s in uv_sources]
 
         clean_files = [AIPSPath(name=s, disk=self.disk,
-                                aclass=IMG_CLASS, atype="MA")
-                                        for s in uv_sources]
-
+                       aclass=IMG_CLASS, atype="MA")
+                       for s in uv_sources]
 
         # Find a maximum sequence number referencing unassigned
         # catalogue numbers for all uv and clean files
@@ -335,8 +325,8 @@ class ContinuumPipeline(object):
         # Fall over on empty selections
         if not self.ka.size > 0:
             raise ValueError("The katdal selection "
-                            "produced an empty dataset"
-                            "\n'%s'\n" % pretty(self.katdal_select))
+                             "produced an empty dataset"
+                             "\n'%s'\n" % pretty(self.katdal_select))
 
         global_desc = self.ka.uv_descriptor()
         global_table_cmds = self.ka.default_table_cmds()
@@ -353,13 +343,13 @@ class ContinuumPipeline(object):
         # Scan indices
         scan_indices = [int(si) for si in self.ka.scan_indices]
 
-        # Export each scan individually,
-        # baseline averaging and merging it
-        # into the final observation file
+        # Export each scan individually, baseline averaging and merging it
+        # into the final observation file.
+        # NOTE: Loop over scan indices here rather than using the ka.scans
+        # generator to avoid a conflict with the loop over ka.scans in uv_export.
         for si in scan_indices:
-            # Clear katdal selection and set to global selection
-            self.ka.select(**self.katdal_select)
-
+            # Select the current scan
+            self.ka.select(scans=si)
             # Get path, with sequence based on scan index
             scan_path = self.uv_merge_path.copy(aclass='raw', seq=int(si))
             # Get the AIPS source for logging purposes
@@ -374,14 +364,13 @@ class ContinuumPipeline(object):
                             table_cmds=global_table_cmds,
                             desc=global_desc) as uvf:
 
-                self.ka.select(scans=si)
                 uv_export(self.ka, uvf)
 
             # Retrieve the single scan index.
             # The time centroids and interval should be correct
             # but the visibility indices need to be repurposed
             scan_uvf = uv_factory(aips_path=scan_path, mode='r',
-                                            nvispio=self.nvispio)
+                                  nvispio=self.nvispio)
 
             assert len(scan_uvf.tables["AIPS NX"].rows) == 1
             nx_row = scan_uvf.tables["AIPS NX"].rows[0].copy()
@@ -399,26 +388,25 @@ class ContinuumPipeline(object):
                 # Perform baseline averaging
                 blavg_path = self._blavg_scan(scan_path)
                 blavg_uvf = uv_factory(aips_path=blavg_path,
-                                        mode='r',
-                                        nvispio=self.nvispio)
+                                       mode='r',
+                                       nvispio=self.nvispio)
 
             # Create the merge UV file, if necessary
             merge_uvf = self._maybe_create_merge_uvf(merge_uvf, blavg_uvf,
-                                                    global_table_cmds)
+                                                     global_table_cmds)
 
             blavg_desc = blavg_uvf.Desc.Dict
             blavg_nvis = blavg_desc['nvis']
 
             # Record something about the baseline averaging process
-            param_str = ', '.join("%s=%s" % (k,v)
-                                 for k,v
-                                 in self.uvblavg_params.items())
+            param_str = ', '.join("%s=%s" % (k, v)
+                                  for k, v
+                                  in self.uvblavg_params.items())
 
             blavg_history = ("Scan %d '%s' averaged "
                              "%s to %s visiblities. UVBlAvg(%s)" %
-                                (si, aips_source_name,
-                                 scan_nvis, blavg_nvis,
-                                 param_str))
+                             (si, aips_source_name, scan_nvis,
+                              blavg_nvis, param_str))
 
             log.info(blavg_history)
 
@@ -426,8 +414,8 @@ class ContinuumPipeline(object):
 
             log.info("Merging '%s' into '%s'", blavg_path, self.uv_merge_path)
             merge_firstVis = self._copy_scan_to_merge(merge_firstVis,
-                                                    merge_uvf, blavg_uvf,
-                                                    nx_row)
+                                                      merge_uvf, blavg_uvf,
+                                                      nx_row)
 
             # Remove scan once merged
             if 'scans' in self.clobber:
@@ -472,11 +460,11 @@ class ContinuumPipeline(object):
 
         # Run MFImage task on merged file,
         out_kwargs = self.uv_merge_path.task_output_kwargs(name='',
-                                                        aclass=IMG_CLASS,
-                                                        seq=clean_seq)
+                                                           aclass=IMG_CLASS,
+                                                           seq=clean_seq)
         out2_kwargs = self.uv_merge_path.task_output2_kwargs(name='',
-                                                        aclass=UV_CLASS,
-                                                        seq=uv_seq)
+                                                             aclass=UV_CLASS,
+                                                             seq=uv_seq)
 
         mfimage_kwargs = {}
         # Setup input file
@@ -497,9 +485,8 @@ class ContinuumPipeline(object):
 
         log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
-        mfimage = task_factory("MFImage",**mfimage_kwargs)
+        mfimage = task_factory("MFImage", **mfimage_kwargs)
         mfimage.go()
-
 
     def _cleanup(self, uv_files, clean_files):
         """

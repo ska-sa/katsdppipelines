@@ -167,17 +167,23 @@ COPY --chown=kat:kat katacomb/katacomb/conf /obitconf
 COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
 
+# Set up Obit environment
+ENV OBIT_BASE_PATH=/home/kat/Obit  \
+    OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
+    OBITINSTALL="$OBIT_BASE_PATH" \
+    OBIT_EXEC="$OBIT" \
+    OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
+ENV PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/bin:"$PATH"
+ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib
+ENV PYTHONPATH=/usr/local/share/obittalk/python
+ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/Obit/python
+ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/ObitSD/python
+
 # Set the work directory to /obitconf
 WORKDIR /obitconf
 
-# Add OBIT setup script
-COPY setup_obit.sh /bin/setup_obit.sh
-
-# Add obit setup to bashrc
-RUN cat /bin/setup_obit.sh >> /home/kat/.bashrc
-
 # Configure Obit/AIPS disks
-RUN . /bin/setup_obit.sh && cfg_aips_disks.py
+RUN cfg_aips_disks.py
 
 # Execute test cases
-RUN . /bin/setup_obit.sh && nosetests katacomb
+RUN nosetests katacomb
