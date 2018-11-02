@@ -52,6 +52,15 @@ def create_parser():
     parser.add_argument("katdata",
                         help="Katdal observation file")
 
+    parser.add_argument('--access-key',
+                        help='S3 access key to access the data')
+
+    parser.add_argument('--secret-key',
+                        help='S3 secret key to access the data')
+
+    parser.add_argument('--token',
+                        help='JWT to access the MeerKAT archive')
+
     parser.add_argument("-w", "--workdir",
                         default=None, type=str,
                         help="Location of scratch space. An AIPS disk (called aipsdisk) "
@@ -125,10 +134,20 @@ def create_parser():
 
     return parser
 
-args = create_parser().parse_args()
+parser = create_parser()
+args = parser.parse_args()
 
 # Open the observation
-katdata = katdal.open(args.katdata)
+if (args.access_key is not None) != (args.secret_key is not None):
+    parser.error('--access-key and --secret-key must be used together')
+if args.access_key is not None and args.token is not None:
+    parser.error('--access-key/--secret-key cannot be used with --token')
+open_kwargs = {}
+if args.access_key is not None:
+    open_kwargs['credentials'] = (args.access_key, args.secret_key)
+elif args.token is not None:
+    open_kwargs['token'] = args.token
+katdata = katdal.open(args.katdata, **open_kwargs)
 
 post_process_args(args, katdata)
 
