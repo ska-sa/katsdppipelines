@@ -32,6 +32,11 @@ def derive_metrics(vis,weights,flags,s,ts,parameters,deg=3,metric_func=np.mean,m
     plot_per : str, optional
         When plot is True, save plot for all data, every baseline, or every timestamp ('all' | 'baseline' | 'time')."""
 
+    # get percentage of data flagged and add as metric to telstate
+    unflagged = get_valid_indices(None,vis,weights,flags,size=True)
+    description = 'Fraction of bandpass data flagged, nan, or with zero weight.'
+    add_telstate_metric('bp',unflagged / vis.size,'flagged_percentage',description,s.timestamps[0],0.05,ts)
+
     # get good axis limits from data for plotting amplitude
     if plot:
         inc = vis.shape[1] // 4
@@ -117,7 +122,7 @@ def bandpass_metrics(vis,weights,flags,s,ts,parameters,dtype='Amplitude',freqs=N
         vis = np.angle(vis,deg=True)
         logy = False
     else:
-        print "'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype)
+        print("'{0}' not recognised type. Use 'amplitude' or 'phase'.".format(dtype))
         return
 
     if plot and plot_per.lower() == 'all':
@@ -180,14 +185,16 @@ def polynomial(x,coefficients):
         y += coefficients[-i-1]*x**i
     return y
 
-def get_valid_indices(xdata,ydata,weights,flags):
+def get_valid_indices(xdata,ydata,weights,flags,size=False):
 
     indices = ~np.isnan(ydata) & (flags == 0)
     if weights is not None:
         indices = indices & ~(weights == 0)
-        weights = 1.0/weights[indices]
 
-    return xdata[indices],ydata[indices],weights
+    if size:
+        return np.where(indices)[0].size
+    else:
+        return xdata[indices],ydata[indices],1.0/weights[indices]
 
 def fit_poly(x,y,w,deg):
 
@@ -407,6 +414,12 @@ def add_telstate_metric(metric,val,dtype,description,time,tolerance,ts):
     ts.add('{0}_{1}_metric_status'.format(metric,dtype),val < tolerance,ts=time)
     ts.add('{0}_{1}_metric_description'.format(metric,dtype),description,ts=time)
 
+def print_telstate_metrics(logger,dtypes=[]):
+
+    for dtype in dtypes:
+        logger.info(ts.get('{0}_{1}_metric_val'.format('bp',dtype)))
+        logger.info(ts.get('{0}_{1}_metric_status'.format('bp',dtype)))
+        logger.info(ts.get('{0}_{1}_metric_description'.format('bp',dtype)))
 
 def plot_all_hist(data,label,extn='png',metric_axis=3,metric_func=np.max):
 

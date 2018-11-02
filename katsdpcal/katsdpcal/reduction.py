@@ -16,6 +16,7 @@ from . import solutions
 from . import pipelineprocs as pp
 from .scan import Scan
 from . import lsm_dir
+from . import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -659,6 +660,8 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
             #point to cross-antenna, xx & yy data
             bp_data = s.cross_ant.tf.auto_pol
             s.derive_bp_metrics(bp_data,s,ts,parameters)
+
+            metrics.print_telstate_metrics(logger, dtypes=['amp','phase','flagged_percentage'])
 
     return target_slices, av_corr
 
