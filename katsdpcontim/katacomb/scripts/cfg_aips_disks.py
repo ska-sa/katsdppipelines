@@ -9,18 +9,7 @@ import shutil
 import katacomb.configuration as kc
 from katacomb.util import setup_aips_disks
 
-logging.getLogger('').handlers = [] # Remove handlers on the root logger
-
-def create_logger():
-    """ Create a logger """
-    log = logging.getLogger("cfg_aips_disks")
-    sh = logging.StreamHandler()
-    sh.setLevel(logging.DEBUG)
-    sh.setFormatter(logging.Formatter('%(name)s - %(levelname)s - %(message)s'))
-    log.addHandler(sh)
-    return log
-
-log = create_logger()
+log = logging.getLogger('katacomb')
 
 def rewrite_dadevs():
     """

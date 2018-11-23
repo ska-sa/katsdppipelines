@@ -51,7 +51,7 @@ RUN mkdir -p $KATHOME/src && \
     make DESTDIR=/installs install-strip
 
 # Add python package requirements
-COPY --chown=kat:kat install-requirements.txt /tmp/install-requirements.txt
+COPY --chown=kat:kat requirements.txt /tmp/install-requirements.txt
 
 # Add OBIT patch
 COPY --chown=kat:kat obit.patch /tmp/obit.patch

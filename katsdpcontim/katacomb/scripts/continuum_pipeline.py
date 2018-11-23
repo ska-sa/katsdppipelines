@@ -22,6 +22,7 @@ import numpy as np
 import pkg_resources
 
 import katdal
+import katsdpservices
 from katsdptelstate import TelescopeState
 
 import katacomb
