@@ -2,7 +2,6 @@
 import argparse
 import glob
 import logging
-log = logging.getLogger('katacomb')
 
 import os
 from os.path import join as pjoin
@@ -11,6 +10,8 @@ import shutil
 from katsdpservices import setup_logging
 import katacomb.configuration as kc
 from katacomb.util import setup_aips_disks
+
+log = logging.getLogger('katacomb')
 
 def rewrite_dadevs():
     """
