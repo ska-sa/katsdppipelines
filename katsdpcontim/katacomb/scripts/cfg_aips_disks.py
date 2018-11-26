@@ -2,7 +2,6 @@
 import argparse
 import glob
 import logging
-
 import os
 from os.path import join as pjoin
 import shutil
