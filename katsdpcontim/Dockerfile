@@ -50,9 +50,6 @@ RUN mkdir -p $KATHOME/src && \
     make -j 8 install && \
     make DESTDIR=/installs install-strip
 
-# Add python package requirements
-COPY --chown=kat:kat requirements.txt /tmp/install-requirements.txt
-
 # Add OBIT patch
 COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
@@ -121,15 +118,18 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make DESTDIR=/installs install
 
-COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
-
 USER kat
+
+# Add python package requirements
+COPY --chown=kat:kat requirements.txt /tmp/requirements.txt
 
 # Install required python packages
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/requirements.txt
 
 # Install katacomb
+COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
+
 RUN pip install $KATHOME/src/katacomb
 
 #######################################################################

@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 import argparse
-import logging
 import os.path
+import logging
+log = logging.getLogger('katacomb')
 
 import numpy as np
 from pretty import pretty
 
 import katdal
+from katsdpservices import setup_logging
 
 import katacomb
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
@@ -16,8 +18,6 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
 
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import parse_python_assigns, log_exception
-
-log = logging.getLogger('katacomb')
 
 # uv_export.py -n pks1934 /var/kat/archive2/data/MeerKATAR1/telescope_products/2017/07/15/1500148809.h5
 
@@ -55,6 +55,9 @@ def create_parser():
                         default=False, action="store_true",
                         help="Apply baseline dependent averaging")
     return parser
+
+
+setup_logging()
 
 args = create_parser().parse_args()
 

@@ -1,6 +1,3 @@
-from katsdpservices import setup_logging
-setup_logging()
-
 from obit_context import (obit_context,
                           obit_err,
                           obit_sys,

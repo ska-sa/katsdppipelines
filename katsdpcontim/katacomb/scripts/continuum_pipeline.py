@@ -22,7 +22,7 @@ import numpy as np
 import pkg_resources
 
 import katdal
-import katsdpservices
+from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
 import katacomb
@@ -135,6 +135,7 @@ def create_parser():
 
     return parser
 
+setup_logging()
 parser = create_parser()
 args = parser.parse_args()
 
