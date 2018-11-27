@@ -59,10 +59,9 @@ USER kat
 
 ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
 
-# Download Obit tarball and untar
+# Retrieve Obit r592
 RUN mkdir -p $OBIT_BASE_PATH && \
-    cd $OBIT_BASE_PATH && \
-    svn co -q $OBIT_REPO .
+    svn co -q -r 592 $OBIT_REPO $OBIT_BASE_PATH
 
 WORKDIR $OBIT_BASE_PATH
 

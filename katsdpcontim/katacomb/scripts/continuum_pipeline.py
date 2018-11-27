@@ -157,7 +157,7 @@ post_process_args(args, katdata)
 uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
 mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
 
-# Set up configuration and logfiles from args.workdir
+# Set up configuration from args.workdir
 if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
     kc.set_config(aipsdirs=aipsdirs)
