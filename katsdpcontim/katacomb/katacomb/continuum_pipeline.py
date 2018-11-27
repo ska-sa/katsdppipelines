@@ -14,7 +14,8 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       export_calibration_solutions,
                       export_clean_components)
 from katacomb.aips_path import next_seq_nr
-from katacomb.util import fractional_bandwidth
+from katacomb.util import (fractional_bandwidth,
+                          log_obit_err)
 
 log = logging.getLogger('katacomb')
 
@@ -119,7 +120,8 @@ class ContinuumPipeline(object):
                  "'%s' to '%s'", scan_path, blavg_path)
 
         blavg = task_factory("UVBlAvg", **blavg_kwargs)
-        blavg.go()
+        with log_obit_err(log):
+            blavg.go()
 
         return blavg_path
 
@@ -484,7 +486,9 @@ class ContinuumPipeline(object):
         log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
         mfimage = task_factory("MFImage", **mfimage_kwargs)
-        mfimage.go()
+        # Send stdout from the task to the log
+        with log_obit_err(log):
+            mfimage.go()
 
     def _cleanup(self, uv_files, clean_files):
         """
