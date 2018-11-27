@@ -162,8 +162,6 @@ if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
     kc.set_config(aipsdirs=aipsdirs)
     setup_aips_disks()
-    uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
-    mfimage_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_MFImage.log'))
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID

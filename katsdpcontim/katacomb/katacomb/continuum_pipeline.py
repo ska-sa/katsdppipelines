@@ -113,7 +113,6 @@ class ContinuumPipeline(object):
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
 
-        blavg_kwargs.update(taskLog='UVBLAVG.log')
         blavg_kwargs.update(self.uvblavg_params)
 
         log.info("Time-dependent baseline averaging "
@@ -476,7 +475,6 @@ class ContinuumPipeline(object):
         mfimage_kwargs.update({
             'maxFBW': fractional_bandwidth(merge_desc)/20.0,
             'nThreads': multiprocessing.cpu_count(),
-            'taskLog': 'IMAGE.log',
             'prtLv': 5
         })
 
