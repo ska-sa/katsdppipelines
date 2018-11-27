@@ -28,6 +28,7 @@ ENV PACKAGES \
     libxmlrpc-core-c3-dev \
     libxmlrpc-c++8-dev \
     libboost-all-dev \
+    subversion \
     # Required by bnmin1
     swig \
     zlib1g-dev
@@ -56,13 +57,12 @@ COPY --chown=kat:kat obit.patch /tmp/obit.patch
 # Now downgrade to kat
 USER kat
 
-# Obit r588
-ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/62d49e5e7c04cd230cb545389b19cc05b431d7b8
+ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
 
 # Download Obit tarball and untar
 RUN mkdir -p $OBIT_BASE_PATH && \
     cd $OBIT_BASE_PATH && \
-    curl -L $OBIT_TARBALL | tar xz --strip=1
+    svn co -q $OBIT_REPO .
 
 WORKDIR $OBIT_BASE_PATH
 
