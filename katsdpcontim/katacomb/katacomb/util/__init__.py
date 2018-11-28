@@ -66,7 +66,7 @@ def log_obit_err(logger):
         try:
             OBIT_TO_LOG[log_level](message, extra={"obit_task": taskname})
         except KeyError:
-            log.info(log_level + ' ' + message, extra={"obit_task": taskname})
+            log.info(msg)
 
 
     original = sys.stdout
