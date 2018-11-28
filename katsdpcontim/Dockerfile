@@ -120,7 +120,7 @@ RUN cd ObitSystem/ObitTalk && \
 USER kat
 
 # Add python package requirements
-COPY --chown=kat:kat requirements.txt /tmp/requirements.txt
+COPY --chown=kat:kat katacomb/requirements.txt /tmp/requirements.txt
 
 # Install required python packages
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
