@@ -49,6 +49,9 @@ def log_obit_err(logger):
         # Generate log entry from Obit error string
         # All Obit logs have the form '<taskname>: <level> <timestamp> <message>\n'
 
+        # Ignore empty lines
+        if not msg.strip():
+            return
         # Get the Obit task name (all text before first ':')
         # Lines without ':', just write to log.debug.
         try:
@@ -58,7 +61,7 @@ def log_obit_err(logger):
         msg_remain = msg_remain.lstrip()
         # Log level string (up to 7 characters)
         log_level = msg_remain[:7]
-        # Message (cut the timestamp in the Obit string)
+        # Cut the timestamp in the Obit string
         message = taskname + ':' + msg_remain[OBIT_LOG_PREAMBLE_LEN:].rstrip()
 
         return OBIT_TO_LOG[log_level](message)
