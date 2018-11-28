@@ -3,7 +3,6 @@ import contextlib
 import functools
 import logging
 import os
-import re
 import sys
 
 from pretty import pretty
@@ -55,7 +54,7 @@ def log_obit_err(logger):
         # Get the Obit task name (all text before first ':')
         # Lines without ':', just write to log.debug.
         try:
-            taskname, msg_remain = re.split(':', msg, 1)
+            taskname, msg_remain = msg.split(':', 1)
         except ValueError:
             return log.debug(msg)
         msg_remain = msg_remain.lstrip()
@@ -63,8 +62,12 @@ def log_obit_err(logger):
         log_level = msg_remain[:7]
         # Cut the timestamp in the Obit string
         message = taskname + ':' + msg_remain[OBIT_LOG_PREAMBLE_LEN:].rstrip()
+        # Trap case of unknown Obit log level
+        try:
+            OBIT_TO_LOG[log_level](message, extra={"obit_task": taskname})
+        except KeyError:
+            log.info(log_level + ' ' + message, extra={"obit_task": taskname})
 
-        return OBIT_TO_LOG[log_level](message)
 
     original = sys.stdout
     logger.write = parse_obit_message
