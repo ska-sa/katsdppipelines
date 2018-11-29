@@ -1,7 +1,3 @@
-from logsetup import get_logger
-
-log = get_logger()
-
 from obit_context import (obit_context,
                           obit_err,
                           obit_sys,

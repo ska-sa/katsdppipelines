@@ -28,6 +28,7 @@ ENV PACKAGES \
     libxmlrpc-core-c3-dev \
     libxmlrpc-c++8-dev \
     libboost-all-dev \
+    subversion \
     # Required by bnmin1
     swig \
     zlib1g-dev
@@ -50,22 +51,17 @@ RUN mkdir -p $KATHOME/src && \
     make -j 8 install && \
     make DESTDIR=/installs install-strip
 
-# Add python package requirements
-COPY --chown=kat:kat install-requirements.txt /tmp/install-requirements.txt
-
 # Add OBIT patch
 COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
 # Now downgrade to kat
 USER kat
 
-# Obit r588
-ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/62d49e5e7c04cd230cb545389b19cc05b431d7b8
+ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
 
-# Download Obit tarball and untar
+# Retrieve Obit r592
 RUN mkdir -p $OBIT_BASE_PATH && \
-    cd $OBIT_BASE_PATH && \
-    curl -L $OBIT_TARBALL | tar xz --strip=1
+    svn co -q -r 592 $OBIT_REPO $OBIT_BASE_PATH
 
 WORKDIR $OBIT_BASE_PATH
 
@@ -121,15 +117,18 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make DESTDIR=/installs install
 
-COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
-
 USER kat
+
+# Add python package requirements
+COPY --chown=kat:kat katacomb/requirements.txt /tmp/requirements.txt
 
 # Install required python packages
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/requirements.txt
 
 # Install katacomb
+COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
+
 RUN pip install $KATHOME/src/katacomb
 
 #######################################################################

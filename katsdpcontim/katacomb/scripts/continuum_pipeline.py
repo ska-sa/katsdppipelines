@@ -22,6 +22,7 @@ import numpy as np
 import pkg_resources
 
 import katdal
+from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
 import katacomb
@@ -134,6 +135,7 @@ def create_parser():
 
     return parser
 
+setup_logging()
 parser = create_parser()
 args = parser.parse_args()
 
@@ -155,13 +157,11 @@ post_process_args(args, katdata)
 uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
 mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
 
-# Set up configuration and logfiles from args.workdir
+# Set up configuration from args.workdir
 if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
     kc.set_config(aipsdirs=aipsdirs)
     setup_aips_disks()
-    uvblavg_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_UVBlAvg.log'))
-    mfimage_args.update(taskLog=pjoin(args.workdir, args.capture_block_id + '_MFImage.log'))
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID

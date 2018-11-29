@@ -14,7 +14,8 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       export_calibration_solutions,
                       export_clean_components)
 from katacomb.aips_path import next_seq_nr
-from katacomb.util import fractional_bandwidth
+from katacomb.util import (fractional_bandwidth,
+                          log_obit_err)
 
 log = logging.getLogger('katacomb')
 
@@ -113,14 +114,14 @@ class ContinuumPipeline(object):
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
 
-        blavg_kwargs.update(taskLog='UVBLAVG.log')
         blavg_kwargs.update(self.uvblavg_params)
 
         log.info("Time-dependent baseline averaging "
                  "'%s' to '%s'", scan_path, blavg_path)
 
         blavg = task_factory("UVBlAvg", **blavg_kwargs)
-        blavg.go()
+        with log_obit_err(log):
+            blavg.go()
 
         return blavg_path
 
@@ -476,7 +477,6 @@ class ContinuumPipeline(object):
         mfimage_kwargs.update({
             'maxFBW': fractional_bandwidth(merge_desc)/20.0,
             'nThreads': multiprocessing.cpu_count(),
-            'taskLog': 'IMAGE.log',
             'prtLv': 5
         })
 
@@ -486,7 +486,9 @@ class ContinuumPipeline(object):
         log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
 
         mfimage = task_factory("MFImage", **mfimage_kwargs)
-        mfimage.go()
+        # Send stdout from the task to the log
+        with log_obit_err(log):
+            mfimage.go()
 
     def _cleanup(self, uv_files, clean_files):
         """

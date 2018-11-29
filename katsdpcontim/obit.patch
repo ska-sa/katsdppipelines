@@ -2,15 +2,6 @@ Index: trunk/ObitSystem/Obit/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/Makefile.in	(working copy)
-@@ -56,7 +56,7 @@
- DIRN = @PACKAGE_NAME@
- 
- #------------------------------------------------------------------------
--TARGETS = versionupdate cfitsioupdate xmlrpcupdate srcupdate libupdate \
-+TARGETS = cfitsioupdate xmlrpcupdate srcupdate libupdate \
- 	pythonupdate taskupdate
- 
- all:  $(TARGETS)
 @@ -74,35 +74,35 @@
  	cd dummy_xmlrpc; $(MAKE)
  

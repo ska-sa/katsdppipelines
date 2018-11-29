@@ -1,7 +1,9 @@
 import ast
+import contextlib
 import functools
 import logging
 import os
+import sys
 
 from pretty import pretty
 import yaml
@@ -22,6 +24,58 @@ if len(_missing) > 0:
     raise ValueError("'%s' are not valid builtin functions.'" % list(_missing))
 
 log = logging.getLogger('katacomb')
+
+# Mapping from Obit log levels to python logging methods.
+# Obit log levels are from Obit/src/ObitErr.c
+OBIT_TO_LOG = {
+  "no msg ": log.debug,     # OBIT_None
+  "info   ": log.info,      # OBIT_InfoErr
+  "warn   ": log.warning,   # OBIT_InfoWarn
+  "trace  ": log.error,     # OBIT_Traceback
+  "MildErr": log.error,     # OBIT_MildError
+  "Error  ": log.error,     # OBIT_Error
+  "Serious": log.error,     # OBIT_StrongError
+  "Fatal  ": log.critical   # OBIT_Fatal
+}
+
+OBIT_LOG_PREAMBLE_LEN = 23
+
+@contextlib.contextmanager
+def log_obit_err(logger):
+    """ Trap Obit log messages written to stdout and send them to logger"""
+
+    def parse_obit_message(msg):
+        # Generate log entry from Obit error string
+        # All Obit logs have the form '<taskname>: <level> <timestamp> <message>\n'
+
+        # Ignore empty lines
+        if not msg.strip():
+            return
+        # Get the Obit task name (all text before first ':')
+        # Lines without ':', just write to log.debug.
+        try:
+            taskname, msg_remain = msg.split(':', 1)
+        except ValueError:
+            return log.debug(msg)
+        msg_remain = msg_remain.lstrip()
+        # Log level string (up to 7 characters)
+        log_level = msg_remain[:7]
+        # Cut the timestamp in the Obit string
+        message = taskname + ':' + msg_remain[OBIT_LOG_PREAMBLE_LEN:].rstrip()
+        # Trap case of unknown Obit log level
+        try:
+            OBIT_TO_LOG[log_level](message, extra={"obit_task": taskname})
+        except KeyError:
+            log.info(msg)
+
+
+    original = sys.stdout
+    logger.write = parse_obit_message
+    # The go() method inside ObitTask needs sys.stdout.isatty
+    logger.isatty = sys.stdout.isatty
+    sys.stdout = logger
+    yield
+    sys.stdout = original
 
 
 def post_process_args(args, kat_adapter):
@@ -57,7 +111,6 @@ def post_process_args(args, kat_adapter):
                      kat_adapter.experiment_id)
 
     return args
-
 
 
 def recursive_merge(source, destination):
