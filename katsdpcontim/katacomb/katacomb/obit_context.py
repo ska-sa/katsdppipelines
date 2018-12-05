@@ -8,6 +8,8 @@ import ObitTalkUtil
 import OErr
 import OSystem
 
+import katacomb.configuration as kc
+
 log = logging.getLogger('katacomb')
 
 # Single obit context class
@@ -28,26 +30,26 @@ class ObitContext(object):
         https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/share/scripts/AIPSSetup.py
         """
 
-        from configuration import get_config
-        cfg = get_config()
+        # Get the current configuration
+        cfg = kc.get_config()
 
         self.err = err = OErr.OErr()
-        self.obitsys = OSystem.OSystem("Pipeline", 1, cfg.aips.userno,
+        self.obitsys = OSystem.OSystem("Pipeline", 1, cfg['userno'],
                                        0, [" "], 0, [" "],
                                        True, False, err)
         OErr.printErrMsg(err, "Error starting Obit System")
 
         # Setup AIPS userno
-        AIPS.userno = cfg.aips.userno
+        AIPS.userno = cfg['userno']
 
         # Setup Obit Environment
-        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg.aips.aipsroot,
-                                AIPS_VERSION=cfg.aips.aipsversion,
-                                OBIT_EXEC=cfg.obit.obitexec,
-                                DA00=cfg.aips.da00,
+        ObitTalkUtil.SetEnviron(AIPS_ROOT=cfg['aipsroot'],
+                                AIPS_VERSION=cfg['aipsversion'],
+                                OBIT_EXEC=cfg['obitexec'],
+                                DA00=cfg['da00'],
                                 ARCH="LINUX",
-                                aipsdirs=cfg.obit.aipsdirs,
-                                fitsdirs=cfg.obit.fitsdirs)
+                                aipsdirs=cfg['aipsdirs'],
+                                fitsdirs=cfg['fitsdirs'])
 
     def close(self):
         """

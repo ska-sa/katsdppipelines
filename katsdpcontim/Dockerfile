@@ -28,6 +28,7 @@ ENV PACKAGES \
     libxmlrpc-core-c3-dev \
     libxmlrpc-c++8-dev \
     libboost-all-dev \
+    subversion \
     # Required by bnmin1
     swig \
     zlib1g-dev
@@ -50,22 +51,17 @@ RUN mkdir -p $KATHOME/src && \
     make -j 8 install && \
     make DESTDIR=/installs install-strip
 
-# Add python package requirements
-COPY --chown=kat:kat install-requirements.txt /tmp/install-requirements.txt
-
 # Add OBIT patch
 COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
 # Now downgrade to kat
 USER kat
 
-# Obit r588
-ENV OBIT_TARBALL https://api.github.com/repos/bill-cotton/Obit/tarball/62d49e5e7c04cd230cb545389b19cc05b431d7b8
+ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
 
-# Download Obit tarball and untar
+# Retrieve Obit r592
 RUN mkdir -p $OBIT_BASE_PATH && \
-    cd $OBIT_BASE_PATH && \
-    curl -L $OBIT_TARBALL | tar xz --strip=1
+    svn co -q -r 592 $OBIT_REPO $OBIT_BASE_PATH
 
 WORKDIR $OBIT_BASE_PATH
 
@@ -121,15 +117,18 @@ RUN cd ObitSystem/ObitTalk && \
     make && \
     make DESTDIR=/installs install
 
-COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
-
 USER kat
+
+# Add python package requirements
+COPY --chown=kat:kat katacomb/requirements.txt /tmp/requirements.txt
 
 # Install required python packages
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
-RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/install-requirements.txt
+RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/requirements.txt
 
 # Install katacomb
+COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
+
 RUN pip install $KATHOME/src/katacomb
 
 #######################################################################
@@ -167,17 +166,23 @@ COPY --chown=kat:kat katacomb/katacomb/conf /obitconf
 COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
 
+# Set up Obit environment
+ENV OBIT_BASE_PATH=/home/kat/Obit  \
+    OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
+    OBITINSTALL="$OBIT_BASE_PATH" \
+    OBIT_EXEC="$OBIT" \
+    OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
+ENV PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/bin:"$PATH"
+ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib
+ENV PYTHONPATH=/usr/local/share/obittalk/python
+ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/Obit/python
+ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/ObitSD/python
+
 # Set the work directory to /obitconf
 WORKDIR /obitconf
 
-# Add OBIT setup script
-COPY setup_obit.sh /bin/setup_obit.sh
-
-# Add obit setup to bashrc
-RUN cat /bin/setup_obit.sh >> /home/kat/.bashrc
-
 # Configure Obit/AIPS disks
-RUN . /bin/setup_obit.sh && cfg_aips_disks.py
+RUN cfg_aips_disks.py
 
 # Execute test cases
-RUN . /bin/setup_obit.sh && nosetests katacomb
+RUN nosetests katacomb

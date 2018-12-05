@@ -22,9 +22,11 @@ import numpy as np
 import pkg_resources
 
 import katdal
+from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
 import katacomb
+import katacomb.configuration as kc
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         ContinuumPipeline,
                         task_factory,
@@ -36,9 +38,11 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                         export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (parse_python_assigns,
+                        get_and_merge_args,
                         log_exception,
                         post_process_args,
-                        fractional_bandwidth)
+                        fractional_bandwidth,
+                        setup_aips_disks)
 
 log = logging.getLogger('katacomb')
 
@@ -49,11 +53,22 @@ def create_parser():
     parser.add_argument("katdata",
                         help="Katdal observation file")
 
-    parser.add_argument("-d", "--disk",
-                        default=1, type=int,
-                        help="AIPS disk")
+    parser.add_argument('--access-key',
+                        help='S3 access key to access the data')
 
-    parser.add_argument("--nvispio", default=1024, type=int)
+    parser.add_argument('--secret-key',
+                        help='S3 secret key to access the data')
+
+    parser.add_argument('--token',
+                        help='JWT to access the MeerKAT archive')
+
+    parser.add_argument("-w", "--workdir",
+                        default=None, type=str,
+                        help="Location of scratch space. An AIPS disk (called aipsdisk) "
+                             "will be created in this space and logfiles of Obit "
+                             "tasks will be written here.")
+
+    parser.add_argument("--nvispio", default=10240, type=int)
 
     parser.add_argument("-cbid", "--capture-block-id",
                         default=None, type=str,
@@ -82,10 +97,7 @@ def create_parser():
 
 
     parser.add_argument("-ba", "--uvblavg",
-                        # Averaging FOV is 1.0, turn on frequency averaging,
-                        # average eight channels together. Average a maximum
-                        # integration time of 2 minutes
-                        default="FOV=1.0; avgFreq=1; chAvg=8; maxInt=2.0",
+                        default="",
                         type=log_exception(log)(parse_python_assigns),
                         help="UVBLAVG task parameter assignment statement. "
                              "Should only contain python "
@@ -95,13 +107,9 @@ def create_parser():
 
 
     parser.add_argument("-mf", "--mfimage",
-                        # FOV of 1.2 degrees, 5000 Clean cycles,
-                        # 3 phase self-cal loops with a solution interval
-                        # of four minutes
-                        default="FOV=1.2; Niter=5000; "
-                                "maxPSCLoop=3; minFluxPSC=0.0; solPInt=4.0",
+                        default="",
                         type=log_exception(log)(parse_python_assigns),
-                        help="MFIMAGE task parameter assignment statement. "
+                        help="MFImage task parameter assignment statement. "
                              "Should only contain python "
                              "assignment statements to python "
                              "literals, separated by semi-colons. "
@@ -118,15 +126,42 @@ def create_parser():
                              "'clean' => Output CLEAN files. "
                              "'mfimage' => Output MFImage files. ")
 
+    parser.add_argument("--config",
+                        default=os.path.sep + "obitconf",
+                        type=str,
+                        help="Directory containing default configuration "
+                             ".yaml files for mfimage and uvblavg. ")
+
 
     return parser
 
-args = create_parser().parse_args()
+setup_logging()
+parser = create_parser()
+args = parser.parse_args()
 
 # Open the observation
-katdata = katdal.open(args.katdata)
+if (args.access_key is not None) != (args.secret_key is not None):
+    parser.error('--access-key and --secret-key must be used together')
+if args.access_key is not None and args.token is not None:
+    parser.error('--access-key/--secret-key cannot be used with --token')
+open_kwargs = {}
+if args.access_key is not None:
+    open_kwargs['credentials'] = (args.access_key, args.secret_key)
+elif args.token is not None:
+    open_kwargs['token'] = args.token
+katdata = katdal.open(args.katdata, **open_kwargs)
 
 post_process_args(args, katdata)
+
+# Get defaults for uvblavg and mfimage and merge user supplied ones
+uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
+
+# Set up configuration from args.workdir
+if args.workdir is not None:
+    aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
+    kc.set_config(aipsdirs=aipsdirs)
+    setup_aips_disks()
 
 # Set up telstate link then create
 # a view based the capture block ID and sub-band ID
@@ -138,10 +173,9 @@ ts_view = telstate.view(view)
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
                             katdal_select=args.select,
-                            uvblavg_params=args.uvblavg,
-                            mfimage_params=args.mfimage,
-                            nvispio=args.nvispio,
-                            disk=args.disk)
+                            uvblavg_params=uvblavg_args,
+                            mfimage_params=mfimage_args,
+                            nvispio=args.nvispio)
 
 # Execute it
 pipeline.execute()

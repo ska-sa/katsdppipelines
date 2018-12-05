@@ -1,5 +1,7 @@
 attrs == 17.4.0
 astropy == 2.0.3
+backports-abc
+backports.ssl-match-hostname
 beautifulsoup4 == 4.6.0
 botocore == 1.10.16
 bs4 == 0.0.1
@@ -13,6 +15,7 @@ enum34
 fakeredis
 funcsigs == 0.4
 future
+futures
 h5py
 html5lib == 1.0.1
 idna
@@ -20,6 +23,7 @@ ipaddress
 jmespath == 0.9.3
 katversion
 llvmlite
+msgpack
 netifaces
 nose
 numba
@@ -28,9 +32,11 @@ pluggy == 0.6.0
 pretty == 0.1
 py == 1.5.2
 pyephem
+pygelf
 pytest == 3.3.2
 python-dateutil
 python-lzf
+PyYAML == 3.13
 rdbtools
 redis
 requests
@@ -40,9 +46,12 @@ scipy
 singledispatch
 six
 toolz
+tornado
+trollius
 webencodings == 0.5.1
 urllib3
 git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
-git+ssh://git@github.com/ska-sa/katpoint@master#egg=katpoint
-git+ssh://git@github.com/ska-sa/katdal@master#egg=katdal
-git+ssh://git@github.com/ska-sa/katsdptelstate@master#egg=katsdptelstate
+git+ssh://git@github.com/ska-sa/katpoint#egg=katpoint
+git+ssh://git@github.com/ska-sa/katdal#egg=katdal
+git+ssh://git@github.com/ska-sa/katsdptelstate#egg=katsdptelstate
+git+ssh://git@github.com/ska-sa/katsdpservices#egg=katsdpservices

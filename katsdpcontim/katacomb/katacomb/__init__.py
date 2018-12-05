@@ -1,16 +1,14 @@
-from logsetup import get_logger
-
-log = get_logger()
-
 from obit_context import (obit_context,
                           obit_err,
                           obit_sys,
                           handle_obit_err)
 
+from aips_parser import obit_config_from_aips
+
 from aips_path import AIPSPath
 
 from util import task_factory
-from configuration import get_config
+
 from katdal_adapter import (KatdalAdapter,
                         time_chunked_scans,
                         aips_ant_nr,

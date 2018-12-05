@@ -12,6 +12,8 @@ import UVDesc
 
 from katacomb import AIPSPath
 
+from katdal.lazy_indexer import DaskLazyIndexer
+
 log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
@@ -367,9 +369,15 @@ class KatdalAdapter(object):
             Transform katdal visibilities indexed by ``index``
             into AIPS visiblities.
             """
-            vis = self._katds.vis[index]
-            weights = self._katds.weights[index]
-            flags = self._katds.flags[index]
+            if isinstance(self._katds.vis, DaskLazyIndexer):
+                vis, weights, flags = self._katds.vis.get([self._katds.vis,
+                                                           self._katds.weights,
+                                                           self._katds.flags],
+                                                           np.s_[index, :, :])
+            else:
+                vis = self._katds.vis[index]
+                weights = self._katds.weights[index]
+                flags = self._katds.flags[index]
 
             # Apply flags by negating weights
             weights[np.where(flags)] = -32767.0
