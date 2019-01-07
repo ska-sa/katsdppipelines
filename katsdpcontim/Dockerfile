@@ -1,4 +1,4 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build:latest as build
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build:18.04 as build
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -17,8 +17,8 @@ ENV PACKAGES \
     bison \
     libblas-dev \
     liblapacke-dev \
-    libcfitsio3-dev \
-    # Needs GSL 1.x but xenial has 2.x
+    libcfitsio-dev \
+    # Needs GSL 1.x but bionic has 2.x
     # Manually download and install below
     # libgsl0-dev \
     libfftw3-dev \
@@ -133,7 +133,7 @@ RUN pip install $KATHOME/src/katacomb
 
 #######################################################################
 
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:latest
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:18.04
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -142,8 +142,8 @@ USER root
 ENV PACKAGES \
     libglib2.0-0 \
     libncurses5 \
-    libreadline6 \
-    libcurl3 \
+    libreadline7 \
+    libcurl4 \
     libxmlrpc-core-c3 \
     libxmlrpc-c++8v5 \
     libxm4
