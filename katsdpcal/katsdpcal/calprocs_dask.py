@@ -429,21 +429,39 @@ def bp_fit(data, weights, corrprod_lookup, bp0=None, refant=0, normalise=True, *
     """
 
     n_ants = calprocs.ants_from_bllist(corrprod_lookup)
-    n_chans = data.shape[0]
 
     # -----------------------------------------------------
     # solve for the bandpass over the channel range
     bp = stefcal(data, n_ants, corrprod_lookup, weights, refant, num_iters=100,
                  init_gain=bp0, **kwargs)
     if normalise:
-        # centre the phase on zero and scale the average amplitude to one
-        angle = da.angle(bp)
-        base_angle = da.nanmin(angle, axis=0) - np.pi
-        # angle relative to base_angle, wrapped to range [0, 2pi], with
-        # some data point sitting at pi.
-        rel_angle = da.fmod(angle - base_angle, 2 * np.pi)
-        mid_angle = da.nanmean(rel_angle, axis=0) + base_angle
-        centre_rotation = da.exp(-1.0j * mid_angle)
-        average_amplitude = da.nansum(da.absolute(bp), axis=0) / n_chans
-        bp *= centre_rotation / average_amplitude
+        bp = normalise_complex(bp)
     return bp
+
+
+def normalise_complex(x):
+    """
+    Normalise complex array across the 0-axis by centering phase of data on zero
+    and scaling the average amplitude
+
+    Inputs:
+    -------
+    x : :class: `da.Array`
+        data to be normalised
+
+    Returns:
+    --------
+    :class: `da.Array`: normalised data
+    """
+    # centre the phase on zero and scale the average amplitude to one
+    angle = da.angle(x)
+    base_angle = da.nanmin(angle, axis=0) - np.pi
+    # angle relative to base_angle, wrapped to range [0, 2pi], with
+    # some data point sitting at pi.
+    rel_angle = da.fmod(angle - base_angle, 2 * np.pi)
+    mid_angle = da.nanmean(rel_angle, axis=0) + base_angle
+    centre_rotation = da.exp(-1.0j * mid_angle)
+    n_valid = da.sum(~da.isnan(x), axis=0, dtype=np.float32)
+    average_amplitude = da.nansum(da.absolute(x), axis=0) / n_valid
+    x *= centre_rotation / average_amplitude
+    return x
