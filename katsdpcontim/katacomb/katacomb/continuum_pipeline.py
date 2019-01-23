@@ -478,7 +478,7 @@ class ContinuumPipeline(object):
         mfimage_kwargs.update({
             'maxFBW': fractional_bandwidth(merge_desc)/20.0,
             'nThreads': multiprocessing.cpu_count(),
-            'prtLv': 5
+            'prtLv': 1
         })
 
         # Finally, override with default parameters
