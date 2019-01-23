@@ -15,7 +15,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (fractional_bandwidth,
-                          log_obit_err)
+                           log_obit_err)
 
 log = logging.getLogger('katacomb')
 
