@@ -1,4 +1,4 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build:18.04 as build
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build as build
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
