@@ -15,7 +15,7 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       export_clean_components)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (fractional_bandwidth,
-                          log_obit_err)
+                           log_obit_err)
 
 log = logging.getLogger('katacomb')
 
@@ -93,6 +93,7 @@ class ContinuumPipeline(object):
                                         self.ka, self.telstate)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
+                raise
             finally:
                 self._cleanup(uv_files, clean_files)
 
@@ -477,7 +478,7 @@ class ContinuumPipeline(object):
         mfimage_kwargs.update({
             'maxFBW': fractional_bandwidth(merge_desc)/20.0,
             'nThreads': multiprocessing.cpu_count(),
-            'prtLv': 5
+            'prtLv': 1
         })
 
         # Finally, override with default parameters
