@@ -546,6 +546,42 @@ def k_fit(data, weights, corrprod_lookup, chans, refant=0, cross=True, chan_samp
     return np.atleast_2d(kdelay)
 
 
+def normalise_complex(x):
+    """
+    Calculate normalisation factor for a complex array across the 0-axis to center
+    phase of data on zero and scale the average amplitude to one. If the 0-axis
+    is all NaN or all zero, the normalisation factor is given as 1+0j.
+
+    Parameters
+    ----------
+    x : :class:`np.ndarray`
+        data to be normalised
+
+    Returns
+    -------
+    :class:`np.ndarray`
+        normalisation factor, complex
+    """
+    # suppress warnings related to all-NaN and all-zero values on the 0-axis
+    # by replacing columns which consist of all NaNs and/or zeros with all ones.
+    all_nan = np.all((np.isnan(x)) ^ (x == 0), axis=0)
+    all_nan = np.broadcast_to(all_nan, x.shape)
+    valid_x = np.where(all_nan, 1.0, x)
+
+    angle = np.angle(valid_x)
+    base_angle = np.nanmin(angle, axis=0) - np.pi
+    # angle relative to base_angle, wrapped to range [0, 2pi], with
+    # some data point sitting at pi.
+    rel_angle = np.fmod(angle - base_angle, 2 * np.pi)
+    mid_angle = np.nanmean(rel_angle, axis=0) + base_angle
+    centre_rotation = np.exp(-1.0j * mid_angle)
+    n_valid = np.sum(~np.isnan(valid_x), axis=0, dtype=np.float32)
+    average_amplitude = np.nansum(np.absolute(valid_x), axis=0) / n_valid
+    norm_factor = centre_rotation / average_amplitude
+
+    return norm_factor
+
+
 def asbool(arr):
     """View an array as boolean.
 
@@ -957,6 +993,7 @@ def _wavg_flags_f(flags, chanav, excise):
                 for b in range(n_baselines):
                     out[t, oc, p, b] = merge_good[p, b] if good[p, b] else merge_all[p, b]
     return out
+
 
 def wavg_flags_f(flags, chanav, excise, axis):
     """Combine flags across frequencies.
