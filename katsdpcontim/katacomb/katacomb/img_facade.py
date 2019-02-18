@@ -11,14 +11,15 @@ import TableList
 import TableUtil
 
 from katacomb import (AIPSTable,
-                          AIPSHistory,
-                          AIPSPath,
-                          obit_err,
-                          handle_obit_err)
+                      AIPSHistory,
+                      AIPSPath,
+                      obit_err,
+                      handle_obit_err)
+
+from katacomb.uv_facade import _history_wrapper
 
 log = logging.getLogger('katacomb')
 
-from katacomb.uv_facade import _history_wrapper
 
 def img_file_mode(mode):
     """ Returns UV file mode given string mode """
@@ -32,6 +33,7 @@ def img_file_mode(mode):
     # Read by default
     else:
         return Image.READONLY
+
 
 def open_img(aips_path, mode=None):
     """
@@ -62,20 +64,20 @@ def open_img(aips_path, mode=None):
     if aips_path.dtype == "AIPS":
         try:
             img = Image.newPAImage(aips_path.label, aips_path.name,
-                            aips_path.aclass, aips_path.disk,
-                            aips_path.seq, exists, err)
+                                   aips_path.aclass, aips_path.disk,
+                                   aips_path.seq, exists, err)
         except Exception:
             raise (ValueError("Error calling newPAImage on '%s'" % aips_path),
-                                None, sys.exc_info()[2])
+                   None, sys.exc_info()[2])
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFImage calls do not currently work")
 
         try:
             img = Image.newPFImage(aips_path.label, aips_path.name, aips_path.disk,
-                            exists, err)
+                                   exists, err)
         except Exception:
             raise (ValueError("Error calling newPFImage on '%s'" % aips_path),
-                                None, sys.exc_info()[2])
+                   None, sys.exc_info()[2])
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
@@ -91,6 +93,7 @@ def open_img(aips_path, mode=None):
     handle_obit_err(err_msg, err)
 
     return img
+
 
 def img_factory(**kwargs):
     """
@@ -119,9 +122,11 @@ def img_factory(**kwargs):
     img = open_img(ofile, mode)
     return ImageFacade(img)
 
+
 # Force order to ra, dec, freq, stokes
 OBITIMAGEMF_ORDER = ["jlocr", "jlocd", "jlocf", "jlocs"]
 OBITIMAGEMF_CTYPE = ["RA---SIN", "DEC--SIN", "SPECLNMF", "STOKES"]
+
 
 def obit_image_mf_planes(imgf):
     """
@@ -144,8 +149,8 @@ def obit_image_mf_planes(imgf):
     # Make sure imgf is an ObitImageMF
     imgf._requireObitImageMF()
 
-    l = inaxes[desc['jlocr']]
-    m = inaxes[desc['jlocd']]
+    ra = inaxes[desc['jlocr']]
+    dec = inaxes[desc['jlocd']]
     speclnmf = inaxes[desc['jlocf']]
     nstokes = inaxes[desc['jlocs']]
 
@@ -157,10 +162,11 @@ def obit_image_mf_planes(imgf):
             # So we get the [l,m] axes by default.
             plane = [slnmf, stokes, 1, 1, 1]
             imgf.GetPlane(None, plane)
-            imgs.append(imgf.np_farray.reshape(l, m).copy())
+            imgs.append(imgf.np_farray.reshape(ra, dec).copy())
 
         # Yield arrays stacked on stokes
         yield np.stack(imgs, axis=2)
+
 
 def obit_image_mf_rms(imgf):
     """
@@ -185,12 +191,13 @@ def obit_image_mf_rms(imgf):
     nstokes = inaxes[desc["jlocs"]]
 
     rms = np.empty((nimplanes, nstokes,), dtype=np.float32)
-    for fplane in range (1, nimplanes + 1):
+    for fplane in range(1, nimplanes + 1):
         for stokes in range(1, nstokes + 1):
             plane = [fplane, stokes, 1, 1, 1]
             imgf.GetPlane(None, plane)
             rms[fplane - 1, stokes - 1] = imgf.FArray.RMS
     return rms
+
 
 class ImageFacade(object):
     def __init__(self, img, **kwargs):
@@ -296,7 +303,6 @@ class ImageFacade(object):
 
         handle_obit_err(err_msg, self._err)
 
-
     @property
     def img(self):
         try:
@@ -344,8 +350,8 @@ class ImageFacade(object):
             buf = FArray.PGetBuf(self.img.FArray)
         except Exception:
             raise (Exception("Exception getting float array buffer "
-                            " on image '%s'" % self.name),
-                                None, sys.exc_info()[2])
+                             "on image '%s'" % self.name),
+                   None, sys.exc_info()[2])
 
         return np.frombuffer(buf, count=-1, dtype=np.float32)
 
@@ -361,7 +367,7 @@ class ImageFacade(object):
 
     def GetPlane(self, array, plane):
         err_msg = ("Error getting plane '%s' "
-                    "from image '%s'" % (plane, self.name))
+                   "from image '%s'" % (plane, self.name))
 
         try:
             self.img.GetPlane(array, plane, self._err)
@@ -416,7 +422,7 @@ class ImageFacade(object):
         self.attach_table("AIPS CC", cctab.version + 1)
         merged_cctab = self.tables["AIPS CC"]
         log.info("Merged %d CCs to %d for %s",
-             init_nrow, merged_cctab.nrow, self.name)
+                 init_nrow, merged_cctab.nrow, self.name)
         return merged_cctab
 
     def isObitImageMF(self):
@@ -439,5 +445,5 @@ class ImageFacade(object):
         """
         if not self.isObitImageMF():
             raise ValueError("'%s' doesn't appear to be an ObitImageMF. "
-                             "Descriptor is '%s'." % (
-                             self.aips_path, pretty(self.Desc.Dict)))
+                             "Descriptor is '%s'." %
+                             (self.aips_path, pretty(self.Desc.Dict)))
