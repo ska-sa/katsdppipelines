@@ -149,7 +149,7 @@ if args.access_key is not None:
     open_kwargs['credentials'] = (args.access_key, args.secret_key)
 elif args.token is not None:
     open_kwargs['token'] = args.token
-katdata = katdal.open(args.katdata, **open_kwargs)
+katdata = katdal.open(args.katdata, applycal='all', **open_kwargs)
 
 post_process_args(args, katdata)
 
