@@ -26,7 +26,7 @@ katsdp.standardBuild(
 katsdp.standardBuild(
     subdir: 'katsdpcontim',
     cuda: true,
-    (cpu-avx2): true,
+    label: "cpu-avx2",
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
 katsdp.mail(maintainer)
