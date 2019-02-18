@@ -37,6 +37,12 @@ ENV PACKAGES \
 RUN apt-get update && \
     apt-get install -y $PACKAGES
 
+# Get CUDA samples
+RUN CUDA_RUN_FILE=cuda_10.0.130_410.48_linux && \
+    wget --progress=dot:mega "http://sdp-services.kat.ac.za/mirror/developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/$CUDA_RUN_FILE" && \
+    sh ./$CUDA_RUN_FILE --samples --silent && \
+    mv /root/NVIDIA_CUDA-10.0_Samples /usr/local/cuda/samples
+
 ENV KATHOME=/home/kat
 ENV OBIT_BASE_PATH=/home/kat/Obit
 ENV OBIT=/home/kat/Obit/ObitSystem/Obit
