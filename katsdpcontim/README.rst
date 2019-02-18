@@ -411,7 +411,7 @@ The --uvblavg option is used to average the data down to 1024 channels from the 
 
 .. code-block::
 
-  $ docker run -v /scratch1:/scratch sdp-docker-registry.kat.ac.za:5000/katsdpcontim:latest \
+  $ docker run --runtime=nvidia -v /scratch1:/scratch sdp-docker-registry.kat.ac.za:5000/katsdpcontim:latest \
     continuum_pipeline.py /scratch/1533675778_sdp_l0.rdb -w /scratch \
     --select "scans='track'; corrprods='cross'; channels=slice(205,3892)" \
     --uvblavg "avgFreq=1; chAvg=4"
