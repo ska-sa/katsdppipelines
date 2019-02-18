@@ -80,18 +80,8 @@ RUN cd ObitSystem/Obit && \
     make clean && \
     make -j 8
 
-# Compile ObitView
-# Useful, but not critical image viewing utility
-# that can interact with Obit MFImage while it is running, or with ObitTalk.
-# This could be removed from Dockerfile but is useful for debugging
-RUN cd ObitSystem/ObitView && \
-    ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
-    make clean && \
-    make
-
 # Compile ObitTalk
 # Useful, but not critical tool for interacting with the AIPS filesystem
-# and ObitView
 # This could be removed from the Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitTalk && \
     # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
@@ -103,14 +93,8 @@ RUN cd ObitSystem/ObitTalk && \
     { make || true; }
 
 # Go back to root priviledges to install
-# ObitView and ObitTalk in the /installs filesystem
+# ObitTalk in the /installs filesystem
 USER root
-
-# Install ObitView. Its Makefile.in doesn't support DESTDIR, so the install is
-# done manually.
-RUN cd ObitSystem/ObitView && \
-    mkdir -p /installs/usr/bin && \
-    install -s ObitView ObitMess /installs/usr/bin
 
 # Install ObitTalk
 RUN cd ObitSystem/ObitTalk && \
