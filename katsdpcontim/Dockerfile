@@ -1,4 +1,4 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build as build
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-build:latest as build
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -133,7 +133,7 @@ RUN pip install $KATHOME/src/katacomb
 
 #######################################################################
 
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:18.04
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-runtime:latest
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
