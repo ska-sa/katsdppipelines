@@ -286,6 +286,17 @@ class ImageFacade(object):
         handle_obit_err(err_msg, self._err)
         self._clear_img()
 
+    def writefits(self, output):
+        """ Write the image to a FITS file """
+
+        err_msg = "Unable to write image to %s" % output
+
+        outImage = Image.newPFImage("FITS Image DATA", output, 0, False, self._err)
+        Image.PCopy(self._img, outImage, self._err)
+
+        handle_obit_err(err_msg, self._err)
+
+
     @property
     def img(self):
         try:
