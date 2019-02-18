@@ -129,11 +129,11 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  SERVER_LIBS =  @XMLRPC_SERVER_LIBS@ 
  
 +#CUDA
-+CUDA_PATH   ?= "/usr/local/cuda"
++
 +CUDA_LDFLAGS   := -Wl,-rpath,/usr/local/cuda/lib64
 +CUDA_LIB    := -L/usr/local/cuda/lib64 -lcudart -lstdc++
 +CUDA_FLAGS := -I/usr/local/cuda/samples/common/inc/ -I/usr/local/cuda/include/
-+GENCODE_FLAGS := -arch=sm_61
++
 +
  # Must use SWIG v1.1-883
  SWIG = @SWIG@
@@ -178,7 +178,7 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/src/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/src/Makefile.in	(working copy)
-@@ -34,38 +34,66 @@
+@@ -34,38 +34,64 @@
  # library directory for object files
  LIBDIR = $(top_srcdir)/lib/
  
@@ -203,8 +203,6 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  
 +#CUDA
 +CUDA_CFLAGS = -g -O3 --compiler-options -fPIC -I$(top_srcdir)/include -I$(OTHER)/include -I/usr/include/glib-2.0 -I/usr/lib64/glib-2.0/include
-+CUDA_PATH   ?= "/usr/local/cuda"
-+CUDA_LIB    := -Wl,-rpath,/usr/local/cuda/lib64 -L/usr/local/cuda/lib64 -lcudart
 +CUDA_FLAGS := -I/usr/local/cuda/samples/common/inc/ -I/usr/local/cuda/include/ -DHAVE_GPU=1
 +GENCODE_FLAGS := -arch=sm_61
 +
