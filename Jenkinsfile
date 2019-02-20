@@ -1,6 +1,6 @@
 #!groovy
 
-@Library('katsdpjenkins') _
+@Library('katsdpjenkins@martin_groovy_labels') _
 
 def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za kmcalpine@ska.ac.za'
 if (!katsdp.isTegra()) {
@@ -26,7 +26,7 @@ katsdp.standardBuild(
 katsdp.standardBuild(
     subdir: 'katsdpcontim',
     cuda: true,
-    label: "cpu-avx2",
+    label: 'cpu-avx2',
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
 katsdp.mail(maintainer)
