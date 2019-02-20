@@ -85,8 +85,8 @@ RUN cd ObitSystem/Obit && \
 # This could be removed from the Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitTalk && \
     # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
-    export PYTHONPATH=$OBIT/python && \
-    export LD_LIBRARY_PATH=$OBIT/lib && \
+    export PYTHONPATH=$OBIT/python:${PYTHONPATH} && \
+    export LD_LIBRARY_PATH=$OBIT/lib:${LD_LIBRARY_PATH} && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
