@@ -44,13 +44,11 @@ RUN CUDA_RUN_FILE=cuda_10.0.130_410.48_linux && \
     mv /root/NVIDIA_CUDA-10.0_Samples /usr/local/cuda/samples
 
 ENV KATHOME=/home/kat
-ENV OBIT_BASE_PATH=/home/kat/Obit
-ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
 # Install gsl 1.16
 RUN mkdir -p $KATHOME/src && \
     cd $KATHOME/src && \
-    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzf - && \
     cd gsl-1.16 && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
@@ -63,11 +61,13 @@ COPY --chown=kat:kat obit.patch /tmp/obit.patch
 # Now downgrade to kat
 USER kat
 
-ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
+ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk/ObitSystem
+ENV OBIT_BASE_PATH=/home/kat/Obit
+ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
 # Retrieve Obit r592
 RUN mkdir -p $OBIT_BASE_PATH && \
-    svn co -q -r 592 $OBIT_REPO $OBIT_BASE_PATH
+    svn co -q -r 592 $OBIT_REPO ${OBIT_BASE_PATH}/ObitSystem
 
 WORKDIR $OBIT_BASE_PATH
 
@@ -157,11 +157,11 @@ COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
 
 # Set up Obit environment
-ENV OBIT_BASE_PATH=/home/kat/Obit  \
-    OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
+ENV OBIT_BASE_PATH=/home/kat/Obit
+ENV OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
     OBITINSTALL="$OBIT_BASE_PATH" \
     OBIT_EXEC="$OBIT" \
-    OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
+    OBITSD="$OBIT_BASE_PATH"/ObitSystem/ObitSD
 ENV PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/bin:"$PATH"
 ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib
 ENV PYTHONPATH=/usr/local/share/obittalk/python
