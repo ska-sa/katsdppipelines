@@ -100,14 +100,13 @@ Index: trunk/ObitSystem/Obit/lib/Makefile
  SHTARGETS = libObit.so
  
  # list of object modules
-@@ -50,8 +50,8 @@
+@@ -50,8 +50,7 @@
  
  #  build shared Obit library, put in dependencies library
  libObit.so: ${OBJECTS}
 -	gcc -shared -o libObit.so  ${OBJECTS}
 -	cp libObit.so ../../../deps/lib
 +	gcc -shared -o libObit.so  ${OBJECTS} -lglib-2.0 -lpthread -lgthread-2.0
-+	#cp libObit.so ../../../deps/lib
  
  clean:
  	rm -f $(TARGETS) $(SHTARGETS)
@@ -124,16 +123,14 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  LDFLAGS = @LDFLAGS@
  
  ALL_CPPFLAGS = $(CPPFLAGS) -I$(top_srcdir)/include @CFITSIO_CPPFLAGS@ \
-@@ -67,6 +67,13 @@
+@@ -67,6 +67,11 @@
  SERVER_LDFLAGS = $(LDFLAGS) @XMLRPC_SERVER_LDFLAGS@
  SERVER_LIBS =  @XMLRPC_SERVER_LIBS@ 
  
 +#CUDA
 +
-+CUDA_LDFLAGS   := -Wl,-rpath,/usr/local/cuda/lib64
-+CUDA_LIB    := -L/usr/local/cuda/lib64 -lcudart -lstdc++
++CUDA_LIB := -L/usr/local/cuda/lib64 -lcudart -lstdc++
 +CUDA_FLAGS := -I/usr/local/cuda/samples/common/inc/ -I/usr/local/cuda/include/
-+
 +
  # Must use SWIG v1.1-883
  SWIG = @SWIG@
@@ -147,7 +144,7 @@ Index: trunk/ObitSystem/Obit/python/Makefile.in
  	echo "CPPFLAGS='$(CLIENT_CPPFLAGS) $(SERVER_CPPFLAGS)'">>setupdata.py
 -	echo "LDFLAGS='$(CLIENT_LDFLAGS) $(SERVER_LDFLAGS)'">>setupdata.py
 -	echo "LIBS='$(CLIENT_LIBS) $(SERVER_LIBS)'">>setupdata.py
-+	echo "LDFLAGS='$(CLIENT_LDFLAGS) $(SERVER_LDFLAGS) $(CUDA_LDFLAGS)'">>setupdata.py
++	echo "LDFLAGS='$(CLIENT_LDFLAGS) $(SERVER_LDFLAGS)'">>setupdata.py
 +	echo "LIBS='$(CLIENT_LIBS) $(SERVER_LIBS) $(CUDA_LIB)'">>setupdata.py
  
  clean:
@@ -178,18 +175,18 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/src/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/src/Makefile.in	(working copy)
-@@ -34,38 +34,64 @@
+@@ -34,38 +34,56 @@
  # library directory for object files
  LIBDIR = $(top_srcdir)/lib/
  
-+NVCC = /usr/local/cuda/bin/nvcc
++NVCC = nvcc
  CC = @CC@
 -CPPFLAGS = @CPPFLAGS@ 
 +CPPFLAGS = @CPPFLAGS@
  # Turn off memory usage checking
 -CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM 
 +# Add AVX instructions
-+CFLAGS = -Wall -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -msse -mavx -mavx2 -lstdc++
++CFLAGS = -fno-strict-aliasing @CFLAGS@ -DFASTOBITMEM -msse -mavx -mavx2 -lstdc++
  LDFLAGS = @LDFLAGS@
  LIBS = @LIBS@
 -DEFS = @DEFS@
@@ -202,9 +199,8 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  	@PGPLOT_CFLAGS@ @ZLIB_CFLAGS@ @WVR_CFLAGS@
  
 +#CUDA
-+CUDA_CFLAGS = -g -O3 --compiler-options -fPIC -I$(top_srcdir)/include -I$(OTHER)/include -I/usr/include/glib-2.0 -I/usr/lib64/glib-2.0/include
++CUDA_CFLAGS = -g -O3 --compiler-options -fPIC -I$(top_srcdir)/include -I$(OTHER)/include
 +CUDA_FLAGS := -I/usr/local/cuda/samples/common/inc/ -I/usr/local/cuda/include/ -DHAVE_GPU=1
-+GENCODE_FLAGS := -arch=sm_61
 +
  # teach how to compile
 -.c.o:	
@@ -212,11 +208,6 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $<
  	mv $@.o $(LIBDIR)
  
-+#CUDA COMPILE
-+.cu.o:
-+	$(NVCC) -c -g $(ALL_CPPFLAGS) $(CUDA_INC) $(GENCODE_FLAGS) $(ALL_CFLAGS) $<
-+	mv ./$*.o $@
-+
  # get list of all c source files (*.c) files
  AllC := $(filter-out ObitAIPSFortran.c, $(filter-out ObitAIPSObject.c, $(wildcard *.c)))
  OBJECTS := $(patsubst %.c,%.o, $(AllC))
@@ -224,14 +215,14 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  CTARGETS := $(addprefix $(LIBDIR),$(OBJECTS))
  
 +# get list of all cu (CUDA) source files (*.cu) files
-+AllCUDA := $(wildcard *.cu)
-+CUDAOBJECTS := $(patsubst %.cu,%.o, $(AllCUDA))
-+CUDATARGETS := $(addprefix $(LIBDIR),$(CUDAOBJECTS))
++ALL_CUDA := $(wildcard *.cu)
++CUDA_OBJECTS := $(patsubst %.cu, %.o, $(ALL_CUDA))
++CUDA_TARGETS := $(addprefix $(LIBDIR), $(CUDA_OBJECTS))
  
 -all:  $(CTARGETS) 
-+all:  $(CTARGETS) $(CUDATARGETS)
++all:  $(CTARGETS) $(CUDA_TARGETS)
 +
-+cuda:  $(CUDATARGETS)
++cuda:  $(CUDA_TARGETS)
  
  # generic C compile
  $(CTARGETS): $(LIBDIR)%.o: %.c $(wildcard ../include/%*.h)
@@ -240,15 +231,13 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  
 +# generic CUDA compile - need to generate relocatable code
 +# Use NVCC with -cuda to generate input for gcc
-+$(CUDATARGETS): $(LIBDIR)%.o: %.cu $(wildcard ../include/%*.cuh)
-+	echo "CUDATARGETS $(CTARGETS)"
-+	$(NVCC) -c -g $(CUDA_FLAGS) $(CUDA_CFLAGS) $(GENCODE_FLAGS) $*.cu
-+#	$(CC) -c -fPIC -lstdc++ $*.cu.cpp.ii
-+	mv ./$*.o $@
++$(CUDA_TARGETS): $(LIBDIR)%.o: %.cu $(wildcard ../include/%*.cuh)
++	echo "CUDA_TARGETS $(CUDA_TARGETS)"
++	$(NVCC) -c -g $(CUDA_FLAGS) $(CUDA_CFLAGS) -o $@ $*.cu
 +
  clean:
 -	rm -f $(CTARGETS)
-+	rm -f $(CTARGETS) $(CUDATARGETS)
++	rm -f $(CTARGETS) $(CUDA_TARGETS)
  	rm -f *.o
  
 Index: trunk/ObitSystem/Obit/tasks/Makefile.in
@@ -260,7 +249,7 @@ Index: trunk/ObitSystem/Obit/tasks/Makefile.in
  CC = @CC@
  CPPFLAGS = @CPPFLAGS@
 -CFLAGS = -Wall -fno-strict-aliasing -Wall -DFASTOBITMEM @CFLAGS@
-+CFLAGS = -Wall -fno-strict-aliasing -Wall -DFASTOBITMEM -msse -mavx -mavx2 -DHAVE_AVX=1 -DHAVE_AVX2=1 -DHAVE_GPU=1 @CFLAGS@
++CFLAGS = -fno-strict-aliasing -DFASTOBITMEM -msse -mavx -mavx2 -DHAVE_AVX=1 -DHAVE_AVX2=1 -DHAVE_GPU=1 @CFLAGS@
  LDFLAGS = @LDFLAGS@
  
  SERVER_CPPFLAGS = @XMLRPC_SERVER_CPPFLAGS@
@@ -301,10 +290,11 @@ Index: trunk/ObitSystem/Obit/tasks/Makefile.in
  
  # get list of all c source files (*.c) files
  AllC    := $(wildcard *.c)
- EXECU   := $(patsubst %.c,%, $(AllC))
+-EXECU   := $(patsubst %.c,%, $(AllC))
++EXECU   := $(patsubst %.c, %, $(AllC)) 
  TARGETS := $(addprefix $(BINDIR),$(EXECU))
  
-+CUDA_LIB    := -Wl,-rpath,/usr/local/cuda/lib64 -L/usr/local/cuda/lib64 -lcudart -lstdc++
++CUDA_LIB    := -L/usr/local/cuda/lib64 -lcudart -lstdc++
 +
  all: $(TARGETS)
  
