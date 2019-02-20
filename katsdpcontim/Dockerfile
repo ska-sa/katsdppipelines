@@ -163,10 +163,8 @@ ENV OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
     OBIT_EXEC="$OBIT" \
     OBITSD="$OBIT_BASE_PATH"/ObitSystem/ObitSD
 ENV PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/bin:"$PATH"
-ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib
-ENV PYTHONPATH=/usr/local/share/obittalk/python
-ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/Obit/python
-ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/ObitSD/python
+ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib:${LD_LIBRARY_PATH}
+ENV PYTHONPATH=/usr/local/share/obittalk/python:$OBIT_BASE_PATH/ObitSystem/Obit/python:$OBIT_BASE_PATH/ObitSystem/ObitSD/python:${PYTHONPATH}
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
