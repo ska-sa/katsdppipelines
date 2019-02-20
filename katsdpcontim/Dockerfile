@@ -55,9 +55,6 @@ RUN mkdir -p $KATHOME/src && \
     make -j 8 install && \
     make DESTDIR=/installs install-strip
 
-# Add OBIT patch
-COPY --chown=kat:kat obit.patch /tmp/obit.patch
-
 # Now downgrade to kat
 USER kat
 
@@ -70,6 +67,9 @@ RUN mkdir -p $OBIT_BASE_PATH && \
     svn co -q -r 592 $OBIT_REPO ${OBIT_BASE_PATH}/ObitSystem
 
 WORKDIR $OBIT_BASE_PATH
+
+# Add OBIT patch
+COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
 # Apply OBIT patch
 RUN patch -p1 -N -s < /tmp/obit.patch
