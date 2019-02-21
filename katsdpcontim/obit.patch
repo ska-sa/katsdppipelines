@@ -229,8 +229,7 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  	$(CC) -c $(ALL_CPPFLAGS) $(ALL_CFLAGS) $*.c
  	mv ./$*.o $@
  
-+# generic CUDA compile - need to generate relocatable code
-+# Use NVCC with -cuda to generate input for gcc
++# generic CUDA compile
 +$(CUDA_TARGETS): $(LIBDIR)%.o: %.cu $(wildcard ../include/%*.cuh)
 +	echo "CUDA_TARGETS $(CUDA_TARGETS)"
 +	$(NVCC) -c -g $(CUDA_FLAGS) $(CUDA_CFLAGS) -o $@ $*.cu
