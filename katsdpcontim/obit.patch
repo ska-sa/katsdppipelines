@@ -175,7 +175,7 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
 ===================================================================
 --- trunk/ObitSystem/Obit/src/Makefile.in	(revision 570)
 +++ trunk/ObitSystem/Obit/src/Makefile.in	(working copy)
-@@ -34,38 +34,56 @@
+@@ -34,38 +34,54 @@
  # library directory for object files
  LIBDIR = $(top_srcdir)/lib/
  
@@ -231,7 +231,6 @@ Index: trunk/ObitSystem/Obit/src/Makefile.in
  
 +# generic CUDA compile
 +$(CUDA_TARGETS): $(LIBDIR)%.o: %.cu $(wildcard ../include/%*.cuh)
-+	echo "CUDA_TARGETS $(CUDA_TARGETS)"
 +	$(NVCC) -c -g $(CUDA_FLAGS) $(CUDA_CFLAGS) -o $@ $*.cu
 +
  clean:
