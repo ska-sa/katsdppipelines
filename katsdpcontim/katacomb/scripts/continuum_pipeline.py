@@ -91,7 +91,7 @@ def create_parser():
                         help="katdal select statement "
                              "Should only contain python "
                              "assignment statements to python "
-                             "literals, separated by semi-colons")
+                             "literals, separated by semi-colons.")
 
     TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
 
@@ -132,7 +132,10 @@ def create_parser():
                         help="Directory containing default configuration "
                              ".yaml files for mfimage and uvblavg. ")
 
-
+    parser.add_argument("--nif", default=8, type=int,
+                        help="Number of AIPS 'IFs' to equally subdivide the band. "
+                             "NOTE: Must divide the number of channels after any "
+                             "katdal selection.")
     return parser
 
 setup_logging()
@@ -170,9 +173,12 @@ sub_band_id_str = "sub_band%d" % args.sub_band_id
 view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
 ts_view = telstate.view(view)
 
+katdal_args = args.select
+katdal_args['nif'] = args.nif
+
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
-                            katdal_select=args.select,
+                            katdal_select=katdal_args,
                             uvblavg_params=uvblavg_args,
                             mfimage_params=mfimage_args,
                             nvispio=args.nvispio)

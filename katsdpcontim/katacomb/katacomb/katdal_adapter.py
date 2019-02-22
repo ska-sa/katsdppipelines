@@ -358,11 +358,12 @@ class KatdalAdapter(object):
         Parameters
         ----------
         katds : :class:`katdal.DataSet`
-            An opened katdal dataset, probably an hdf5file
+            An opened katdal dataset.
         """
         self._katds = katds
         self._cache = {}
         self._catalogue = aips_catalogue(katds)
+        self._nif = 1
 
         def _vis_xformer(index):
             """
@@ -489,8 +490,12 @@ class KatdalAdapter(object):
         return AIPSPath(name=name, **kwargs)
 
     def select(self, **kwargs):
-        """ Proxies :meth:`katdal.DataSet.select` """
-        return self._katds.select(**kwargs)
+        nif = kwargs.pop('nif', None)
+        result = self._katds.select(**kwargs)
+        # Make sure any possible new channel range in selection is permitted
+        if nif is not None:
+            self.nif = nif
+        return result
 
     @property
     def size(self):
@@ -723,7 +728,14 @@ class KatdalAdapter(object):
         int
             The number of spectral windows
         """
-        return 1
+        return self._nif
+
+    @nif.setter
+    def nif(self, numif):
+        if self.nchan % numif != 0:
+            raise ValueError('Number of requested IFs (%d) does not divide number of channels (%d)' % (numif, self.nchan))
+        else:
+            self._nif = numif
 
     @property
     def channel_freqs(self):
