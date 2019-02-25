@@ -151,7 +151,7 @@ def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
     return "{:16.16}".format(name)
 
-def aips_catalogue(katdata):
+def aips_catalogue(katdata, nif):
     """
     Creates a catalogue of AIPS sources from :attribute:`katdata.catalogue`
     It resembles :attribute:`katdal.Dataset.catalogue`.
@@ -178,10 +178,15 @@ def aips_catalogue(katdata):
     the purposes of the continuum pipeline. See Bill Cotton's description
     of parameter and why it is unnecessary above each row entry in the code.
 
+    Relevant keys ('[IQUV]FLUX', 'LSRVEL', 'FREQOFF', 'RESTREQ') are repeated
+    `nif` times to allow equal subdivision of the band into IFs.
+
     Parameters
     ----------
     katdata : :class:`katdal.Dataset`
         katdal object
+    nif : int
+        Number of IFs to split band into
 
     Returns
     -------
@@ -237,10 +242,10 @@ def aips_catalogue(katdata):
             # calibration process from a standard calibrator.
             # Since this data will likely never be used to derive the
             # external calibration, they are unlikely to ever be used.
-            'IFLUX': [0.0],
-            'QFLUX': [0.0],
-            'VFLUX': [0.0],
-            'UFLUX': [0.0],
+            'IFLUX': [0.0] * nif,
+            'QFLUX': [0.0] * nif,
+            'VFLUX': [0.0] * nif,
+            'UFLUX': [0.0] * nif,
 
             # NOTE(bcotton)
             # LSRVEL, FREQOFF,RESTFREQ are used in making Doppler corrections
@@ -256,9 +261,9 @@ def aips_catalogue(katdata):
             # which all have very well known rest frequencies.
             # I don't know if MeerKAT plans online Doppler tracking which
             # I think is a bad idea anyway.
-            'LSRVEL': [0.0],    # Velocity
-            'FREQOFF': [0.0],   # Frequency Offset
-            'RESTFREQ': [0.0],  # Rest Frequency
+            'LSRVEL': [0.0] * nif,    # Velocity
+            'FREQOFF': [0.0] * nif,   # Frequency Offset
+            'RESTFREQ': [0.0] * nif,  # Rest Frequency
 
             # NOTE(bcotton)
             # BANDWIDTH was probably a mistake although, in principle,
@@ -362,8 +367,8 @@ class KatdalAdapter(object):
         """
         self._katds = katds
         self._cache = {}
-        self._catalogue = aips_catalogue(katds)
         self._nif = 1
+        self._catalogue = aips_catalogue(katds, self._nif)
 
         def _vis_xformer(index):
             """
@@ -490,11 +495,20 @@ class KatdalAdapter(object):
         return AIPSPath(name=name, **kwargs)
 
     def select(self, **kwargs):
-        nif = kwargs.pop('nif', None)
+        """
+        Proxies :meth:`katdal.select`
+
+        Parameters
+        ----------
+        nif (optional): int
+            Number of AIPSish IFs of equal frequency width to split the band into.
+        **kwargs (optional): dict
+            :meth:`katdal.select` arguments. See katdal documentation for information
+        """
+        nif = kwargs.pop('nif', self.nif)
         result = self._katds.select(**kwargs)
         # Make sure any possible new channel range in selection is permitted
-        if nif is not None:
-            self.nif = nif
+        self.nif = nif
         return result
 
     @property
@@ -719,9 +733,9 @@ class KatdalAdapter(object):
     @property
     def nif(self):
         """
-        The number of spectral windows, hard-coded to one,
-        since :class:`katdal.DataSet` only supports selecting
-        by one spectral window at a time.
+        The number of spectral widows to use in the AIPS uv
+        data. Must equally subdivide the number of frequency channels
+        currently selected.
 
         Returns
         -------
@@ -736,6 +750,7 @@ class KatdalAdapter(object):
             raise ValueError('Number of requested IFs (%d) does not divide number of channels (%d)' % (numif, self.nchan))
         else:
             self._nif = numif
+            self._catalogue = aips_catalogue(self._katds, numif)
 
     @property
     def channel_freqs(self):
@@ -821,12 +836,12 @@ class KatdalAdapter(object):
 
             # Defaults for the rest
             'POLAB': [0.0],
-            'POLCALA': [0.0, 0.0],
-            'POLCALB': [0.0, 0.0],
+            'POLCALA': [0.0, 0.0] * self.nif,
+            'POLCALB': [0.0, 0.0] * self.nif,
             'POLTYA': ['X'],
             'POLTYB': ['Y'],
             'STAXOF': [0.0],
-            'BEAMFWHM': [0.0],
+            'BEAMFWHM': [0.0] * self.nif,
             'ORBPARM': [],
             'MNTSTA': [0]
         } for a in sorted(self._katds.ants)]
@@ -907,17 +922,17 @@ class KatdalAdapter(object):
         """
 
         spw = self._katds.spectral_windows[self._katds.spw]
-        bandwidth = abs(self.chinc) * self.nchan
+        bandwidth = abs(self.chinc) * self.nchan / self.nif
 
         return [{
             # Fill in data from MeerKAT spectral window
             'FRQSEL': [self.frqsel],        # Frequency setup ID
-            'IF FREQ': [0.0],
-            'CH WIDTH': [self.chinc],
+            'IF FREQ': [if_num * bandwidth for if_num in range(self.nif)],
+            'CH WIDTH': [self.chinc] * self.nif,
             # Should be 'BANDCODE' according to AIPS MEMO 117!
-            'RXCODE': [spw.band],
-            'SIDEBAND': [spw.sideband],
-            'TOTAL BANDWIDTH': [bandwidth],
+            'RXCODE': [spw.band] * self.nif,
+            'SIDEBAND': [spw.sideband] * self.nif,
+            'TOTAL BANDWIDTH': [bandwidth] * self.nif,
         }]
 
     def fits_descriptor(self):
@@ -934,7 +949,7 @@ class KatdalAdapter(object):
         return {
             'naxis': 6,
             'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
-            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
+            'inaxes': [3, self.nstokes, self.nchan / self.nif, self.nif, 1, 1],
             'cdelt': [1.0, stokes_cdelt, self.chinc, 1.0, 0.0, 0.0],
             'crval': [1.0, stokes_crval, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
@@ -949,19 +964,19 @@ class KatdalAdapter(object):
         """
         return {
             "AIPS AN" : {
-                "attach" : {'version': 1},
+                "attach" : {'version': 1, 'numIF': self.nif},
                 "keywords" : self.uv_antenna_keywords,
                 "rows": self.uv_antenna_rows,
                 "write": True,
             },
             "AIPS FQ" : {
-                "attach" : {'version': 1, 'numIF': 1 },
+                "attach" : {'version': 1, 'numIF': self.nif },
                 "keywords" : self.uv_spw_keywords,
                 "rows": self.uv_spw_rows,
                 "write": True,
             },
             "AIPS SU" : {
-                "attach" : {'version': 1},
+                "attach" : {'version': 1, 'numIF': self.nif},
                 "keywords" : self.uv_source_keywords,
                 "rows": self.uv_source_rows,
                 "write": True,

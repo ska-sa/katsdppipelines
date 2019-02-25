@@ -173,8 +173,8 @@ sub_band_id_str = "sub_band%d" % args.sub_band_id
 view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
 ts_view = telstate.view(view)
 
-katdal_args = args.select
-katdal_args['nif'] = args.nif
+katdal_select = args.select
+katdal_select['nif'] = args.nif
 
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
