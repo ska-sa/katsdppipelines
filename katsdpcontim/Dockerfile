@@ -1,4 +1,4 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build as build
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-build:latest as build
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -37,33 +37,39 @@ ENV PACKAGES \
 RUN apt-get update && \
     apt-get install -y $PACKAGES
 
+# Get CUDA samples- Obit needs some headers from there
+RUN CUDA_RUN_FILE=cuda_10.0.130_410.48_linux && \
+    wget --progress=dot:mega "http://sdp-services.kat.ac.za/mirror/developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/$CUDA_RUN_FILE" && \
+    sh ./$CUDA_RUN_FILE --samples --silent && \
+    mv /root/NVIDIA_CUDA-10.0_Samples /usr/local/cuda/samples
+
 ENV KATHOME=/home/kat
-ENV OBIT_BASE_PATH=/home/kat/Obit
-ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
 # Install gsl 1.16
 RUN mkdir -p $KATHOME/src && \
     cd $KATHOME/src && \
-    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzvf - && \
+    curl ftp://ftp.gnu.org/gnu/gsl/gsl-1.16.tar.gz | tar xzf - && \
     cd gsl-1.16 && \
     ./configure --prefix=/usr && \
     make -j 8 all && \
     make -j 8 install && \
     make DESTDIR=/installs install-strip
 
-# Add OBIT patch
-COPY --chown=kat:kat obit.patch /tmp/obit.patch
-
 # Now downgrade to kat
 USER kat
 
-ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk
+ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk/ObitSystem
+ENV OBIT_BASE_PATH=/home/kat/Obit
+ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
 # Retrieve Obit r592
 RUN mkdir -p $OBIT_BASE_PATH && \
-    svn co -q -r 592 $OBIT_REPO $OBIT_BASE_PATH
+    svn co -q -r 592 $OBIT_REPO ${OBIT_BASE_PATH}/ObitSystem
 
 WORKDIR $OBIT_BASE_PATH
+
+# Add OBIT patch
+COPY --chown=kat:kat obit.patch /tmp/obit.patch
 
 # Apply OBIT patch
 RUN patch -p1 -N -s < /tmp/obit.patch
@@ -74,37 +80,21 @@ RUN cd ObitSystem/Obit && \
     make clean && \
     make -j 8
 
-# Compile ObitView
-# Useful, but not critical image viewing utility
-# that can interact with Obit MFImage while it is running, or with ObitTalk.
-# This could be removed from Dockerfile but is useful for debugging
-RUN cd ObitSystem/ObitView && \
-    ./configure --prefix=/usr --with-obit=$OBIT --without-plplot --without-wvr && \
-    make clean && \
-    make
-
 # Compile ObitTalk
 # Useful, but not critical tool for interacting with the AIPS filesystem
-# and ObitView
 # This could be removed from the Dockerfile but is useful for debugging
 RUN cd ObitSystem/ObitTalk && \
     # --with-obit doesn't pick up the PYTHONPATH and libObit.so correctly
-    export PYTHONPATH=$OBIT/python && \
-    export LD_LIBRARY_PATH=$OBIT/lib && \
+    export PYTHONPATH=$OBIT/python:${PYTHONPATH} && \
+    export LD_LIBRARY_PATH=$OBIT/lib:${LD_LIBRARY_PATH} && \
     ./configure --bindir=/bin --with-obit=$OBIT && \
     # Run the main makefile. This gets some of the way but falls over
     # due to lack of latex
     { make || true; }
 
 # Go back to root priviledges to install
-# ObitView and ObitTalk in the /installs filesystem
+# ObitTalk in the /installs filesystem
 USER root
-
-# Install ObitView. Its Makefile.in doesn't support DESTDIR, so the install is
-# done manually.
-RUN cd ObitSystem/ObitView && \
-    mkdir -p /installs/usr/bin && \
-    install -s ObitView ObitMess /installs/usr/bin
 
 # Install ObitTalk
 RUN cd ObitSystem/ObitTalk && \
@@ -133,7 +123,7 @@ RUN pip install $KATHOME/src/katacomb
 
 #######################################################################
 
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:18.04
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-runtime:latest
 MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
@@ -167,16 +157,14 @@ COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
 ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
 
 # Set up Obit environment
-ENV OBIT_BASE_PATH=/home/kat/Obit  \
-    OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
+ENV OBIT_BASE_PATH=/home/kat/Obit
+ENV OBIT="$OBIT_BASE_PATH"/ObitSystem/Obit \
     OBITINSTALL="$OBIT_BASE_PATH" \
     OBIT_EXEC="$OBIT" \
-    OBITSD=$OBIT_BASE_PATH/ObitSystem/ObitSD
+    OBITSD="$OBIT_BASE_PATH"/ObitSystem/ObitSD
 ENV PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/bin:"$PATH"
-ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib
-ENV PYTHONPATH=/usr/local/share/obittalk/python
-ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/Obit/python
-ENV PYTHONPATH="$PYTHONPATH":$OBIT_BASE_PATH/ObitSystem/ObitSD/python
+ENV LD_LIBRARY_PATH="$OBIT_BASE_PATH"/ObitSystem/Obit/lib:${LD_LIBRARY_PATH}
+ENV PYTHONPATH=/usr/local/share/obittalk/python:$OBIT_BASE_PATH/ObitSystem/Obit/python:$OBIT_BASE_PATH/ObitSystem/ObitSD/python:${PYTHONPATH}
 
 # Set the work directory to /obitconf
 WORKDIR /obitconf
