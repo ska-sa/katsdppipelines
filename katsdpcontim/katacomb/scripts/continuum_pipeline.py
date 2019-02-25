@@ -178,7 +178,7 @@ katdal_select['nif'] = args.nif
 
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
-                            katdal_select=katdal_args,
+                            katdal_select=katdal_select,
                             uvblavg_params=uvblavg_args,
                             mfimage_params=mfimage_args,
                             nvispio=args.nvispio)
