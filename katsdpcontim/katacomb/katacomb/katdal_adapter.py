@@ -409,11 +409,11 @@ class KatdalAdapter(object):
             return aips_timestamps(self._katds.timestamps[index], self.midnight)
 
         # Convert katdal UVW into AIPS UVW
-        def _u_xformer(i): aips_uvw(self._katds.u[i], self.refwave)
+        def _u_xformer(i): return aips_uvw(self._katds.u[i], self.refwave)
 
-        def _v_xformer(i): aips_uvw(self._katds.v[i], self.refwave)
+        def _v_xformer(i): return aips_uvw(self._katds.v[i], self.refwave)
 
-        def _w_xformer(i): aips_uvw(self._katds.w[i], self.refwave)
+        def _w_xformer(i): return aips_uvw(self._katds.w[i], self.refwave)
 
         # Set up the actual transformers
         self._vis_xformer = _KatdalTransformer(_vis_xformer,
@@ -933,7 +933,7 @@ class KatdalAdapter(object):
             'IF FREQ': [if_num * bandwidth for if_num in range(self.nif)],
             'CH WIDTH': [self.chinc] * self.nif,
             # Should be 'BANDCODE' according to AIPS MEMO 117!
-            'RXCODE': [spw.band] * self.nif,
+            'RXCODE': [spw.band],
             'SIDEBAND': [spw.sideband] * self.nif,
             'TOTAL BANDWIDTH': [bandwidth] * self.nif,
         }]
@@ -1107,7 +1107,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
     nstokes = kat_adapter.nstokes
 
     # Lexicographically sort correlation products on (a1, a2, cid)
-    def sort_fn(x): (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+    def sort_fn(x): return (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
 
     cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
     corr_products = np.asarray([cp[i] for i in cp_argsort])
