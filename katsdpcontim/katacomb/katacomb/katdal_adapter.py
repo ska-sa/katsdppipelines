@@ -509,7 +509,7 @@ class KatdalAdapter(object):
 
     def select(self, **kwargs):
         """
-        Proxies :meth:`katdal.select`
+        Proxies :meth:`katdal.select` and adds optional `nif` selection.
 
         Parameters
         ----------
