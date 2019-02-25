@@ -79,7 +79,7 @@ class TestContinuumPipeline(unittest.TestCase):
                                               "chAvg=8; maxInt=2.0")
 
         # Run with imaging defaults
-        mfimage_params = {}
+        mfimage_params = {'doGPU': False}
 
         # Create and run the pipeline
         pipeline = ContinuumPipeline(ds, TelescopeState(),
@@ -178,7 +178,7 @@ class TestContinuumPipeline(unittest.TestCase):
             # 100 clean components
             mfimage_params = {'Niter': 100, 'maxFBW': 0.05,
                               'FOV': 0.1, 'xCells': 5.,
-                              'yCells': 5.}
+                              'yCells': 5., 'doGPU': False}
 
             pipeline = ContinuumPipeline(ds, ts, katdal_select=katdal_select,
                                          uvblavg_params=uvblavg_params,

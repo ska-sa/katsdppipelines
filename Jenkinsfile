@@ -1,7 +1,6 @@
 #!groovy
 
 @Library('katsdpjenkins') _
-
 def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za kmcalpine@ska.ac.za'
 if (!katsdp.isTegra()) {
     katsdp.setDependencies([
@@ -13,7 +12,9 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer ruby@ska.ac.za"
     katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
-    katsdp.standardBuild(subdir: 'katsdpcontim')
+    katsdp.standardBuild(subdir: 'katsdpcontim',
+                         cuda: true,
+                         label: 'cpu-avx2')
 }
 else {
     katsdp.setDependencies(['tegra_ska-sa/katsdpdockerbase/master'])

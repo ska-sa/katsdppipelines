@@ -34,3 +34,4 @@ solAType: 'L1'           # A&P SC Soln. Type: '  ', 'L1',
 solAMode: 'A&P'          # A&P SC Soln. Mode:'A&P', 'P', 'P!A',
 refAnt: 0                # SC Reference antenna
 Reuse: 20.0              # Number of sigma to reuse CCs
+doGPU: True              # Use GPU predict
