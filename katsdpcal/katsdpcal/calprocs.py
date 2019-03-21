@@ -371,10 +371,14 @@ def best_refant(data, corrprod_lookup, chans):
     # Calculate the median of the pnr for all baselines per antenna
     num_ants = ants_from_bllist(corrprod_lookup)
     med_pnr_ants = np.zeros(num_ants)
-    for a in range(num_ants):
-        mask = [np.any(b == a) for b in corrprod_lookup]
-        pnr = (peak[..., mask] - mean[..., mask]) / std[..., mask]
-        med_pnr_ants[a] = np.median(pnr)
+    try:
+        for a in range(num_ants):
+            mask = [np.any(b == a) for b in corrprod_lookup]
+            pnr = (peak[..., mask] - mean[..., mask]) / std[..., mask]
+            med_pnr_ants[a] = np.median(pnr)
+    except IndexError:
+        logger.warn('Failed to calculate pnr for antenna %r. Ref ant selection may be compromised.',
+		    a, exc_info=True)
     return np.argmax(med_pnr_ants)
 
 
