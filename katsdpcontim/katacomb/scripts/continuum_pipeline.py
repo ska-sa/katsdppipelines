@@ -80,10 +80,10 @@ def create_parser():
                         default='', type=str,
                         help="Address of the telstate server")
 
-    parser.add_argument("-sbid", "--sub-band-id",
-                        default=0, type=int,
-                        help="Sub-band ID. Unique integer identifier for the sub-band "
-                             "on which the continuum pipeline is run.")
+    parser.add_argument("-oid", "--output-id",
+                        default="continuum_image", type=str,
+                        help="Label the product of the continuum pipeline. "
+                             "Used to generate telstate keys.")
 
     parser.add_argument("-ks", "--select",
                         default="scans='track'; spw=0; corrprods='cross'",
@@ -167,10 +167,9 @@ if args.workdir is not None:
     setup_aips_disks()
 
 # Set up telstate link then create
-# a view based the capture block ID and sub-band ID
+# a view based the capture block ID and output ID
 telstate = TelescopeState(args.telstate)
-sub_band_id_str = "sub_band%d" % args.sub_band_id
-view = telstate.SEPARATOR.join((args.capture_block_id, sub_band_id_str))
+view = telstate.SEPARATOR.join((args.capture_block_id, args.output_id))
 ts_view = telstate.view(view)
 
 katdal_select = args.select
