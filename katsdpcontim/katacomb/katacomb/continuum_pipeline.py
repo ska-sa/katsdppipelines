@@ -69,7 +69,6 @@ class ContinuumPipeline(object):
 
         self.ka = KatdalAdapter(katdata)
         self.telstate = telstate
-
         self.nvispio = kwargs.pop("nvispio", 10240)
         self.disk = 1
         self.katdal_select = kwargs.pop("katdal_select", {})
