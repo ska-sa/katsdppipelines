@@ -7,7 +7,7 @@ from aips_parser import obit_config_from_aips
 
 from aips_path import AIPSPath
 
-from util import task_factory
+from util import task_factory, normalise_target_name
 
 from katdal_adapter import (KatdalAdapter,
                         time_chunked_scans,

@@ -3,6 +3,7 @@ import contextlib
 import functools
 import logging
 import os
+import re
 import sys
 
 from pretty import pretty
@@ -423,3 +424,13 @@ def setup_aips_disks():
         if not os.path.exists(fitsdir):
             log.info("Creating FITS Disk '%s'", fitsdir)
             os.makedirs(fitsdir)
+
+def normalise_target_name(name, used=[]):
+    name = re.sub(r'[^-A-Za-z0-9_]', '_', name)
+    if name not in used:
+        return name
+    else:
+        i = 1
+        while '{}_{}'.format(name, i) in used:
+            i += 1
+        return '{}_{}'.format(name, i)

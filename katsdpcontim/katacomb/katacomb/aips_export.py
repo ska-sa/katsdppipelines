@@ -7,7 +7,8 @@ from katacomb import (uv_factory,
                       img_factory,
                       katdal_timestamps,
                       katdal_ant_name,
-                      obit_image_mf_rms)
+                      obit_image_mf_rms,
+                      normalise_target_name)
 import katacomb.configuration as kc
 
 import katpoint
@@ -33,7 +34,7 @@ def _condition(row):
     return {k: v[0] if len(v) == 1 else np.array(v)
             for k, v in row.items() if k not in _DROP}
 
-def export_fits(clean_files, disk):
+def export_fits(clean_files, target_indices, disk, kat_adapter):
     """
     Write out FITS files for each image in clean_files.
 
@@ -45,16 +46,21 @@ def export_fits(clean_files, disk):
         FITS disk number to write to
     """
 
-    for clean_file in clean_files:
+    used = []
+    targets = kat_adapter.katdal.catalogue.targets
+    for clean_file, ti in zip(clean_files, target_indices):
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
                 ap = cf.aips_path
                 cfg = kc.get_config()
                 out_dir = cfg['fitsdirs'][disk - 1][1]
                 cb_id = cfg['cb_id']
-                out_filename = OFILE_SEPARATOR.join([cb_id, ap.label, ap.name, ap.aclass])
+                targ = targets[ti]
+                tn = normalise_target_name(targ.name, used)
+                used.append(tn)
+                out_filename = OFILE_SEPARATOR.join([cb_id, ap.label, tn, ap.aclass])
                 out_filename += '.fits'
-                log.info('Writing FITS image output: %s' % (pjoin(out_dir, out_filename)))
+                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filename)))
                 cf.writefits(disk, out_filename)    
         except Exception as e:
             log.warn("Export of FITS image from %s failed.\n%s",

@@ -93,7 +93,7 @@ class ContinuumPipeline(object):
                 export_calibration_solutions(uv_files, self.ka, self.telstate)
                 export_clean_components(clean_files, target_indices,
                                         self.ka, self.telstate)
-                export_fits(clean_files, self.odisk)
+                export_fits(clean_files, target_indices, self.odisk, self.ka)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
                 raise

@@ -9,7 +9,7 @@ import numpy as np
 
 import UVDesc
 
-from katacomb import AIPSPath
+from katacomb import AIPSPath, normalise_target_name
 from katacomb.util import fmt_bytes
 
 from katdal.lazy_indexer import DaskLazyIndexer
@@ -157,7 +157,7 @@ def katdal_uvw(uvw, refwave):
 
 def aips_source_name(name):
     """ Truncates to length 16, padding with spaces """
-    return "{:16.16}".format(name)
+    return "{:16.16}".format(normalise_target_name(name))
 
 
 def aips_catalogue(katdata, nif):
