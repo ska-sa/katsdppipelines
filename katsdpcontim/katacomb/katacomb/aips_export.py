@@ -42,8 +42,12 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
     ----------
     clean_files : list
         List of :class:`katacomb.ImageFacade` objects
+    target_indices : list of integers
+        List of target indices associated with each CLEAN file
     disk : int
         FITS disk number to write to
+    kat_adapter : :class:`KatdalAdapter`
+        Katdal Adapter
     """
 
     used = []
@@ -54,12 +58,11 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
                 # Derive output product label and image class from AIPSPath
                 ap = cf.aips_path
 
-                # Get Capture Block ID from kat_adapter
-                cb_id = kat_adapter.katdal.obs_params['capture_block_id']
-
-                # Get disk location of chosen FITS disk from configuration
+                # Get disk location of chosen FITS disk
+                # and capture block ID from configuration
                 cfg = kc.get_config()
                 out_dir = cfg['fitsdirs'][disk - 1][1]
+                cb_id = cfg['cb_id']
 
                 # Get and sanitise target name
                 targ = targets[ti]
