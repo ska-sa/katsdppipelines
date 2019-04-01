@@ -1,12 +1,14 @@
 from __future__ import with_statement
 
 import logging
+from os.path import join as pjoin
 
 from katacomb import (uv_factory,
                       img_factory,
                       katdal_timestamps,
                       katdal_ant_name,
                       obit_image_mf_rms)
+import katacomb.configuration as kc
 
 import katpoint
 import numpy as np
@@ -22,6 +24,7 @@ log = logging.getLogger('katacomb')
 # Strip out book-keeping keys and flatten lists
 _DROP = {"Table name", "NumFields", "_status"}
 
+OFILE_SEPARATOR = '_'
 
 def _condition(row):
     """ Flatten singleton lists, drop book-keeping keys
@@ -30,6 +33,32 @@ def _condition(row):
     return {k: v[0] if len(v) == 1 else np.array(v)
             for k, v in row.items() if k not in _DROP}
 
+def export_fits(clean_files, disk):
+    """
+    Write out FITS files for each image in clean_files.
+
+    Parameters
+    ----------
+    clean_files : list
+        List of :class:`katacomb.ImageFacade` objects
+    disk : int
+        FITS disk number to write to
+    """
+
+    for clean_file in clean_files:
+        try:
+            with img_factory(aips_path=clean_file, mode='r') as cf:
+                ap = cf.aips_path
+                cfg = kc.get_config()
+                out_dir = cfg['fitsdirs'][disk - 1][1]
+                cb_id = cfg['cb_id']
+                out_filename = OFILE_SEPARATOR.join([cb_id, ap.label, ap.name, ap.aclass])
+                out_filename += '.fits'
+                log.info('Writing FITS image output: %s' % (pjoin(out_dir, out_filename)))
+                cf.writefits(disk, out_filename)    
+        except Exception as e:
+            log.warn("Export of FITS image from %s failed.\n%s",
+                     clean_file, str(e))
 
 def export_calibration_solutions(uv_files, kat_adapter, telstate):
     """

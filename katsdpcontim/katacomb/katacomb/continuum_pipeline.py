@@ -12,10 +12,12 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       uv_history_obs_description,
                       uv_history_selection,
                       export_calibration_solutions,
-                      export_clean_components)
+                      export_clean_components,
+                      export_fits)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (fractional_bandwidth,
                            log_obit_err)
+import katacomb.configuration as kc
 
 log = logging.getLogger('katacomb')
 
@@ -75,7 +77,8 @@ class ContinuumPipeline(object):
         self.uvblavg_params = kwargs.pop("uvblavg_params", {})
         self.mfimage_params = kwargs.pop("mfimage_params", {})
         self.clobber = kwargs.pop("clobber", set(['scans', 'avgscans']))
-
+        # Use highest numbered FITS disk for FITS output.
+        self.odisk = len(kc.get_config()['fitsdirs'])
         self.__merge_scans = kwargs.get("__merge_scans", False)
 
     def execute(self):
@@ -90,6 +93,7 @@ class ContinuumPipeline(object):
                 export_calibration_solutions(uv_files, self.ka, self.telstate)
                 export_clean_components(clean_files, target_indices,
                                         self.ka, self.telstate)
+                export_fits(clean_files, self.odisk)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
                 raise
