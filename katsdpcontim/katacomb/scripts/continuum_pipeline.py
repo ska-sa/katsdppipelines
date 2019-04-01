@@ -64,9 +64,14 @@ def create_parser():
 
     parser.add_argument("-w", "--workdir",
                         default=None, type=str,
-                        help="Location of scratch space. An AIPS disk (called aipsdisk) "
-                             "will be created in this space and logfiles of Obit "
-                             "tasks will be written here.")
+                        help="Location of scratch space. An AIPS disk "
+                             "will be created in this space.")
+
+    parser.add_argument("-o", "--outputdir",
+                        default=None, type=str,
+                        help="Location to store output FITS files "
+                             "and metadata dictionary. Default is --workdir "
+                             "location.")
 
     parser.add_argument("--nvispio", default=10240, type=int)
 
@@ -160,11 +165,27 @@ post_process_args(args, katdata)
 uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
 mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
 
-# Set up configuration from args.workdir
+# Get the default config.
+dc = kc.get_config()
+# Set up aipsdisk configuration from args.workdir
 if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
-    kc.set_config(aipsdirs=aipsdirs)
-    setup_aips_disks()
+else:
+    aipsdirs = dc['aipsdirs']
+log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+
+# Set up output configuration from args.outputdir
+fitsdirs = dc['fitsdirs']
+# Append args.outputdir to fitsdirs if it is set
+if args.outputdir is not None:
+    fitsdirs += [(None, args.outputdir)]
+# Otherwise append args.workdir
+elif args.workdir is not None:
+    fitsdirs += [(None, args.workdir)]
+log.info('Using output data area: %s' % (fitsdirs[-1][1]))
+kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
+
+setup_aips_disks()
 
 # Set up telstate link then create
 # a view based the capture block ID and output ID
