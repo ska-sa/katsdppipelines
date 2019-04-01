@@ -51,17 +51,28 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
     for clean_file, ti in zip(clean_files, target_indices):
         try:
             with img_factory(aips_path=clean_file, mode='r') as cf:
+                # Derive output product label and image class from AIPSPath
                 ap = cf.aips_path
+
+                # Get Capture Block ID from kat_adapter
+                cb_id = kat_adapter.katdal.obs_params['capture_block_id']
+
+                # Get disk location of chosen FITS disk from configuration
                 cfg = kc.get_config()
                 out_dir = cfg['fitsdirs'][disk - 1][1]
-                cb_id = cfg['cb_id']
+
+                # Get and sanitise target name
                 targ = targets[ti]
                 tn = normalise_target_name(targ.name, used)
                 used.append(tn)
+
+                # Output file name
                 out_filename = OFILE_SEPARATOR.join([cb_id, ap.label, tn, ap.aclass])
                 out_filename += '.fits'
+
                 log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filename)))
                 cf.writefits(disk, out_filename)    
+
         except Exception as e:
             log.warn("Export of FITS image from %s failed.\n%s",
                      clean_file, str(e))

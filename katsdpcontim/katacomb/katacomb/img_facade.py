@@ -234,7 +234,7 @@ class ImageFacade(object):
                 raise ValueError("Invalid FileType '%s'" % img.FileType)
 
             self._aips_path = AIPSPath(name, img.Disk, aclass,
-                                       seq, atype='MA', label='katim',
+                                       seq, atype='MA', label=img.GetName(),
                                        dtype=img.FileType)
 
             self._img = img

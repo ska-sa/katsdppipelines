@@ -87,7 +87,6 @@ class ContinuumPipeline(object):
             try:
                 result_tuple = self._export_and_merge_scans()
                 uv_sources, target_indices, uv_files, clean_files = result_tuple
-
                 self._run_mfimage(uv_sources, uv_files, clean_files)
 
                 export_calibration_solutions(uv_files, self.ka, self.telstate)
@@ -284,14 +283,17 @@ class ContinuumPipeline(object):
 
         target_indices = self.ka.target_indices[:]
 
+        # Use output_id for labels
+        label = kc.get_config()['output_id']
+
         # Source names
         uv_sources = [s["SOURCE"][0].strip() for s in self.ka.uv_source_rows]
 
-        uv_files = [AIPSPath(name=s, disk=self.disk,
+        uv_files = [AIPSPath(name=s, disk=self.disk, label=label,
                     aclass=UV_CLASS, atype="UV")
                     for s in uv_sources]
 
-        clean_files = [AIPSPath(name=s, disk=self.disk,
+        clean_files = [AIPSPath(name=s, disk=self.disk, label=label,
                        aclass=IMG_CLASS, atype="MA")
                        for s in uv_sources]
 

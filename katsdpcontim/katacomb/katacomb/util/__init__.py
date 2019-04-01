@@ -79,19 +79,19 @@ def log_obit_err(logger):
     sys.stdout = original
 
 
-def post_process_args(args, kat_adapter):
+def post_process_args(args, kat_ds):
     """
     Perform post-processing on command line arguments.
 
     1. Capture Block ID set to katdal experiment ID if not present or
-    found in kat_adaptor.obs_params.
+    found in kat_ds.obs_params.
 
     Parameters
     ----------
     args : object
         Arguments created by :meth:`argparse.ArgumentParser.parse_args()`
-    kat_adapter : :class:`katacomb.KatdalAdapter`
-        Katdal Adapter
+    kat_ds : :class:`katdal`
+        Katdal object
 
     Returns
     -------
@@ -102,14 +102,14 @@ def post_process_args(args, kat_adapter):
     # Set capture block ID to experiment ID if not set or found in obs_params
     if args.capture_block_id is None:
         try:
-            args.capture_block_id = kat_adapter.obs_params['capture_block_id']
+            args.capture_block_id = kat_ds.obs_params['capture_block_id']
         except KeyError:
-            args.capture_block_id = kat_adapter.experiment_id
+            args.capture_block_id = kat_ds.experiment_id
 
             log.warn("No capture block ID was specified or "
                      "found in katdal. "
                      "Using experiment_id '%s' instead.",
-                     kat_adapter.experiment_id)
+                     kat_ds.experiment_id)
 
     return args
 
