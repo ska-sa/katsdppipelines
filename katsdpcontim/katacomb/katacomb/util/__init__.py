@@ -407,15 +407,19 @@ def setup_aips_disks():
     Creates a SPACE file within the aips disks.
     """
     cfg = kc.get_config()
-    for url, aipsdir in cfg['aipsdirs'] + cfg['fitsdirs']:
+    for url, aipsdir in cfg['aipsdirs']:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
             log.info("Creating AIPS Disk '%s'", aipsdir)
             os.makedirs(aipsdir)
-
-    for url, aipsdir in cfg['aipsdirs']:
         # Create SPACE file
         space = os.path.join(aipsdir, 'SPACE')
 
         with open(space, 'a'):
             os.utime(space, None)
+
+    for url, fitsdir in cfg['fitsdirs']:
+        # Create directory if it doesn't exist
+        if not os.path.exists(fitsdir):
+            log.info("Creating FITS Disk '%s'", fitsdir)
+            os.makedirs(fitsdir)
