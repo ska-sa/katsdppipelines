@@ -18,7 +18,7 @@ log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
 MAX_AIPS_PATH_LEN = 10
-
+MAX_AIPS_STRING_LEN = 16
 
 def aips_timestamps(timestamps, midnight):
     """
@@ -155,9 +155,12 @@ def katdal_uvw(uvw, refwave):
     return refwave * uvw
 
 
-def aips_source_name(name):
-    """ Truncates to length 16, padding with spaces """
-    return "{:16.16}".format(normalise_target_name(name))
+def aips_source_name(name, used=[]):
+    """
+    Truncates to length 16, padding with spaces adding
+    repeat number to repeat names.
+    """
+    return normalise_target_name(name, used, max_length=MAX_AIPS_STRING_LEN)
 
 
 def aips_catalogue(katdata, nif):
@@ -207,6 +210,8 @@ def aips_catalogue(katdata, nif):
 
     zero = np.asarray([0.0, 0.0])
 
+    used = []
+
     for aips_i, t in enumerate(katdata.catalogue.targets, 1):
         # Nothings have no position!
         if "Nothing" == t.name:
@@ -224,7 +229,7 @@ def aips_catalogue(katdata, nif):
         aips_source_data = {
             # Fill in data derived from katpoint target
             'ID. NO.': [aips_i],
-            'SOURCE': [aips_source_name(t.name)],
+            'SOURCE': [aips_source_name(t.name, used)],
             'RAEPO': [ra],
             'DECEPO': [dec],
             'RAOBS': [raa],
@@ -306,6 +311,8 @@ def aips_catalogue(katdata, nif):
             'QUAL': [0.0],      # Source Qualifier Number
         }
 
+        used.extend(aips_source_data['SOURCE'])
+
         catalogue.append(aips_source_data)
 
     return catalogue
@@ -380,6 +387,7 @@ class KatdalAdapter(object):
         self._cache = {}
         self._nif = 1
         self._catalogue = aips_catalogue(katds, self._nif)
+        log.info(katds.catalogue.targets)
 
         def _vis_xformer(index):
             """

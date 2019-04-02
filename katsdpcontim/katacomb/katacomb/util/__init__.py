@@ -425,12 +425,34 @@ def setup_aips_disks():
             log.info("Creating FITS Disk '%s'", fitsdir)
             os.makedirs(fitsdir)
 
-def normalise_target_name(name, used=[]):
+def normalise_target_name(name, used=[], max_length=None):
+    """
+        Check that name[:max_length] is not in used and
+        append a integer suffix if it is.
+    """
+    def generate_name(name, i, ml):
+        # Create suffix string
+        i_name = '' if i is 0 else '_' + str(i)
+        # Return concatenated string if ml is not set
+        if ml is None:
+            ml = len(name) + len(i_name)
+            t_name = name
+        else:
+            # Work out amount of name to drop
+            length = len(name) + len(i_name) - ml
+            t_name = name if length <= 0 else name[:-length]
+        # If the length of i_name is greater than ml
+        # just warn and revert to straight append
+        if len(i_name) >= ml:
+            log.warn('Too many repetitions of name %s.' % name)
+            t_name = name
+        o_name = ''.join(filter(None, [t_name, i_name]))
+        return '{:{ml}.{ml}}'.format(o_name, ml=ml)
+
     name = re.sub(r'[^-A-Za-z0-9_]', '_', name)
-    if name not in used:
-        return name
-    else:
-        i = 1
-        while '{}_{}'.format(name, i) in used:
-            i += 1
-        return '{}_{}'.format(name, i)
+    i = 0
+    test_name = generate_name(name, i, max_length)
+    while test_name in used:
+        i += 1
+        test_name = generate_name(name, i, max_length)
+    return test_name
