@@ -1,4 +1,6 @@
+import os
 import random
+import shutil
 import unittest
 from functools import partial
 
@@ -16,9 +18,12 @@ from katacomb.mock_dataset import (MockDataSet,
                                    DEFAULT_TIMESTAMPS)
 
 from katacomb import ContinuumPipeline
+from katacomb.continuum_pipeline import IMG_CLASS
 from katacomb.aips_export import fit_flux_model, obit_flux_model
-from katacomb.util import parse_python_assigns
-
+from katacomb.util import (parse_python_assigns,
+                           normalise_target_name,
+                           setup_aips_disks)
+import katacomb.configuration as kc
 
 class TestContinuumPipeline(unittest.TestCase):
 
@@ -37,10 +42,16 @@ class TestContinuumPipeline(unittest.TestCase):
             'band': 'L',
         }]
 
-        target_names = random.sample(stars.keys(), 5)
+        target_names = ['Gunther Lord of the Gibichungs',
+                        'Gunther\Lord/of%the Gibichungs',
+                        'Gutrune', 'Hagen']
 
-        # Pick 5 random stars as targets
-        targets = [katpoint.Target("%s, star" % t) for t in target_names]
+        # Construct 4 targets
+        targets = [katpoint.Target("%s, radec, 100.0, -35.0" % t) for t in target_names]
+
+        # Construct a 5th target with repeated name
+        targets += [katpoint.Target("%s | %s, radec, 100.0, -35.0"
+                    % (target_names[2], target_names[3]))]
 
         # Set up varying scans
         scans = [('slew', 1, targets[0]), ('track', 3, targets[0]),
@@ -68,7 +79,6 @@ class TestContinuumPipeline(unittest.TestCase):
         select = {
             'scans': 'track',
             'corrprods': 'cross',
-            'targets': target_names,
             'pol': 'HH,VV',
             'channels': slice(0, nchan), }
         assign_str = '; '.join('%s=%s' % (k, repr(v)) for k, v in select.items())
@@ -81,6 +91,13 @@ class TestContinuumPipeline(unittest.TestCase):
         # Run with imaging defaults
         mfimage_params = {'doGPU': False}
 
+        # Dummy CB_ID and Product ID and temp fits disk
+        fd = kc.get_config()['fitsdirs']
+        fd += [(None, '/tmp/FITS')]
+        kc.set_config(output_id='OID', cb_id='CBID', fitsdirs=fd)
+
+        setup_aips_disks()
+
         # Create and run the pipeline
         pipeline = ContinuumPipeline(ds, TelescopeState(),
                                      katdal_select=select,
@@ -88,6 +105,28 @@ class TestContinuumPipeline(unittest.TestCase):
                                      mfimage_params=mfimage_params)
 
         pipeline.execute()
+
+        # Check that output FITS files exist and have the right names        
+        # Output target names have been manipulated via normalise_target_name
+        output_targets = []
+        for targ in targets:
+          new_name = normalise_target_name(targ.name, output_targets)
+          output_targets.append(new_name)
+
+        # Now check for files
+        cfg = kc.get_config()
+        cb_id = cfg['cb_id']
+        out_id = cfg['output_id']
+        fits_area = cfg['fitsdirs'][-1][1]
+
+        for otarg in output_targets:
+            out_strings = [cb_id, out_id, otarg, IMG_CLASS]
+            filename = '_'.join(filter(None, out_strings)) + '.fits'
+            filepath = os.path.join(fits_area, filename)
+            assert os.path.isfile(filepath)
+
+        # Remove the tmp/FITS dir
+        shutil.rmtree(fits_area)
 
     def test_cc_fitting(self):
         """Check CC fitting with increasing order and conversion to katpoint models
@@ -163,6 +202,13 @@ class TestContinuumPipeline(unittest.TestCase):
         cat.add(katpoint.Target("Kundry, radec, 100.0, -35.0, (856. 1712. -1.0 1. -0.1)"))
 
         ts = TelescopeState()
+
+        # Set up a scratch space in /tmp
+        fd = kc.get_config()['fitsdirs']
+        fd += [(None, '/tmp/FITS')]
+        kc.set_config(fitsdirs=fd)
+
+        setup_aips_disks()
 
         # Point sources with various flux models
         for targ in cat:
@@ -241,3 +287,6 @@ class TestContinuumPipeline(unittest.TestCase):
             delta_ra = delta_dec/np.cos(model.radec()[1])
             self.assertAlmostEqual(cc.radec()[0], model.radec()[0], delta=delta_ra)
             self.assertAlmostEqual(cc.radec()[1], model.radec()[1], delta=delta_dec)
+
+        # Empty the scratch space
+        shutil.rmtree(fd[-1][1])

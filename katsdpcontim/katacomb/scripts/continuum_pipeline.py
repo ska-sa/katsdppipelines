@@ -188,7 +188,7 @@ kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
 setup_aips_disks()
 
 # Add output_id and capture_block_id to configuration
-kc.set_config(output_id=args.output_id, cb_id=args.capture_block_id)
+kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_block_id)
 
 # Set up telstate link then create
 # a view based the capture block ID and output ID

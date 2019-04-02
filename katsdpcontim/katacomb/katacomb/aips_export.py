@@ -70,7 +70,8 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
                 used.append(tn)
 
                 # Output file name
-                out_filename = OFILE_SEPARATOR.join([cb_id, ap.label, tn, ap.aclass])
+                out_strings = [cb_id, ap.label, tn, ap.aclass]
+                out_filename = OFILE_SEPARATOR.join(filter(None, out_strings))
                 out_filename += '.fits'
 
                 log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filename)))

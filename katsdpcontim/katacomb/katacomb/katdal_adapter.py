@@ -387,7 +387,6 @@ class KatdalAdapter(object):
         self._cache = {}
         self._nif = 1
         self._catalogue = aips_catalogue(katds, self._nif)
-        log.info(katds.catalogue.targets)
 
         def _vis_xformer(index):
             """
