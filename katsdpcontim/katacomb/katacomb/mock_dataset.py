@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-import itertools
+from datetime import datetime
 import random
 
 import numpy as np
@@ -13,76 +12,92 @@ from katdal.h5datav3 import VIRTUAL_SENSORS, SENSOR_PROPS
 
 from katdal.sensordata import SensorCache
 from katdal.categorical import CategoricalData
-from katdal.lazy_indexer import LazyIndexer
 
 import katpoint
 
 ANTENNA_DESCRIPTIONS = [
-    'm000, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -8.2435 -207.289 1.18 5872.443 5873.171, 0:01:23.5 0 -0:02:25.8 -0:03:01.9 0:00:42.6 -0:00:10.3 -0:11:37.7 0:03:03.5, 1.22',
-    'm002, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -32.098 -224.248 1.202 5870.487 5871.204, 0:28:42.0 0 0:01:38.9 0:01:50.4 0:00:21.6 0:00:03.2 0:02:57.6, 1.22',
-    'm005, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -102.08 -283.1155 1.454 5876.408 5876.854, 0:01:11.1 0 -0:00:50.9 -0:06:06.7 0:00:21.4 -0:00:10.6 -0:00:29.3, 1.22',
-    'm017, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 199.641 -112.277 1.499 5868.708 5869.414, 0:47:17.0 0 -0:03:13.0 -0:06:45.8 0:00:42.8 0:00:05.4 0:06:26.5 0:03:35.6, 1.22',
-    'm020, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 97.0245 -299.636 2.452 5852.26 5833.148, -1:37:44.7 0 0:04:29.3 0:04:55.8 0:00:24.9 0:00:04.9 0:03:37.0 0:02:17.1, 1.22',
-    'm021, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -295.9485 -327.2465 0.6725 5885.674 5866.658, -0:22:35.3 0 0:02:41.4 -0:03:24.5 0:00:33.3 0:00:26.3 0:02:10.4 -0:04:09.4, 1.22',
-    'm034, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 357.8245 -28.3215 1.515 5861.427 5861.286, 0:11:27.2 0 0:12:28.4 0:08:44.2 -0:00:34.1 0:01:29.7 -0:24:03.2 0:02:38.4, 1.22',
-    'm041, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -287.531 -661.6855 2.5065 5870.621 5870.585, 0:06:55.8 0 -0:03:18.5 0:00:28.2 0:00:23.8 0:00:28.8 0:04:47.4 0:02:08.3, 1.22',
-    'm042, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -361.6965 -460.3195 1.059 5870.792 5870.692, -0:07:55.0 0 0:00:53.5 -0:00:10.7 -0:00:16.1 0:00:08.4 0:02:22.5 0:01:37.9, 1.22',
-    'm043, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -629.8345 -128.3255 -2.1695 5860.531 5861.26, 0:21:49.1 0 -0:00:00.8 0:00:47.2 0:00:03.0 0:00:34.9 -0:09:30.3 0:01:51.5, 1.22',
-    'm048, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -2805.594 2686.8905 -17.153 5869.018 5850.242, 1:21:25.0 0 0:05:18.8 0:11:29.4 0:00:17.0 0:00:05.6 0:04:21.3 -0:02:36.1, 1.22',
-    'm049, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -3605.9285 436.507 -4.6515 5881.679 5882.156, 0:22:43.8 0 0:12:37.6 0:25:26.6 0:00:37.1 0:00:33.8 -0:08:53.6 -0:01:09.3, 1.22',
-    'm050, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -2052.322 -843.685 -2.0395 5882.69 5882.889, 0:26:30.1 0 -0:01:18.0 -0:05:14.5 -0:00:01.8 -0:00:13.0 -0:12:05.9 0:02:41.4, 1.22',
-    'm054, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 871.9915 -499.8355 5.8945 5878.312 5878.298, 0:01:58.0 0 -0:06:01.7 -0:03:59.5 0:00:35.1 -0:00:45.8 0:06:50.6 -0:00:58.1, 1.22',
-    'm055, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 1201.798 96.4835 2.577 5849.908 5850.499, -0:00:02.5 0 0:02:37.7 -0:05:55.1 -0:00:01.2 0:01:30.5 0:06:12.9 0:03:27.3, 1.22',
-    'm056, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 1598.4195 466.6315 -0.502 5873.236 5854.456, -0:25:01.4 0 0:02:18.3 0:07:57.5 -0:00:19.6 0:00:57.1 0:12:21.6 0:01:28.5, 1.22'
+    'm000, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -8.2435 -207.289 1.18 5872.443 5873.171, \
+    0:01:23.5 0 -0:02:25.8 -0:03:01.9 0:00:42.6 -0:00:10.3 -0:11:37.7 0:03:03.5, 1.22',
+    'm002, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -32.098 -224.248 1.202 5870.487 5871.204, \
+    0:28:42.0 0 0:01:38.9 0:01:50.4 0:00:21.6 0:00:03.2 0:02:57.6, 1.22',
+    'm005, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -102.08 -283.1155 1.454 5876.408 5876.854, \
+    0:01:11.1 0 -0:00:50.9 -0:06:06.7 0:00:21.4 -0:00:10.6 -0:00:29.3, 1.22',
+    'm017, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 199.641 -112.277 1.499 5868.708 5869.414, \
+    0:47:17.0 0 -0:03:13.0 -0:06:45.8 0:00:42.8 0:00:05.4 0:06:26.5 0:03:35.6, 1.22',
+    'm020, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 97.0245 -299.636 2.452 5852.26 5833.148, \
+    -1:37:44.7 0 0:04:29.3 0:04:55.8 0:00:24.9 0:00:04.9 0:03:37.0 0:02:17.1, 1.22',
+    'm021, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -295.9485 -327.2465 0.6725 5885.674 5866.658, \
+    -0:22:35.3 0 0:02:41.4 -0:03:24.5 0:00:33.3 0:00:26.3 0:02:10.4 -0:04:09.4, 1.22',
+    'm034, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 357.8245 -28.3215 1.515 5861.427 5861.286, \
+    0:11:27.2 0 0:12:28.4 0:08:44.2 -0:00:34.1 0:01:29.7 -0:24:03.2 0:02:38.4, 1.22',
+    'm041, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -287.531 -661.6855 2.5065 5870.621 5870.585, \
+    0:06:55.8 0 -0:03:18.5 0:00:28.2 0:00:23.8 0:00:28.8 0:04:47.4 0:02:08.3, 1.22',
+    'm042, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -361.6965 -460.3195 1.059 5870.792 5870.692, \
+    -0:07:55.0 0 0:00:53.5 -0:00:10.7 -0:00:16.1 0:00:08.4 0:02:22.5 0:01:37.9, 1.22',
+    'm043, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -629.8345 -128.3255 -2.1695 5860.531 5861.26, \
+    0:21:49.1 0 -0:00:00.8 0:00:47.2 0:00:03.0 0:00:34.9 -0:09:30.3 0:01:51.5, 1.22',
+    'm048, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -2805.594 2686.8905 -17.153 5869.018 5850.242, \
+    1:21:25.0 0 0:05:18.8 0:11:29.4 0:00:17.0 0:00:05.6 0:04:21.3 -0:02:36.1, 1.22',
+    'm049, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -3605.9285 436.507 -4.6515 5881.679 5882.156, \
+    0:22:43.8 0 0:12:37.6 0:25:26.6 0:00:37.1 0:00:33.8 -0:08:53.6 -0:01:09.3, 1.22',
+    'm050, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, -2052.322 -843.685 -2.0395 5882.69 5882.889, \
+    0:26:30.1 0 -0:01:18.0 -0:05:14.5 -0:00:01.8 -0:00:13.0 -0:12:05.9 0:02:41.4, 1.22',
+    'm054, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 871.9915 -499.8355 5.8945 5878.312 5878.298, \
+    0:01:58.0 0 -0:06:01.7 -0:03:59.5 0:00:35.1 -0:00:45.8 0:06:50.6 -0:00:58.1, 1.22',
+    'm055, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 1201.798 96.4835 2.577 5849.908 5850.499, \
+    -0:00:02.5 0 0:02:37.7 -0:05:55.1 -0:00:01.2 0:01:30.5 0:06:12.9 0:03:27.3, 1.22',
+    'm056, -30:42:39.8, 21:26:38.0, 1035.0, 13.5, 1598.4195 466.6315 -0.502 5873.236 5854.456, \
+    -0:25:01.4 0 0:02:18.3 0:07:57.5 -0:00:19.6 0:00:57.1 0:12:21.6 0:01:28.5, 1.22'
 ]
 
 DEFAULT_SUBARRAYS = [{
-    'antenna' : ANTENNA_DESCRIPTIONS,
+    'antenna': ANTENNA_DESCRIPTIONS,
     # Auto-generated from 'antenna'
     # 'corr_products' : [],
 }]
 
 DEFAULT_SPWS = [{
-    'centre_freq' : .856e9 + .856e9 / 2.,
-    'num_chans' : 32768,
-    'channel_width' : .856e9 / 32768,
-    'sideband' : 1,
-    'band' : 'L',
+    'centre_freq': .856e9 + .856e9 / 2.,
+    'num_chans': 32768,
+    'channel_width': .856e9 / 32768,
+    'sideband': 1,
+    'band': 'L',
 }]
 
 # Pick 10 random ephem stars as katpoint targets
 _NR_OF_DEFAULT_TARGETS = 10
 DEFAULT_TARGETS = [katpoint.Target("%s, star" % t) for t in
-                    random.sample(stars.keys(), _NR_OF_DEFAULT_TARGETS)]
+                   random.sample(stars.keys(), _NR_OF_DEFAULT_TARGETS)]
 
 # Slew for 1 dumps then track for 4 on random targets
 _SLEW_TRACK_DUMPS = (('slew', 1), ('track', 4))
-DEFAULT_DUMPS = [(e, nd, t) for t in DEFAULT_TARGETS
-                            for e, nd in _SLEW_TRACK_DUMPS]*20
+DEFAULT_DUMPS = [(e, nd, t)
+                 for t in DEFAULT_TARGETS
+                 for e, nd in _SLEW_TRACK_DUMPS] * 20
 
 DEFAULT_TIMESTAMPS = {
     # Auto-generated from current time
-    #'start_time' : 1.0,
-    'dump_period' : 4.0,
+    # 'start_time': 1.0,
+    'dump_period': 4.0,
 }
 
 DEFAULT_METADATA = {
-    'name' : "mock",
-#    ref_ant
-#    time_offset
-    'version' : 'mock_version',
+    'name': "mock",
+    'version': 'mock_version',
     'observer': 'ghost',
     'description':  'mock observation',
     'experiment_id': 'mock',
 }
 
+
 def DEFAULT_WEIGHTS(dataset):
     # Dump space is linear space between scaled dump indices
-    start, stop = dataset.dumps[[0,-1]]/ 1000.0
+    start, stop = dataset.dumps[[0, -1]] / 1000.0
     return np.linspace(start, stop,
                        num=np.product(dataset.shape),
                        endpoint=True,
                        dtype=np.float32).reshape(dataset.shape)
+
 
 def DEFAULT_FLAGS(dataset):
     flags = np.zeros(dataset.shape, dtype=np.bool)
@@ -95,9 +110,10 @@ def DEFAULT_FLAGS(dataset):
 def DEFAULT_VIS(dataset):
     # Visibilities of form (scan + dump*1j)
     vis = np.empty(dataset.shape, dtype=np.complex64)
-    vis[:,:,:].real = np.full(dataset.shape, dataset.scan_indices[0])
-    vis[:,:,:].imag = dataset.dumps[:,None,None]
+    vis[:, :, :].real = np.full(dataset.shape, dataset.scan_indices[0])
+    vis[:, :, :].imag = dataset.dumps[:, None, None]
     return vis
+
 
 _CORR_PRODUCT_LOOKUP = {
     ('h', 'h'): 0,
@@ -107,6 +123,7 @@ _CORR_PRODUCT_LOOKUP = {
 }
 
 _CP_LOOKUP_LEN = len(_CORR_PRODUCT_LOOKUP)
+
 
 def corr_product_index(a1, a2, na):
     """
@@ -135,6 +152,7 @@ def corr_product_index(a1, a2, na):
                          "(%s, %s)" % (a1, a2))
 
     return (int(a1[1:4])*na + int(a2[1:4]))*_CP_LOOKUP_LEN + corr_id
+
 
 class MockDataSet(DataSet):
     def __init__(self, **kwargs):
@@ -198,15 +216,14 @@ class MockDataSet(DataSet):
         self._flags_def = kwargs.get('flags', DEFAULT_FLAGS)
         self._weights_def = kwargs.get('weights', DEFAULT_WEIGHTS)
 
-
         self._create_metadata(metadata_defs)
         self._create_timestamps(timestamp_defs, dump_defs)
 
         # Now create the sensors cache now that
         # we have dump period and timestamps
         self.sensor = SensorCache({}, self._timestamps, self.dump_period,
-                                    keep=self._time_keep, props=SENSOR_PROPS,
-                                    virtual=VIRTUAL_SENSORS)
+                                  keep=self._time_keep, props=SENSOR_PROPS,
+                                  virtual=VIRTUAL_SENSORS)
 
         self._create_subarrays(subarray_defs)
         self._create_spectral_windows(spw_defs)
@@ -285,7 +302,7 @@ class MockDataSet(DataSet):
         self.dump_period = dump_period
         self.dumps = np.arange(ndumps)
         self._timestamps = np.arange(self.start_time.secs, self.end_time.secs,
-                                    step=dump_period, dtype=np.float64)
+                                     step=dump_period, dtype=np.float64)
 
     def _create_subarrays(self, subarray_defs):
         """
@@ -309,7 +326,7 @@ class MockDataSet(DataSet):
                                "missing '%s'" % (subarray_def, e.message))
 
             ants = [a if isinstance(a, katpoint.Antenna)
-                      else katpoint.Antenna(a) for a in ants]
+                    else katpoint.Antenna(a) for a in ants]
 
             try:
                 corr_products = subarray_def['corr_products']
@@ -318,10 +335,10 @@ class MockDataSet(DataSet):
                 # including auto-correlations
                 corr_products = np.array([
                     (a1.name + c1, a2.name + c2)
-                        for i, a1 in enumerate(ants)
-                        for a2 in ants[i:]
-                        for c1 in ('h', 'v')
-                        for c2 in ('h', 'v')],
+                    for i, a1 in enumerate(ants)
+                    for a2 in ants[i:]
+                    for c1 in ('h', 'v')
+                    for c2 in ('h', 'v')],
                     dtype='|S5')
 
             subarrays.append(Subarray(ants, corr_products))
@@ -395,7 +412,6 @@ class MockDataSet(DataSet):
         for ant in antenna:
             ant_catdata = CategoricalData([ant], [0, self._ndumps])
             self.sensor['Antennas/%s/antenna' % (ant.name,)] = ant_catdata
-
 
     def _create_scans(self, ref_ant, dumps_def):
         """
@@ -490,12 +506,12 @@ class MockDataSet(DataSet):
         na = len(self.ants)
 
         return np.array([corr_product_index(a1, a2, na) for a1, a2
-                                            in self.corr_products])
+                        in self.corr_products])
 
     def selection_index(self, shape="TFB"):
-        dim_sizes = { 'T' : self.shape[0],
-                      'F' : self.shape[1],
-                      'B' : self.shape[2] }
+        dim_sizes = {'T': self.shape[0],
+                     'F': self.shape[1],
+                     'B': self.shape[2]}
 
         select_shape = tuple(dim_sizes[d] for d in shape)
         size_mults = np.asarray(tuple(dim_sizes[d] for d in shape[1:]) + (1,))
@@ -505,7 +521,7 @@ class MockDataSet(DataSet):
 
         for i, (dim, mult) in enumerate(zip(shape, size_mults)):
             broadcast = tuple(slice(None) if i == j else None
-                                    for j in range(len(shape)))
+                              for j in range(len(shape)))
 
             if dim == 'T':
                 dim_index = np.arange(dim_sizes['T'])

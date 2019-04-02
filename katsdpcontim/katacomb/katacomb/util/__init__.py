@@ -41,6 +41,7 @@ OBIT_TO_LOG = {
 
 OBIT_LOG_PREAMBLE_LEN = 23
 
+
 @contextlib.contextmanager
 def log_obit_err(logger):
     """ Trap Obit log messages written to stdout and send them to logger"""
@@ -68,7 +69,6 @@ def log_obit_err(logger):
             OBIT_TO_LOG[log_level](message, extra={"obit_task": taskname})
         except KeyError:
             log.info(msg)
-
 
     original = sys.stdout
     logger.write = parse_obit_message
@@ -279,7 +279,7 @@ def log_exception(logger):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except:
+            except Exception:
                 logger.exception("Exception in '%s'", func.__name__)
                 raise
 
@@ -424,6 +424,7 @@ def setup_aips_disks():
         if not os.path.exists(fitsdir):
             log.info("Creating FITS Disk '%s'", fitsdir)
             os.makedirs(fitsdir)
+
 
 def normalise_target_name(name, used=[], max_length=None):
     """

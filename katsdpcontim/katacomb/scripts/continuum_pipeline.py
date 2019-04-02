@@ -16,35 +16,21 @@ import argparse
 import logging
 import os.path
 from os.path import join as pjoin
-import sys
-
-import numpy as np
-import pkg_resources
 
 import katdal
 from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
-import katacomb
 import katacomb.configuration as kc
-from katacomb import (KatdalAdapter, obit_context, AIPSPath,
-                        ContinuumPipeline,
-                        task_factory,
-                        uv_factory,
-                        uv_export,
-                        uv_history_obs_description,
-                        uv_history_selection,
-                        export_calibration_solutions,
-                        export_clean_components)
-from katacomb.aips_path import next_seq_nr
+from katacomb import ContinuumPipeline
 from katacomb.util import (parse_python_assigns,
-                        get_and_merge_args,
-                        log_exception,
-                        post_process_args,
-                        fractional_bandwidth,
-                        setup_aips_disks)
+                           get_and_merge_args,
+                           log_exception,
+                           post_process_args,
+                           setup_aips_disks)
 
 log = logging.getLogger('katacomb')
+
 
 def create_parser():
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
@@ -100,7 +86,6 @@ def create_parser():
 
     TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
 
-
     parser.add_argument("-ba", "--uvblavg",
                         default="",
                         type=log_exception(log)(parse_python_assigns),
@@ -109,7 +94,6 @@ def create_parser():
                              "assignment statements to python "
                              "literals, separated by semi-colons. "
                              "See %s/UVBlAvg.TDF for valid parameters. " % TDF_URL)
-
 
     parser.add_argument("-mf", "--mfimage",
                         default="",
@@ -127,7 +111,7 @@ def create_parser():
                              "'scans' => Individual scans. "
                              "'avgscans' => Averaged individual scans. "
                              "'merge' => Observation file containing merged, "
-                                                            "averaged scans. "
+                             "averaged scans. "
                              "'clean' => Output CLEAN files. "
                              "'mfimage' => Output MFImage files. ")
 
@@ -142,6 +126,7 @@ def create_parser():
                              "NOTE: Must divide the number of channels after any "
                              "katdal selection.")
     return parser
+
 
 setup_logging()
 parser = create_parser()
@@ -162,8 +147,8 @@ katdata = katdal.open(args.katdata, applycal='all', **open_kwargs)
 post_process_args(args, katdata)
 
 # Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
-mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
+uvblavg_args = get_and_merge_args(pjoin(args.config, 'uvblavg.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(args.config, 'mfimage.yaml'), args.mfimage)
 
 # Get the default config.
 dc = kc.get_config()
@@ -201,10 +186,10 @@ katdal_select['nif'] = args.nif
 
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
-                            katdal_select=katdal_select,
-                            uvblavg_params=uvblavg_args,
-                            mfimage_params=mfimage_args,
-                            nvispio=args.nvispio)
+                             katdal_select=katdal_select,
+                             uvblavg_params=uvblavg_args,
+                             mfimage_params=mfimage_args,
+                             nvispio=args.nvispio)
 
 # Execute it
 pipeline.execute()

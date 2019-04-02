@@ -1,10 +1,8 @@
 import os
-import random
 import shutil
 import unittest
 from functools import partial
 
-from ephem.stars import stars
 import katpoint
 import numpy as np
 import six
@@ -24,6 +22,7 @@ from katacomb.util import (parse_python_assigns,
                            normalise_target_name,
                            setup_aips_disks)
 import katacomb.configuration as kc
+
 
 class TestContinuumPipeline(unittest.TestCase):
 
@@ -106,12 +105,12 @@ class TestContinuumPipeline(unittest.TestCase):
 
         pipeline.execute()
 
-        # Check that output FITS files exist and have the right names        
+        # Check that output FITS files exist and have the right names
         # Output target names have been manipulated via normalise_target_name
         output_targets = []
         for targ in targets:
-          new_name = normalise_target_name(targ.name, output_targets)
-          output_targets.append(new_name)
+            new_name = normalise_target_name(targ.name, output_targets)
+            output_targets.append(new_name)
 
         # Now check for files
         cfg = kc.get_config()

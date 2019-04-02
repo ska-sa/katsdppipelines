@@ -20,6 +20,7 @@ ONE_DAY_IN_SECONDS = 24*60*60.0
 MAX_AIPS_PATH_LEN = 10
 MAX_AIPS_STRING_LEN = 16
 
+
 def aips_timestamps(timestamps, midnight):
     """
     Given katdal timestamps and midnight on the observation date in UTC,

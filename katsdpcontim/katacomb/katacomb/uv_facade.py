@@ -9,18 +9,19 @@ import TableList
 import UV
 
 from katacomb import (AIPSTable,
-                          AIPSHistory,
-                          AIPSPath,
-                          obit_err,
-                          handle_obit_err)
+                      AIPSHistory,
+                      AIPSPath,
+                      obit_err,
+                      handle_obit_err)
 
 log = logging.getLogger('katacomb')
 
 """ TextWrapper for wrapping AIPS history text to 70 chars """
 _history_wrapper = TextWrapper(width=70, initial_indent='',
-                                subsequent_indent='  ',
-                                break_long_words=True,
-                                break_on_hyphens=True)
+                               subsequent_indent='  ',
+                               break_long_words=True,
+                               break_on_hyphens=True)
+
 
 def uv_file_mode(mode):
     """ Returns UV file mode given string mode """
@@ -74,7 +75,7 @@ def open_uv(aips_path, nvispio=1024, mode=None):
                             aips_path.seq, exists, err, nvis=nvispio)
         except Exception:
             raise (ValueError("Error calling newPAUV on '%s'" % aips_path),
-                                                None, sys.exc_info()[2])
+                   None, sys.exc_info()[2])
     elif aips_path.dtype == "FITS":
         raise NotImplementedError("newPFUV calls do not currently work")
 
@@ -83,7 +84,7 @@ def open_uv(aips_path, nvispio=1024, mode=None):
                             exists, err, nvis=nvispio)
         except Exception:
             raise (ValueError("Error calling newPFUV on '%s'" % aips_path),
-                                                None, sys.exc_info()[2])
+                   None, sys.exc_info()[2])
     else:
         raise ValueError("Invalid dtype '{}'".format(aips_path.dtype))
 
@@ -93,11 +94,12 @@ def open_uv(aips_path, nvispio=1024, mode=None):
         uv.Open(uv_mode, err)
     except Exception:
         raise (ValueError("Error opening '%s'" % aips_path),
-                None, sys.exc_info()[2])
+               None, sys.exc_info()[2])
 
     handle_obit_err("Error opening '%s'" % aips_path, err)
 
     return uv
+
 
 def uv_factory(**kwargs):
     """
@@ -309,7 +311,7 @@ class UVFacade(object):
             return
         except Exception:
             raise (Exception("Exception closing uv file '%s'" % self.name),
-                                                    None, sys.exc_info()[2])
+                   None, sys.exc_info()[2])
 
         handle_obit_err("Error closing uv file '%s'" % self.name, self._err)
         self._clear_uv()
@@ -348,7 +350,6 @@ class UVFacade(object):
 
     def __exit__(self, etype, evalue, etraceback):
         self.close()
-
 
     def append_history(self, msg):
         """
@@ -489,7 +490,7 @@ class UVFacade(object):
             Maximum antenna number written to the AIPS AN table.
         """
         err_msg = ("Error creating CL table "
-                    "from NX table on UV file '%s'" % self.name)
+                   "from NX table on UV file '%s'" % self.name)
 
         try:
             UV.PTableCLfromNX(self.uv, max_ant_nr, self._err)

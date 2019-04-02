@@ -27,12 +27,14 @@ _DROP = {"Table name", "NumFields", "_status"}
 
 OFILE_SEPARATOR = '_'
 
+
 def _condition(row):
     """ Flatten singleton lists, drop book-keeping keys
         and convert non-singleton lists to np.ndarray
     """
     return {k: v[0] if len(v) == 1 else np.array(v)
             for k, v in row.items() if k not in _DROP}
+
 
 def export_fits(clean_files, target_indices, disk, kat_adapter):
     """
@@ -75,11 +77,12 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
                 out_filename += '.fits'
 
                 log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filename)))
-                cf.writefits(disk, out_filename)    
+                cf.writefits(disk, out_filename)
 
         except Exception as e:
             log.warn("Export of FITS image from %s failed.\n%s",
                      clean_file, str(e))
+
 
 def export_calibration_solutions(uv_files, kat_adapter, telstate):
     """
