@@ -252,8 +252,7 @@ class MockDataSet(DataSet):
             List of (event, number of dumps, target) tuples
         """
         for _, _, target in dump_defs:
-            if target not in self.catalogue:
-                self.catalogue.add(target)
+            self.catalogue.add(target)
 
         self.catalogue.antenna = ref_ant
 
