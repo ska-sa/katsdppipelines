@@ -19,7 +19,6 @@ from katacomb import ContinuumPipeline
 from katacomb.continuum_pipeline import IMG_CLASS
 from katacomb.aips_export import fit_flux_model, obit_flux_model
 from katacomb.util import (parse_python_assigns,
-                           normalise_target_name,
                            setup_aips_disks)
 import katacomb.configuration as kc
 
@@ -106,11 +105,11 @@ class TestContinuumPipeline(unittest.TestCase):
         pipeline.execute()
 
         # Check that output FITS files exist and have the right names
-        # Output target names have been manipulated via normalise_target_name
-        output_targets = []
-        for targ in targets:
-            new_name = normalise_target_name(targ.name, output_targets)
-            output_targets.append(new_name)
+        # Expected target name in file output for the list of targets
+        # constructed via normalise_target_name
+        sanitised_target_names = ['Gunther_Lord_of_the_Gibichungs',
+                                  'Gunther_Lord_of_the_Gibichungs_1',
+                                  'Gutrune', 'Hagen', 'Gutrune_1']
 
         # Now check for files
         cfg = kc.get_config()
@@ -118,7 +117,7 @@ class TestContinuumPipeline(unittest.TestCase):
         out_id = cfg['output_id']
         fits_area = cfg['fitsdirs'][-1][1]
 
-        for otarg in output_targets:
+        for otarg in sanitised_target_names:
             out_strings = [cb_id, out_id, otarg, IMG_CLASS]
             filename = '_'.join(filter(None, out_strings)) + '.fits'
             filepath = os.path.join(fits_area, filename)

@@ -162,6 +162,9 @@ log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
 # Append args.outputdir to fitsdirs if it is set
+# NOTE: Pipeline is set up to always place its output in the
+# highest numbered fits disk so we ensure that is the case
+# here.
 if args.outputdir is not None:
     fitsdirs += [(None, args.outputdir)]
 # Otherwise append args.workdir
