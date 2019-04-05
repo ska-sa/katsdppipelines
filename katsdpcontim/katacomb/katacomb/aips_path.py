@@ -1,10 +1,10 @@
 import ast
 import inspect
-import os
 
 from katacomb import obit_err, handle_obit_err
 
 _VALID_DISK_TYPES = ["AIPS", "FITS"]
+
 
 def next_seq_nr(aips_path):
     """
@@ -24,7 +24,6 @@ def next_seq_nr(aips_path):
     from AIPSDir import PHiSeq, PTestCNO
     from OSystem import PGetAIPSuser
 
-
     err = obit_err()
     aips_user = PGetAIPSuser()
 
@@ -36,9 +35,8 @@ def next_seq_nr(aips_path):
 
     while True:
         cno = PTestCNO(disk=aips_path.disk, user=aips_user,
-            Aname=aips_path.name, Aclass=aips_path.aclass,
-            Atype=aips_path.atype, seq=hi_seq,
-            err=err)
+                       Aname=aips_path.name, Aclass=aips_path.aclass,
+                       Atype=aips_path.atype, seq=hi_seq, err=err)
 
         handle_obit_err("Error finding catalogue entry", err)
 
@@ -70,6 +68,7 @@ def _check_disk_type(dtype, check=True):
         raise ValueError("Invalid disk type '%s'. "
                          "Should be one of '%s'" % (
                              dtype, _VALID_DISK_TYPES))
+
 
 class AIPSPath(object):
     """
@@ -129,7 +128,6 @@ class AIPSPath(object):
         else:
             _check_disk_type(dtype, False)
 
-
     def copy(self, name=None, disk=None, aclass=None,
              seq=None, atype=None, label=None, dtype=None):
         """
@@ -148,7 +146,7 @@ class AIPSPath(object):
         """ String representation """
         if self.dtype == "AIPS":
             return "%s.%s.%s.%s on AIPS %d" % (self.name, self.aclass,
-                                            self.atype, self.seq, self.disk)
+                                               self.atype, self.seq, self.disk)
         elif self.dtype == "FITS":
             return "%s.%s on FITS %d" % (self.name, self.atype, self.disk)
         else:
@@ -176,7 +174,6 @@ class AIPSPath(object):
         else:
             _check_disk_type(self.dtype, False)
 
-
     def task_output_kwargs(self, name=None, disk=None, aclass=None,
                            seq=None, dtype=None):
         """
@@ -199,7 +196,6 @@ class AIPSPath(object):
                     "outFile": self.name}
         else:
             _check_disk_type(dtype, False)
-
 
     def task_output2_kwargs(self, name=None, disk=None, aclass=None,
                             seq=None, dtype=None):
@@ -226,11 +222,11 @@ class AIPSPath(object):
 
 
 _AIPS_PATH_TUPLE_ARGS = [a for a in inspect.getargspec(AIPSPath.__init__).args
-                                                            if not a == "self"]
+                         if not a == "self"]
 _AIPS_PATH_TUPLE_FORMAT = "(%s)" % ",".join(_AIPS_PATH_TUPLE_ARGS)
 _AIPS_PATH_HELP = ("AIPS path should be a tuple of "
-                    "names or numbers of the form "
-                    "%s" % _AIPS_PATH_TUPLE_FORMAT)
+                   "names or numbers of the form "
+                   "%s" % _AIPS_PATH_TUPLE_FORMAT)
 
 
 def parse_aips_path(aips_path_str):
@@ -270,8 +266,9 @@ def parse_aips_path(aips_path_str):
 
     return AIPSPath(**dict(zip(_AIPS_PATH_TUPLE_ARGS, xformed)))
 
+
 try:
-    parse_aips_path.__doc__ %= {'fmt' : _AIPS_PATH_TUPLE_FORMAT}
+    parse_aips_path.__doc__ %= {'fmt': _AIPS_PATH_TUPLE_FORMAT}
 except KeyError:
     # For python -OO
     pass

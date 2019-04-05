@@ -16,35 +16,21 @@ import argparse
 import logging
 import os.path
 from os.path import join as pjoin
-import sys
-
-import numpy as np
-import pkg_resources
 
 import katdal
 from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
-import katacomb
 import katacomb.configuration as kc
-from katacomb import (KatdalAdapter, obit_context, AIPSPath,
-                        ContinuumPipeline,
-                        task_factory,
-                        uv_factory,
-                        uv_export,
-                        uv_history_obs_description,
-                        uv_history_selection,
-                        export_calibration_solutions,
-                        export_clean_components)
-from katacomb.aips_path import next_seq_nr
+from katacomb import ContinuumPipeline
 from katacomb.util import (parse_python_assigns,
-                        get_and_merge_args,
-                        log_exception,
-                        post_process_args,
-                        fractional_bandwidth,
-                        setup_aips_disks)
+                           get_and_merge_args,
+                           log_exception,
+                           post_process_args,
+                           setup_aips_disks)
 
 log = logging.getLogger('katacomb')
+
 
 def create_parser():
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
@@ -64,9 +50,14 @@ def create_parser():
 
     parser.add_argument("-w", "--workdir",
                         default=None, type=str,
-                        help="Location of scratch space. An AIPS disk (called aipsdisk) "
-                             "will be created in this space and logfiles of Obit "
-                             "tasks will be written here.")
+                        help="Location of scratch space. An AIPS disk "
+                             "will be created in this space.")
+
+    parser.add_argument("-o", "--outputdir",
+                        default=None, type=str,
+                        help="Location to store output FITS files "
+                             "and metadata dictionary. Default is --workdir "
+                             "location.")
 
     parser.add_argument("--nvispio", default=10240, type=int)
 
@@ -95,7 +86,6 @@ def create_parser():
 
     TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
 
-
     parser.add_argument("-ba", "--uvblavg",
                         default="",
                         type=log_exception(log)(parse_python_assigns),
@@ -104,7 +94,6 @@ def create_parser():
                              "assignment statements to python "
                              "literals, separated by semi-colons. "
                              "See %s/UVBlAvg.TDF for valid parameters. " % TDF_URL)
-
 
     parser.add_argument("-mf", "--mfimage",
                         default="",
@@ -122,7 +111,7 @@ def create_parser():
                              "'scans' => Individual scans. "
                              "'avgscans' => Averaged individual scans. "
                              "'merge' => Observation file containing merged, "
-                                                            "averaged scans. "
+                             "averaged scans. "
                              "'clean' => Output CLEAN files. "
                              "'mfimage' => Output MFImage files. ")
 
@@ -137,6 +126,7 @@ def create_parser():
                              "NOTE: Must divide the number of channels after any "
                              "katdal selection.")
     return parser
+
 
 setup_logging()
 parser = create_parser()
@@ -157,14 +147,36 @@ katdata = katdal.open(args.katdata, applycal='all', **open_kwargs)
 post_process_args(args, katdata)
 
 # Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(pjoin(args.config,'uvblavg.yaml'), args.uvblavg)
-mfimage_args = get_and_merge_args(pjoin(args.config,'mfimage.yaml'), args.mfimage)
+uvblavg_args = get_and_merge_args(pjoin(args.config, 'uvblavg.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(args.config, 'mfimage.yaml'), args.mfimage)
 
-# Set up configuration from args.workdir
+# Get the default config.
+dc = kc.get_config()
+# Set up aipsdisk configuration from args.workdir
 if args.workdir is not None:
     aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
-    kc.set_config(aipsdirs=aipsdirs)
-    setup_aips_disks()
+else:
+    aipsdirs = dc['aipsdirs']
+log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+
+# Set up output configuration from args.outputdir
+fitsdirs = dc['fitsdirs']
+# Append args.outputdir to fitsdirs if it is set
+# NOTE: Pipeline is set up to always place its output in the
+# highest numbered fits disk so we ensure that is the case
+# here.
+if args.outputdir is not None:
+    fitsdirs += [(None, args.outputdir)]
+# Otherwise append args.workdir
+elif args.workdir is not None:
+    fitsdirs += [(None, args.workdir)]
+log.info('Using output data area: %s' % (fitsdirs[-1][1]))
+kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
+
+setup_aips_disks()
+
+# Add output_id and capture_block_id to configuration
+kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_block_id)
 
 # Set up telstate link then create
 # a view based the capture block ID and output ID
@@ -177,10 +189,10 @@ katdal_select['nif'] = args.nif
 
 # Create Continuum Pipeline
 pipeline = ContinuumPipeline(katdata, ts_view,
-                            katdal_select=katdal_select,
-                            uvblavg_params=uvblavg_args,
-                            mfimage_params=mfimage_args,
-                            nvispio=args.nvispio)
+                             katdal_select=katdal_select,
+                             uvblavg_params=uvblavg_args,
+                             mfimage_params=mfimage_args,
+                             nvispio=args.nvispio)
 
 # Execute it
 pipeline.execute()
