@@ -8,7 +8,8 @@ from katacomb import (uv_factory,
                       katdal_timestamps,
                       katdal_ant_name,
                       obit_image_mf_rms,
-                      normalise_target_name)
+                      normalise_target_name,
+                      save_image)
 import katacomb.configuration as kc
 
 import katpoint
@@ -36,9 +37,9 @@ def _condition(row):
             for k, v in row.items() if k not in _DROP}
 
 
-def export_fits(clean_files, target_indices, disk, kat_adapter):
+def export_images(clean_files, target_indices, disk, kat_adapter):
     """
-    Write out FITS files for each image in clean_files.
+    Write out FITS and PNG files for each image in clean_files.
 
     Parameters
     ----------
@@ -73,14 +74,22 @@ def export_fits(clean_files, target_indices, disk, kat_adapter):
 
                 # Output file name
                 out_strings = [cb_id, ap.label, tn, ap.aclass]
-                out_filename = OFILE_SEPARATOR.join(filter(None, out_strings))
-                out_filename += '.fits'
+                out_filebase = OFILE_SEPARATOR.join(filter(None, out_strings))
+                out_fitsfilename = out_filebase + '.fits'
 
-                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filename)))
-                cf.writefits(disk, out_filename)
+                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_fitsfilename)))
+                cf.writefits(disk, out_fitsfilename)
+
+                # Export PNG and a thumbnail PNG
+                out_pngfilename = pjoin(out_dir, out_filebase + '.png')
+                save_image(cf, out_pngfilename)
+                out_pngthumbnail = pjoin(out_dir, out_filebase + OFILE_SEPARATOR + 'tnail.png')
+                save_image(cf, out_pngthumbnail, display_size=5., dpi=100)
+
+                log.info('Write PNG image output: %s' % (pjoin(out_dir, out_filebase + '.png')))
 
         except Exception as e:
-            log.warn("Export of FITS image from %s failed.\n%s",
+            log.warn("Export of FITS and PNG images from %s failed.\n%s",
                      clean_file, str(e))
 
 
