@@ -9,6 +9,8 @@ from aips_path import AIPSPath
 
 from util import task_factory, normalise_target_name
 
+from util.image_util import save_image
+
 from katdal_adapter import (KatdalAdapter,
                             time_chunked_scans,
                             aips_ant_nr,
