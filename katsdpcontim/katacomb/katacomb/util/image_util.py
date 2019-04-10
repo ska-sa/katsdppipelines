@@ -3,12 +3,13 @@ from matplotlib import use
 use('Agg', warn=False)
 from matplotlib import pylab as plt
 
+
 def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
            sigma_rej=3.0, max_iter=500, max_reject=0.1, min_npix=5):
     """
     A python implementation of the IRAF/ds9 zscale algorithm
     for determining maximum and minumum image values for a given
-    contrast. This is used to scale a colourmaps applied to FITS 
+    contrast. This is used to scale a colourmap applied to FITS
     images when saving to alternative image formats or for on
     screen display.
 
@@ -31,7 +32,7 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
 
     Parameters
     ----------
-    image : array 
+    image : array
         Input array of pixel values. shape(numxpix, numypix)
     maxsamples : int
         Number of elements to subsample the input image into.
@@ -56,7 +57,6 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
         Hard limit on the minimum number of pixels allowed in
         the sampled input and after rejection.
     """
-
 
     # Figure out which pixels to use for the zscale algorithm
     # Returns the 1-d array samples
@@ -114,7 +114,7 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
 
         # Detect and reject pixels further than k*sigma from the fitted line
         badpix = np.abs(flat) > threshold
-        
+
         # Compute number of remaining pixels before convolution
         last_ngoodpix = ngoodpix
         ngoodpix = np.sum(~badpix)
@@ -124,7 +124,7 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
         badpix = np.convolve(badpix, kernel, mode='same')
 
         niter += 1
-    
+
     # Transform the slope back to the X range [0:npix-1]
     slope = slope * xscale
 
@@ -152,7 +152,9 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
 
     return z1, z2
 
-def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot', dpi=1000, **kwargs):
+
+def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot',
+               display_size=10., dpi=1000, **kwargs):
     """
     Write an image plane to a file using imshow with contrast scaling.
     Input kwargs are passed to the zscale function for the contrast
@@ -169,6 +171,8 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot', dpi
         Fraction of pixels in x,y image dimensions to plot
     cmap : str or :class:`matplotlib.colors.Colormap`
         Matplotlib style colormap to use (passed to `imshow`)
+    display_size : float
+        Size in inches for the `matplotlib.pylab.figure` instance.
     dpi : int
         Dots per inch desired for figure.
         (Passed to `matplotlib.pylab.savefig`)
@@ -178,8 +182,8 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot', dpi
     image.GetPlane(None, [plane, 1, 1, 1, 1])
     imagedata = image.np_farray
 
-    xpix, ypix = imagedata.shape 
-    
+    xpix, ypix = imagedata.shape
+
     # Determine amount of image edge to remove
     x_off = int(xpix * 0.5 * (1 - image_fraction))
     y_off = int(ypix * 0.5 * (1 - image_fraction))
@@ -192,7 +196,7 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot', dpi
     # Get low and high pixel values to stretch the comormap
     lowcut, highcut = zscale(cutimagedata, **kwargs)
 
-    im=plt.figure(figsize=(10,10))
+    im = plt.figure(figsize=(display_size, display_size))
 
     # Remove axes and whitespace around edges
     plt.axis('off')
@@ -201,7 +205,7 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot', dpi
     # Plot the image with the desired colormap and contrast
     plt.imshow(cutimagedata, cmap=cmap, vmin=lowcut, vmax=highcut,
                aspect='equal', origin='lower', interpolation='nearest')
-    
+
     # Save to filename at the desired dpi
     plt.savefig(filename, dpi=dpi)
     plt.close(im)
