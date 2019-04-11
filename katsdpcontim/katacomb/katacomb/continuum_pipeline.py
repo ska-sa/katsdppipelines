@@ -85,6 +85,7 @@ class ContinuumPipeline(object):
         """ Execute the Continuum Pipeline """
         with obit_context():
             try:
+                uv_files, clean_files = [], []
                 result_tuple = self._export_and_merge_scans()
                 uv_sources, target_indices, uv_files, clean_files = result_tuple
                 self._run_mfimage(uv_sources, uv_files, clean_files)
