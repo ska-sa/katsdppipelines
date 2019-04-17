@@ -1,5 +1,8 @@
 from __future__ import with_statement
 
+import time
+import datetime
+import json
 import logging
 from os.path import join as pjoin
 
@@ -33,7 +36,7 @@ IMG_PLANE = 1
 FITS_EXT = '.fits'
 PNG_EXT = '.png'
 TNAIL_EXT = OFILE_SEPARATOR + 'tnail.png'
-
+METADATA_JSON = 'metadata.json'
 
 def _condition(row):
     """ Flatten singleton lists, drop book-keeping keys
@@ -66,11 +69,33 @@ def _get_target_metadata(image, target, katds, filebase):
     target_metadata['PNGThumbNailFileName'] = filebase + TNAIL_EXT
     target_metadata['IntegrationTime'] = _integration_time(target, katds)
     image.GetPlane(None, [IMG_PLANE, 1, 1, 1, 1])
-    target_metadata['RMSNoise'] = image.FArray.RMS
+    target_metadata['RMSNoise'] = str(image.FArray.RMS)
     target_metadata['RightAscension'] = str(target.radec()[0])
     target_metadata['Declination'] = str(target.radec()[1])
     return target_metadata
 
+
+def _metadata(katds, cb_id, targets, target_metadata, katpoint_targets, decra):
+    """ Construct metadata dictionary """
+    obs_params = katds.obs_params
+    metadata = {}
+    product_type = {}
+    product_type['ProductTypeName'] = 'FITSImageProduct'
+    product_type['ReductionName'] = 'Continuum Image'
+    metadata['ProductType'] = product_type
+    # Format time as required
+    time = datetime.datetime.utcfromtimestamp(katds.start_time)
+    metadata['StartTime'] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata['CaptureBlockID'] = cb_id
+    metadata['ScheduleBlockIDCode'] = obs_params['sb_id_code']
+    metadata['Description'] = obs_params['description'] + ': Continuum image'
+    metadata['ProposalID'] = obs_params['proposal_id']
+    metadata['Observer'] = obs_params['observer']
+    metadata['Targets'] = targets
+    metadata['TargetMetaData'] = target_metadata
+    metadata['KatpointTargets'] = katpoint_targets
+    metadata['DecRa'] = decra
+    return metadata
 
 def export_images(clean_files, target_indices, disk, kat_adapter):
     """
@@ -136,6 +161,15 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
             log.warn("Export of FITS and PNG images from %s failed.\n%s",
                      clean_file, str(e))
 
+    # Export metadata json 
+    try:
+        metadata = _metadata(kat_adapter.katdal, cb_id, all_targets, target_metadata_dict,
+                             all_katpoint_targets, all_decra)
+        metadata_file = pjoin(out_dir, METADATA_JSON)
+        with open(metadata_file, 'w') as meta:
+            json.dump(metadata, meta)
+    except Exception as e:
+            log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
 
 def export_calibration_solutions(uv_files, kat_adapter, telstate):
     """
