@@ -354,7 +354,7 @@ class ImageFacade(object):
                              "on image '%s'" % self.name),
                    None, sys.exc_info()[2])
 
-        return np.frombuffer(buf, count=-1, dtype=np.float32)
+        return np.frombuffer(buf, count=-1, dtype=np.float32).reshape(self.FArray.Naxis)
 
     def Open(self, mode):
         err_msg = "Error opening Image file '%s'" % self.name

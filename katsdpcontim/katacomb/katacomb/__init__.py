@@ -9,6 +9,8 @@ from aips_path import AIPSPath
 
 from util import task_factory, normalise_target_name
 
+from util.image_util import save_image
+
 from katdal_adapter import (KatdalAdapter,
                             time_chunked_scans,
                             aips_ant_nr,
@@ -31,6 +33,6 @@ from uv_export import (uv_export,
 
 from aips_export import (export_calibration_solutions,
                          export_clean_components,
-                         export_fits)
+                         export_images)
 
 from continuum_pipeline import ContinuumPipeline
