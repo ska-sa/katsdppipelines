@@ -153,7 +153,7 @@ def zscale(image, maxsamples=100000, contrast=0.02, stretch=5.0,
     return z1, z2
 
 
-def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot',
+def save_image(image, filename, plane=1, drop_edge=0.125, cmap='afmhot',
                display_size=10., dpi=1000, **kwargs):
     """
     Write an image plane to a file using imshow with contrast scaling.
@@ -167,8 +167,10 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot',
     filename : str
         Disk location of output. Filename extension determins
         format of the output as for `matplotlib.pylab.savefig`
-    image_fraction : float
-        Fraction of pixels in x,y image dimensions to plot
+    plane : int
+        The image plane to plot
+    drop_edge : float
+        Fraction of pixels on each edge of the image to clip.
     cmap : str or :class:`matplotlib.colors.Colormap`
         Matplotlib style colormap to use (passed to `imshow`)
     display_size : float
@@ -185,8 +187,8 @@ def save_image(image, filename, plane=1, image_fraction=0.75, cmap='afmhot',
     xpix, ypix = imagedata.shape
 
     # Determine amount of image edge to remove
-    x_off = int(xpix * 0.5 * (1 - image_fraction))
-    y_off = int(ypix * 0.5 * (1 - image_fraction))
+    x_off = int(xpix * drop_edge)
+    y_off = int(ypix * drop_edge)
 
     # Cut the image to the desired display size
     x_keep = slice(x_off, xpix - x_off)
