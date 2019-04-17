@@ -27,6 +27,12 @@ log = logging.getLogger('katacomb')
 _DROP = {"Table name", "NumFields", "_status"}
 
 OFILE_SEPARATOR = '_'
+# Default image plane to write as FITS.
+IMG_PLANE = 1
+# File extensions for FITS, PNG and thumbnails
+FITS_EXT = '.fits'
+PNG_EXT = '.png'
+TNAIL_EXT = OFILE_SEPARATOR + 'tnail.png'
 
 
 def _condition(row):
@@ -35,6 +41,35 @@ def _condition(row):
     """
     return {k: v[0] if len(v) == 1 else np.array(v)
             for k, v in row.items() if k not in _DROP}
+
+
+def _integration_time(target, katds):
+    """ Work out integration time (in hours) on a target,
+        preserving katdal selection.
+        NOTE:
+        This is a plceholder until we can manipulate katdal
+        target selection as described in JIRA ticket SR-1732:
+        https://skaafrica.atlassian.net/browse/SR-1732
+    """
+    n_dumps = 0
+    for _, _, scan_targ in katds.scans():
+        if scan_targ == target:
+            n_dumps += len(katds.dumps)
+    return n_dumps * katds.dump_period / 3600.
+
+
+def _get_target_metadata(image, target, katds, filebase):
+    """ Populate target metadata dictionary. """
+    target_metadata = {}
+    target_metadata['FITSImageFileName'] = filebase + FITS_EXT
+    target_metadata['PNGImageFileName'] = filebase + PNG_EXT
+    target_metadata['PNGThumbNailFileName'] = filebase + TNAIL_EXT
+    target_metadata['IntegrationTime'] = _integration_time(target, katds)
+    image.GetPlane(None, [IMG_PLANE, 1, 1, 1, 1])
+    target_metadata['RMSNoise'] = image.FArray.RMS
+    target_metadata['RightAscension'] = str(target.radec()[0])
+    target_metadata['Declination'] = str(target.radec()[1])
+    return target_metadata
 
 
 def export_images(clean_files, target_indices, disk, kat_adapter):
@@ -53,7 +88,10 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
         Katdal Adapter
     """
 
-    used = []
+    all_targets = []
+    all_katpoint_targets = []
+    all_decra = []
+    target_metadata_dict = {}
     targets = kat_adapter.katdal.catalogue.targets
     for clean_file, ti in zip(clean_files, target_indices):
         try:
@@ -69,24 +107,30 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
 
                 # Get and sanitise target name
                 targ = targets[ti]
-                tn = normalise_target_name(targ.name, used)
-                used.append(tn)
+                tn = normalise_target_name(targ.name, all_targets)
 
                 # Output file name
                 out_strings = [cb_id, ap.label, tn, ap.aclass]
                 out_filebase = OFILE_SEPARATOR.join(filter(None, out_strings))
-                out_fitsfilename = out_filebase + '.fits'
 
-                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_fitsfilename)))
-                cf.writefits(disk, out_fitsfilename)
+                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filebase + FITS_EXT)))
+                cf.writefits(disk, out_filebase + FITS_EXT)
 
                 # Export PNG and a thumbnail PNG
-                out_pngfilename = pjoin(out_dir, out_filebase + '.png')
-                save_image(cf, out_pngfilename)
-                out_pngthumbnail = pjoin(out_dir, out_filebase + OFILE_SEPARATOR + 'tnail.png')
-                save_image(cf, out_pngthumbnail, display_size=5., dpi=100)
+                out_pngfile = pjoin(out_dir, out_filebase + PNG_EXT)
+                save_image(cf, out_pngfile, plane=IMG_PLANE)
+                out_pngthumbnail = pjoin(out_dir, out_filebase + TNAIL_EXT)
+                save_image(cf, out_pngthumbnail, plane=IMG_PLANE, display_size=5., dpi=100)
 
-                log.info('Write PNG image output: %s' % (pjoin(out_dir, out_filebase + '.png')))
+                log.info('Write PNG image output: %s' % (pjoin(out_dir, out_filebase + PNG_EXT)))
+
+                # Set up metadata for this target
+                target_metadata_dict[tn] = _get_target_metadata(cf, targ, kat_adapter.katdal,
+                                                                out_filebase)
+                all_targets.append(tn)
+                all_katpoint_targets.append(targ.description)
+                radec = np.rad2deg(targ.radec())
+                all_decra.append(','.join(map(str, radec[::-1])))
 
         except Exception as e:
             log.warn("Export of FITS and PNG images from %s failed.\n%s",
