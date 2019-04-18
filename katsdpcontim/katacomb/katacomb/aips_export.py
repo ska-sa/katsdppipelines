@@ -1,6 +1,5 @@
 from __future__ import with_statement
 
-import time
 import datetime
 import json
 import logging
@@ -37,6 +36,7 @@ FITS_EXT = '.fits'
 PNG_EXT = '.png'
 TNAIL_EXT = OFILE_SEPARATOR + 'tnail.png'
 METADATA_JSON = 'metadata.json'
+
 
 def _condition(row):
     """ Flatten singleton lists, drop book-keeping keys
@@ -84,8 +84,8 @@ def _metadata(katds, cb_id, targets, target_metadata, katpoint_targets, decra):
     product_type['ReductionName'] = 'Continuum Image'
     metadata['ProductType'] = product_type
     # Format time as required
-    time = datetime.datetime.utcfromtimestamp(katds.start_time)
-    metadata['StartTime'] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_time = datetime.datetime.utcfromtimestamp(katds.start_time)
+    metadata['StartTime'] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
     metadata['CaptureBlockID'] = cb_id
     metadata['ScheduleBlockIDCode'] = obs_params['sb_id_code']
     metadata['Description'] = obs_params['description'] + ': Continuum image'
@@ -96,6 +96,7 @@ def _metadata(katds, cb_id, targets, target_metadata, katpoint_targets, decra):
     metadata['KatpointTargets'] = katpoint_targets
     metadata['DecRa'] = decra
     return metadata
+
 
 def export_images(clean_files, target_indices, disk, kat_adapter):
     """
@@ -138,7 +139,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
                 out_strings = [cb_id, ap.label, tn, ap.aclass]
                 out_filebase = OFILE_SEPARATOR.join(filter(None, out_strings))
 
-                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_filebase + FITS_EXT)))
+                log.info('Write FITS image output: %s' % (out_filebase + FITS_EXT))
                 cf.writefits(disk, out_filebase + FITS_EXT)
 
                 # Export PNG and a thumbnail PNG
@@ -147,7 +148,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
                 out_pngthumbnail = pjoin(out_dir, out_filebase + TNAIL_EXT)
                 save_image(cf, out_pngthumbnail, plane=IMG_PLANE, display_size=5., dpi=100)
 
-                log.info('Write PNG image output: %s' % (pjoin(out_dir, out_filebase + PNG_EXT)))
+                log.info('Write PNG image output: %s' % (out_filebase + PNG_EXT))
 
                 # Set up metadata for this target
                 target_metadata_dict[tn] = _get_target_metadata(cf, targ, kat_adapter.katdal,
@@ -161,15 +162,17 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
             log.warn("Export of FITS and PNG images from %s failed.\n%s",
                      clean_file, str(e))
 
-    # Export metadata json 
+    # Export metadata json
     try:
         metadata = _metadata(kat_adapter.katdal, cb_id, all_targets, target_metadata_dict,
                              all_katpoint_targets, all_decra)
         metadata_file = pjoin(out_dir, METADATA_JSON)
         with open(metadata_file, 'w') as meta:
             json.dump(metadata, meta)
+        log.info('Write metadata JSON: %s' % (METADATA_JSON))
     except Exception as e:
             log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
+
 
 def export_calibration_solutions(uv_files, kat_adapter, telstate):
     """
