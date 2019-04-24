@@ -1,7 +1,7 @@
 #!groovy
 
 @Library('katsdpjenkins') _
-def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za kmcalpine@ska.ac.za'
+def maintainer = 'bmerry@ska.ac.za tmauch@ska.ac.za kmcalpine@ska.ac.za'
 if (!katsdp.isTegra()) {
     katsdp.setDependencies([
         'ska-sa/katsdpdockerbase/master',
