@@ -11,7 +11,7 @@ if (!katsdp.isTegra()) {
         'ska-sa/katsdpservices/master',
         'ska-sa/katsdptelstate/master'])
     maintainer = "$maintainer ruby@ska.ac.za"
-    katsdp.standardBuild(subdir: 'katsdpcal', docker_venv: true)
+    katsdp.standardBuild(subdir: 'katsdpcal', python3: true, python2: false, docker_venv: true)
     katsdp.standardBuild(subdir: 'katsdpcontim',
                          cuda: true,
                          label: 'cpu-avx2')
