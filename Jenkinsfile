@@ -1,6 +1,8 @@
 #!groovy
 
 @Library('katsdpjenkins') _
+katsdp.killOldJobs()
+
 def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za kmcalpine@ska.ac.za'
 if (!katsdp.isTegra()) {
     katsdp.setDependencies([
