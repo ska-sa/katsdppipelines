@@ -5,10 +5,11 @@ specifying any specific units.
 Most formulae are taken from SKA-TEL-SDP-0000003.
 """
 
-from __future__ import division, print_function, absolute_import
-import astropy.units as units
 import math
+
+import astropy.units as units
 import numpy as np
+
 import katsdpimager.types
 from . import clean, weight
 
@@ -24,7 +25,7 @@ def is_smooth(x):
     return x == 1
 
 
-class ArrayParameters(object):
+class ArrayParameters:
     """Physical attributes of an interferometric array."""
     def __init__(self, antenna_diameter, longest_baseline):
         assert antenna_diameter.unit.physical_type == 'length'
@@ -33,7 +34,7 @@ class ArrayParameters(object):
         self.longest_baseline = longest_baseline
 
 
-class ImageParameters(object):
+class ImageParameters:
     """Physical properties associated with an image. At present, only
     single-frequency images are supported.
 
@@ -141,8 +142,8 @@ def w_kernel_width(image_parameters, w, eps_w, antialias_width=0):
     wl = float(w / image_parameters.wavelength)
     # Squared size of the w part
     wk2 = 4 * fov**2 * (
-        (wl * image_parameters.image_size / 2)**2 +
-        wl**1.5 * fov / (2 * math.pi * eps_w))
+        (wl * image_parameters.image_size / 2)**2
+        + wl**1.5 * fov / (2 * math.pi * eps_w))
     return np.sqrt(wk2 + antialias_width**2)
 
 
@@ -171,7 +172,7 @@ def w_slices(image_parameters, max_w, eps_w, kernel_width, antialias_width=0):
     return hi
 
 
-class WeightParameters(object):
+class WeightParameters:
     """Parameters affecting imaging weight calculations.
 
     Parameters
@@ -197,7 +198,7 @@ class WeightParameters(object):
         return 'Image weights: ' + ans
 
 
-class GridParameters(object):
+class GridParameters:
     """Parameters affecting gridding algorithm.
 
     Parameters
@@ -240,7 +241,7 @@ Antialiasing support: {self.antialias_width} cells
 Kernel support: {self.kernel_width} cells""".format(self=self)
 
 
-class CleanParameters(object):
+class CleanParameters:
     def __init__(self, minor, loop_gain, major_gain, threshold, mode,
                  psf_cutoff, psf_limit, border):
         self.minor = minor

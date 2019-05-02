@@ -6,17 +6,18 @@ on correlation products while katsdpimager works on baselines, so some
 conversion is needed.
 """
 
-from __future__ import division, print_function, absolute_import
 import argparse
 import logging
 import itertools
 import math
+import urllib
+
 import katsdpimager.loader_core
 import katdal
 import numpy as np
 import astropy.units as units
+
 from . import polarization
-from six.moves import range, urllib
 
 
 _logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
                 idx = int(target)
             except ValueError:
                 for i, trg in enumerate(self._file.catalogue):
-                    if target in [trg.name] + trg.aliases:
+                    if target in [trg.name, trg.description] + trg.aliases:
                         return i
                 raise ValueError('Target {} not found in catalogue'.format(target))
             else:
@@ -84,7 +85,7 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
                 return idx
 
     def __init__(self, filename, options):
-        super(LoaderKatdal, self).__init__(filename, options)
+        super().__init__(filename, options)
         parser = argparse.ArgumentParser(
             prog='katdal options',
             usage='katdal options: [-i subarray=N] [-i spw=M] ...')
@@ -98,9 +99,17 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
                             help='Override reference antenna for identifying scans [array]')
         parser.add_argument('--apply-cal', type=str, default='all',
                             help='Comma-separated calibration solutions to pre-apply [%(default)s]')
+        parser.add_argument('--access-key', type=str, help='S3 access key')
+        parser.add_argument('--secret-key', type=str, help='S3 secret key')
         args = parser.parse_args(options)
 
-        self._file = katdal.open(filename, ref_ant=args.ref_ant, applycal=args.apply_cal)
+        open_args = dict(ref_ant=args.ref_ant, apply_cal=args.apply_cal)
+        if (args.access_key is not None) != (args.secret_key is not None):
+            raise ValueError('access-key and secret-key must be used together')
+        if args.access_key is not None:
+            open_args['credentials'] = (args.access_key, args.secret_key)
+
+        self._file = katdal.open(filename, **open_args)
         if args.subarray < 0 or args.subarray >= len(self._file.subarrays):
             raise ValueError('Subarray {} is out of range', args.subarray)
         if args.spw < 0 or args.spw >= len(self._file.spectral_windows):
@@ -163,7 +172,7 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
         # URL string won't end with .rdb.
         try:
             url = urllib.parse.urlsplit(filename)
-            return url.path.endswith('.rdb')
+            return url.scheme == 'redis' or url.path.endswith('.rdb')
         except ValueError:
             # Invalid URL, but could still be valid for another loader
             return False

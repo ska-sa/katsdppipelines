@@ -34,6 +34,8 @@ def config_validator():
         'aipsversion': {'type': 'string', 'default': '31DEC16'},
         'da00': {'type': 'string', 'default': pjoin(aipsroot, 'DA00')},
         'userno': {'type': 'integer', 'default': 105},
+        'output_id': {'type': 'string', 'default': ''},
+        'cb_id': {'type': 'string', 'default': ''}
     }
 
     return Validator(schema)
@@ -42,6 +44,7 @@ def config_validator():
 __cfg_lock = threading.Lock()
 __default_cfg = config_validator().validated({})
 __active_cfg = __default_cfg.copy()
+
 
 def set_config(cfg={}, **kwargs):
     # Set active configuration.

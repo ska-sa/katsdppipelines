@@ -1,7 +1,6 @@
 from collections import Counter
 import datetime
 import logging
-import os
 import time
 
 import attr
@@ -10,7 +9,8 @@ import numpy as np
 
 import UVDesc
 
-from katacomb import AIPSPath
+from katacomb import AIPSPath, normalise_target_name
+from katacomb.util import fmt_bytes
 
 from katdal.lazy_indexer import DaskLazyIndexer
 
@@ -18,6 +18,8 @@ log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
 MAX_AIPS_PATH_LEN = 10
+MAX_AIPS_STRING_LEN = 16
+
 
 def aips_timestamps(timestamps, midnight):
     """
@@ -39,6 +41,7 @@ def aips_timestamps(timestamps, midnight):
     """
     return (timestamps - midnight) / ONE_DAY_IN_SECONDS
 
+
 def katdal_timestamps(timestamps, midnight):
     """
     Given AIPS Julian day timestamps offset from midnight on the day
@@ -59,6 +62,7 @@ def katdal_timestamps(timestamps, midnight):
     """
     return midnight + (timestamps * ONE_DAY_IN_SECONDS)
 
+
 def katdal_ant_nr(ant_name):
     """
     Given a MeerKAT antenna name of the form 'mnnnp' where
@@ -77,8 +81,9 @@ def katdal_ant_nr(ant_name):
     """
     try:
         return int(ant_name[1:4])
-    except (ValueError, IndexError) as e:
+    except (ValueError, IndexError):
         raise ValueError("Invalid antenna name '%s'" % ant_name)
+
 
 def aips_ant_nr(ant_name):
     """
@@ -98,9 +103,11 @@ def aips_ant_nr(ant_name):
     """
     return katdal_ant_nr(ant_name) + 1
 
+
 def katdal_ant_name(aips_ant_nr):
     """ Return katdal antenna name, given the AIPS antenna number """
     return "m%03d" % (aips_ant_nr - 1)
+
 
 def aips_uvw(uvw, refwave):
     """
@@ -127,6 +134,7 @@ def aips_uvw(uvw, refwave):
     """
     return uvw / refwave
 
+
 def katdal_uvw(uvw, refwave):
     """
     Converts AIPS UVW coordinates in wavelengths *at the reference frequency*
@@ -147,11 +155,16 @@ def katdal_uvw(uvw, refwave):
     """
     return refwave * uvw
 
-def aips_source_name(name):
-    """ Truncates to length 16, padding with spaces """
-    return "{:16.16}".format(name)
 
-def aips_catalogue(katdata):
+def aips_source_name(name, used=[]):
+    """
+    Truncates to length 16, padding with spaces adding
+    repeat number to repeat names.
+    """
+    return normalise_target_name(name, used, max_length=MAX_AIPS_STRING_LEN)
+
+
+def aips_catalogue(katdata, nif):
     """
     Creates a catalogue of AIPS sources from :attribute:`katdata.catalogue`
     It resembles :attribute:`katdal.Dataset.catalogue`.
@@ -178,10 +191,15 @@ def aips_catalogue(katdata):
     the purposes of the continuum pipeline. See Bill Cotton's description
     of parameter and why it is unnecessary above each row entry in the code.
 
+    Relevant keys ('[IQUV]FLUX', 'LSRVEL', 'FREQOFF', 'RESTREQ') are repeated
+    `nif` times to allow equal subdivision of the band into IFs.
+
     Parameters
     ----------
     katdata : :class:`katdal.Dataset`
         katdal object
+    nif : int
+        Number of IFs to split band into
 
     Returns
     -------
@@ -192,6 +210,8 @@ def aips_catalogue(katdata):
     catalogue = []
 
     zero = np.asarray([0.0, 0.0])
+
+    used = []
 
     for aips_i, t in enumerate(katdata.catalogue.targets, 1):
         # Nothings have no position!
@@ -210,7 +230,7 @@ def aips_catalogue(katdata):
         aips_source_data = {
             # Fill in data derived from katpoint target
             'ID. NO.': [aips_i],
-            'SOURCE': [aips_source_name(t.name)],
+            'SOURCE': [aips_source_name(t.name, used)],
             'RAEPO': [ra],
             'DECEPO': [dec],
             'RAOBS': [raa],
@@ -237,10 +257,10 @@ def aips_catalogue(katdata):
             # calibration process from a standard calibrator.
             # Since this data will likely never be used to derive the
             # external calibration, they are unlikely to ever be used.
-            'IFLUX': [0.0],
-            'QFLUX': [0.0],
-            'VFLUX': [0.0],
-            'UFLUX': [0.0],
+            'IFLUX': [0.0] * nif,
+            'QFLUX': [0.0] * nif,
+            'VFLUX': [0.0] * nif,
+            'UFLUX': [0.0] * nif,
 
             # NOTE(bcotton)
             # LSRVEL, FREQOFF,RESTFREQ are used in making Doppler corrections
@@ -256,15 +276,15 @@ def aips_catalogue(katdata):
             # which all have very well known rest frequencies.
             # I don't know if MeerKAT plans online Doppler tracking which
             # I think is a bad idea anyway.
-            'LSRVEL': [0.0],    # Velocity
-            'FREQOFF': [0.0],   # Frequency Offset
-            'RESTFREQ': [0.0],  # Rest Frequency
+            'LSRVEL': [0.0] * nif,    # Velocity
+            'FREQOFF': [0.0] * nif,   # Frequency Offset
+            'RESTFREQ': [0.0] * nif,  # Rest Frequency
 
             # NOTE(bcotton)
             # BANDWIDTH was probably a mistake although, in principle,
             # it can be used to override the value in the FQ table.
             # I'm not sure if anything actually uses this.
-            'BANDWIDTH': [0.0], # Bandwidth of the SPW
+            'BANDWIDTH': [0.0],  # Bandwidth of the SPW
 
             # NOTE(bcotton)
             # PMRA, PMDEC are the proper motions of Galactic or extragalactic
@@ -292,9 +312,12 @@ def aips_catalogue(katdata):
             'QUAL': [0.0],      # Source Qualifier Number
         }
 
+        used.extend(aips_source_data['SOURCE'])
+
         catalogue.append(aips_source_data)
 
     return catalogue
+
 
 MEERKAT = 'MeerKAT'
 
@@ -342,6 +365,7 @@ class _KatdalTransformer(object):
     def __len__(self):
         return self.shape[0]
 
+
 class KatdalAdapter(object):
     """
     Adapts a :class:`katdal.DataSet` to look
@@ -358,11 +382,12 @@ class KatdalAdapter(object):
         Parameters
         ----------
         katds : :class:`katdal.DataSet`
-            An opened katdal dataset, probably an hdf5file
+            An opened katdal dataset.
         """
         self._katds = katds
         self._cache = {}
-        self._catalogue = aips_catalogue(katds)
+        self._nif = 1
+        self._catalogue = aips_catalogue(katds, self._nif)
 
         def _vis_xformer(index):
             """
@@ -373,7 +398,7 @@ class KatdalAdapter(object):
                 vis, weights, flags = self._katds.vis.get([self._katds.vis,
                                                            self._katds.weights,
                                                            self._katds.flags],
-                                                           np.s_[index, :, :])
+                                                          np.s_[index, :, :])
             else:
                 vis = self._katds.vis[index]
                 weights = self._katds.weights[index]
@@ -392,28 +417,30 @@ class KatdalAdapter(object):
             return aips_timestamps(self._katds.timestamps[index], self.midnight)
 
         # Convert katdal UVW into AIPS UVW
-        _u_xformer = lambda i: aips_uvw(self._katds.u[i], self.refwave)
-        _v_xformer = lambda i: aips_uvw(self._katds.v[i], self.refwave)
-        _w_xformer = lambda i: aips_uvw(self._katds.w[i], self.refwave)
+        def _u_xformer(i): return aips_uvw(self._katds.u[i], self.refwave)
+
+        def _v_xformer(i): return aips_uvw(self._katds.v[i], self.refwave)
+
+        def _w_xformer(i): return aips_uvw(self._katds.w[i], self.refwave)
 
         # Set up the actual transformers
         self._vis_xformer = _KatdalTransformer(_vis_xformer,
-                                            shape=lambda: self._katds.vis.shape,
-                                            dtype=self._katds.weights.dtype)
+                                               shape=lambda: self._katds.vis.shape,
+                                               dtype=self._katds.weights.dtype)
 
         self._time_xformer = _KatdalTransformer(_time_xformer,
-                                            shape=lambda: self._katds.timestamps.shape,
-                                            dtype=self._katds.timestamps.dtype)
+                                                shape=lambda: self._katds.timestamps.shape,
+                                                dtype=self._katds.timestamps.dtype)
 
         self._u_xformer = _KatdalTransformer(_u_xformer,
-                                            shape=lambda: self._katds.u.shape,
-                                            dtype=self._katds.u.dtype)
+                                             shape=lambda: self._katds.u.shape,
+                                             dtype=self._katds.u.dtype)
         self._v_xformer = _KatdalTransformer(_v_xformer,
-                                            shape=lambda: self._katds.u.shape,
-                                            dtype=self._katds.u.dtype)
+                                             shape=lambda: self._katds.u.shape,
+                                             dtype=self._katds.u.dtype)
         self._w_xformer = _KatdalTransformer(_w_xformer,
-                                            shape=lambda: self._katds.u.shape,
-                                            dtype=self._katds.u.dtype)
+                                             shape=lambda: self._katds.u.shape,
+                                             dtype=self._katds.u.dtype)
 
     @property
     def uv_timestamps(self):
@@ -478,7 +505,7 @@ class KatdalAdapter(object):
 
         if name is None:
             name = self._katds.obs_params.get('capture_block_id',
-                                             self._katds.experiment_id)
+                                              self._katds.experiment_id)
             if dtype == 'AIPS':
                 name = name[-MAX_AIPS_PATH_LEN:]
             elif dtype == "FITS":
@@ -489,8 +516,21 @@ class KatdalAdapter(object):
         return AIPSPath(name=name, **kwargs)
 
     def select(self, **kwargs):
-        """ Proxies :meth:`katdal.DataSet.select` """
-        return self._katds.select(**kwargs)
+        """
+        Proxies :meth:`katdal.select` and adds optional `nif` selection.
+
+        Parameters
+        ----------
+        nif (optional): int
+            Number of AIPSish IFs of equal frequency width to split the band into.
+        **kwargs (optional): dict
+            :meth:`katdal.select` arguments. See katdal documentation for information
+        """
+        nif = kwargs.pop('nif', self.nif)
+        result = self._katds.select(**kwargs)
+        # Make sure any possible new channel range in selection is permitted
+        self.nif = nif
+        return result
 
     @property
     def size(self):
@@ -580,16 +620,6 @@ class KatdalAdapter(object):
         """
         return datetime.date.today().strftime('%Y-%m-%d')
 
-    @property
-    def observer(self):
-        """
-        Returns
-        -------
-        str
-            The observer
-        """
-        return self._katds.observer
-
     """ Map correlation characters to correlation id """
     CORR_ID_MAP = {
         ('h', 'h'): 0,
@@ -641,7 +671,7 @@ class KatdalAdapter(object):
                 return self.aips_ant1_ix * 256.0 + self.aips_ant2_ix
 
         # { name : antenna } mapping
-        antenna_map = { a.name : a for a in self._katds.ants }
+        antenna_map = {a.name: a for a in self._katds.ants}
         products = []
 
         for a1_corr, a2_corr in self._katds.corr_products:
@@ -714,16 +744,24 @@ class KatdalAdapter(object):
     @property
     def nif(self):
         """
-        The number of spectral windows, hard-coded to one,
-        since :class:`katdal.DataSet` only supports selecting
-        by one spectral window at a time.
+        The number of spectral widows to use in the AIPS uv
+        data. Must equally subdivide the number of frequency channels
+        currently selected.
 
         Returns
         -------
         int
             The number of spectral windows
         """
-        return 1
+        return self._nif
+
+    @nif.setter
+    def nif(self, numif):
+        if self.nchan % numif != 0:
+            raise ValueError('Number of requested IFs (%d) does not divide number of channels (%d)' % (numif, self.nchan))
+        else:
+            self._nif = numif
+            self._catalogue = aips_catalogue(self._katds, numif)
 
     @property
     def channel_freqs(self):
@@ -809,12 +847,12 @@ class KatdalAdapter(object):
 
             # Defaults for the rest
             'POLAB': [0.0],
-            'POLCALA': [0.0, 0.0],
-            'POLCALB': [0.0, 0.0],
+            'POLCALA': [0.0, 0.0] * self.nif,
+            'POLCALB': [0.0, 0.0] * self.nif,
             'POLTYA': ['X'],
             'POLTYB': ['Y'],
             'STAXOF': [0.0],
-            'BEAMFWHM': [0.0],
+            'BEAMFWHM': [0.0] * self.nif,
             'ORBPARM': [],
             'MNTSTA': [0]
         } for a in sorted(self._katds.ants)]
@@ -895,17 +933,17 @@ class KatdalAdapter(object):
         """
 
         spw = self._katds.spectral_windows[self._katds.spw]
-        bandwidth = abs(self.chinc) * self.nchan
+        bandwidth = abs(self.chinc) * self.nchan / self.nif
 
         return [{
             # Fill in data from MeerKAT spectral window
             'FRQSEL': [self.frqsel],        # Frequency setup ID
-            'IF FREQ': [0.0],
-            'CH WIDTH': [self.chinc],
+            'IF FREQ': [if_num * bandwidth for if_num in range(self.nif)],
+            'CH WIDTH': [self.chinc] * self.nif,
             # Should be 'BANDCODE' according to AIPS MEMO 117!
             'RXCODE': [spw.band],
-            'SIDEBAND': [spw.sideband],
-            'TOTAL BANDWIDTH': [bandwidth],
+            'SIDEBAND': [spw.sideband] * self.nif,
+            'TOTAL BANDWIDTH': [bandwidth] * self.nif,
         }]
 
     def fits_descriptor(self):
@@ -917,12 +955,12 @@ class KatdalAdapter(object):
         #   XX: -5.0, YY: -6.0, XY: -7.0, YX: -8.0,
         #   I: 1, Q: 2, U: 3, V: 4 }
         stokes_crval = 1.0 if nstokes == 1 else -5.0
-        stokes_cdelt = -1.0 # cdelt is always -1.0
+        stokes_cdelt = -1.0  # cdelt is always -1.0
 
         return {
             'naxis': 6,
             'ctype': ['COMPLEX', 'STOKES', 'FREQ', 'IF', 'RA', 'DEC'],
-            'inaxes': [3, self.nstokes, self.nchan, self.nif, 1, 1],
+            'inaxes': [3, self.nstokes, self.nchan / self.nif, self.nif, 1, 1],
             'cdelt': [1.0, stokes_cdelt, self.chinc, 1.0, 0.0, 0.0],
             'crval': [1.0, stokes_crval, self.reffreq, 1.0, 0.0, 0.0],
             'crpix': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
@@ -936,26 +974,26 @@ class KatdalAdapter(object):
         dict
         """
         return {
-            "AIPS AN" : {
-                "attach" : {'version': 1},
-                "keywords" : self.uv_antenna_keywords,
+            "AIPS AN": {
+                "attach": {'version': 1, 'numIF': self.nif},
+                "keywords": self.uv_antenna_keywords,
                 "rows": self.uv_antenna_rows,
                 "write": True,
             },
-            "AIPS FQ" : {
-                "attach" : {'version': 1, 'numIF': 1 },
-                "keywords" : self.uv_spw_keywords,
+            "AIPS FQ": {
+                "attach": {'version': 1, 'numIF': self.nif},
+                "keywords": self.uv_spw_keywords,
                 "rows": self.uv_spw_rows,
                 "write": True,
             },
-            "AIPS SU" : {
-                "attach" : {'version': 1},
-                "keywords" : self.uv_source_keywords,
+            "AIPS SU": {
+                "attach": {'version': 1, 'numIF': self.nif},
+                "keywords": self.uv_source_keywords,
                 "rows": self.uv_source_rows,
                 "write": True,
             },
-            "AIPS NX" : {
-                "attach" : {'version': 1},
+            "AIPS NX": {
+                "attach": {'version': 1},
             },
         }
 
@@ -1040,6 +1078,7 @@ class KatdalAdapter(object):
 
         return desc
 
+
 def time_chunked_scans(kat_adapter, time_step=2):
     """
     Generator returning vibility data each scan, chunked
@@ -1076,7 +1115,8 @@ def time_chunked_scans(kat_adapter, time_step=2):
     nstokes = kat_adapter.nstokes
 
     # Lexicographically sort correlation products on (a1, a2, cid)
-    sort_fn = lambda x: (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+    def sort_fn(x): return (cp[x].ant1_ix, cp[x].ant2_ix, cp[x].cid)
+
     cp_argsort = np.asarray(sorted(range(len(cp)), key=sort_fn))
     corr_products = np.asarray([cp[i] for i in cp_argsort])
 
@@ -1126,7 +1166,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
         _, nchan, ncorrprods = kat_adapter.shape
         ntime = time_end - time_start
 
-        chunk_shape = (ntime,nchan,ncorrprods)
+        chunk_shape = (ntime, nchan, ncorrprods)
         cplx_size = np.dtype('complex64').itemsize
         vis_size_estimate = np.product(chunk_shape, dtype=np.int64)*cplx_size
 
@@ -1134,8 +1174,8 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
         if vis_size_estimate > FOUR_GB:
             log.warn("Visibility chunk '%s' is greater than '%s'. "
-                    "Check that sufficient memory is available"
-                    % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
+                     "Check that sufficient memory is available"
+                     % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
 
         # Retrieve scan data (ntime, nchan, nbl*nstokes)
         # nbl*nstokes is all mixed up at this point
@@ -1167,12 +1207,12 @@ def time_chunked_scans(kat_adapter, time_step=2):
         # (2) reshape to include the full inaxes shape,
         #     including singleton nif, ra and dec dimensions
         aips_vis = (aips_vis.transpose(0, 2, 1, 3, 4)
-                  .reshape((ntime, nbl,) + inaxes))
+                    .reshape((ntime, nbl,) + inaxes))
 
         # Select UVW coordinate of each baseline
-        aips_u = aips_u[:,bl_argsort]
-        aips_v = aips_v[:,bl_argsort]
-        aips_w = aips_w[:,bl_argsort]
+        aips_u = aips_u[:, bl_argsort]
+        aips_v = aips_v[:, bl_argsort]
+        aips_w = aips_w[:, bl_argsort]
 
         assert aips_u.shape == (ntime, nbl)
         assert aips_v.shape == (ntime, nbl)
@@ -1180,8 +1220,8 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
         # Yield this scan's data
         return (aips_u, aips_v, aips_w,
-                   aips_time, aips_baselines,
-                   aips_vis)
+                aips_time, aips_baselines,
+                aips_vis)
 
     # Iterate through scans
     for si, state, target in kat_adapter.scans():
@@ -1191,7 +1231,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
         # Create a generator returning data
         # associated with chunks of time data.
         data_gen = (_get_data(ts, min(ts+time_step, ntime)) for ts
-                                in six.moves.range(0, ntime, time_step))
+                    in six.moves.range(0, ntime, time_step))
 
         # Yield scan variables and the generator
         yield si, state, target, data_gen

@@ -1,16 +1,16 @@
 """Data loading backend for CASA Measurement Sets."""
 
-from __future__ import division, print_function, absolute_import
 import argparse
 import logging
-import katsdpimager.loader_core
+
 import casacore.tables
 import casacore.quanta
 import numpy as np
 import astropy.units as units
 import astropy.time
 import astropy.coordinates
-from six.moves import range
+
+import katsdpimager.loader_core
 
 
 _logger = logging.getLogger(__name__)
@@ -210,7 +210,7 @@ def _fix_cache_size(table, column):
 
 class LoaderMS(katsdpimager.loader_core.LoaderBase):
     def __init__(self, filename, options):
-        super(LoaderMS, self).__init__(filename, options)
+        super().__init__(filename, options)
         parser = argparse.ArgumentParser(
             prog='Measurement set options',
             usage='Measurement set options: [-i data=COLUMN] [-i field=FIELD] ...')
@@ -220,7 +220,7 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
                             help='Data description ID to image [%(default)s]')
         parser.add_argument('--field', type=int, default=0,
                             help='Field to image [%(default)s]')
-        parser.add_argument('--pol-frame', choices=['sky', 'feed'],
+        parser.add_argument('--pol-frame', choices=['sky', 'feed'], default='sky',
                             help='Reference frame for polarization [%(default)s]')
         parser.add_argument('--uvw', choices=['casa', 'strict'], default='casa',
                             help='UVW sign convention [%(default)s]')
@@ -367,8 +367,8 @@ class LoaderMS(katsdpimager.loader_core.LoaderBase):
                     pointing_altaz = pointing_cirs.transform_to(altaz_frame)
                     pa = pointing_altaz.position_angle(pole_altaz)
                     feed_angle[:, i] = pa + self._antenna_angle[i]
-                feed_angle1 = feed_angle[inverse, antenna1]
-                feed_angle2 = feed_angle[inverse, antenna2]
+                feed_angle1 = feed_angle[inverse, antenna1].astype(np.float32)
+                feed_angle2 = feed_angle[inverse, antenna2].astype(np.float32)
             uvw = _getcol(self._main, 'UVW', start, nrows, 'm', units.m, 'uvw')[valid, ...]
             if not self._strict_uvw:
                 uvw = -uvw

@@ -2,20 +2,18 @@ import attr
 import collections
 import logging
 
-import six
-
 import History
 import InfoList
 import Table
 
 from katacomb import handle_obit_err
 from katacomb.obit_types import (OBIT_TYPE_ENUM,
-                                     OBIT_TYPE,
-                                     OBIT_INTS,
-                                     OBIT_FLOATS,
-                                     OBIT_STRINGS,
-                                     OBIT_BOOLS,
-                                     OBIT_BITS)
+                                 OBIT_TYPE,
+                                 OBIT_INTS,
+                                 OBIT_FLOATS,
+                                 OBIT_STRINGS,
+                                 OBIT_BOOLS,
+                                 OBIT_BITS)
 
 log = logging.getLogger('katacomb')
 
@@ -625,6 +623,7 @@ class AIPSTable(object):
 
     def __exit__(self, etype, evalue, etraceback):
         return self.close()
+
 
 class AIPSHistory(object):
     """

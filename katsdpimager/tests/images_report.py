@@ -4,7 +4,6 @@
 Creates an HTML page showing the images written by the Jenkins script.
 """
 
-from __future__ import division, print_function, absolute_import
 import argparse
 import os
 import os.path
@@ -16,8 +15,6 @@ import timeit
 import io
 import glob
 from contextlib import closing
-
-from six.moves import range
 
 from mako.template import Template
 import matplotlib
@@ -32,7 +29,7 @@ MODE_DIRTY = 'Dirty'
 MODES = [MODE_CLEAN, MODE_DIRTY]
 
 
-class BuildInfo(object):
+class BuildInfo:
     """Runs a command and stores the output and exit code. The output is also
     echoed to stdout.
     """
@@ -42,16 +39,18 @@ class BuildInfo(object):
         output = io.BytesIO()
         self.returncode = 0
         for cmd in cmds:
+            sys.stdout.flush()
             child = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             # The child.stdout seems to do full reads, even though it is supposedly unbuffered
             stdout = io.open(child.stdout.fileno(), mode='rb', buffering=0, closefd=False)
+            sys_stdout = io.open(sys.stdout.fileno(), mode='wb', buffering=0, closefd=False)
             while True:
                 data = stdout.read(256)
                 if not data:
                     break
                 output.write(data)
-                sys.stdout.write(data)
-                sys.stdout.flush()
+                sys_stdout.write(data)
+                sys_stdout.flush()
             self.returncode = child.wait()
             if self.returncode != 0:
                 logging.warning("Process failed with exit code %s", self.returncode)
@@ -62,7 +61,7 @@ class BuildInfo(object):
         logging.info("Elapsed time %.3f", self.elapsed)
 
 
-class Image(object):
+class Image:
     def __init__(self, name, filebase,
                  clean_fits_pattern, dirty_fits_pattern, cmd_patterns,
                  clean_globs=[]):
@@ -254,8 +253,8 @@ def main():
                 '-weight', 'natural',
                 '-size', '{}'.format(pixels), '{}'.format(pixels),
                 '-scale', '{}asec'.format(pixel_size), '-pol', '${",".join(stokes.lower())}',
-                '-channelsout', '${len(channels)}',
-                '-channelrange', '${channels[0]}', '${channels[-1] + 1}',
+                '-channels-out', '${len(channels)}',
+                '-channel-range', '${channels[0]}', '${channels[-1] + 1}',
                 '-name', '${output_dir}/wsclean', '${ms}']],
               clean_globs=['wsclean-*.fits']),
         Image('lwimager', 'lwimager', 'lwimager.fits', 'lwimager-dirty.fits',

@@ -3,6 +3,7 @@ import contextlib
 import functools
 import logging
 import os
+import re
 import sys
 
 from pretty import pretty
@@ -40,6 +41,7 @@ OBIT_TO_LOG = {
 
 OBIT_LOG_PREAMBLE_LEN = 23
 
+
 @contextlib.contextmanager
 def log_obit_err(logger):
     """ Trap Obit log messages written to stdout and send them to logger"""
@@ -68,7 +70,6 @@ def log_obit_err(logger):
         except KeyError:
             log.info(msg)
 
-
     original = sys.stdout
     logger.write = parse_obit_message
     # The go() method inside ObitTask needs sys.stdout.isatty
@@ -78,19 +79,19 @@ def log_obit_err(logger):
     sys.stdout = original
 
 
-def post_process_args(args, kat_adapter):
+def post_process_args(args, kat_ds):
     """
     Perform post-processing on command line arguments.
 
     1. Capture Block ID set to katdal experiment ID if not present or
-    found in kat_adaptor.obs_params.
+    found in kat_ds.obs_params.
 
     Parameters
     ----------
     args : object
         Arguments created by :meth:`argparse.ArgumentParser.parse_args()`
-    kat_adapter : :class:`katacomb.KatdalAdapter`
-        Katdal Adapter
+    kat_ds : :class:`katdal`
+        Katdal object
 
     Returns
     -------
@@ -101,14 +102,14 @@ def post_process_args(args, kat_adapter):
     # Set capture block ID to experiment ID if not set or found in obs_params
     if args.capture_block_id is None:
         try:
-            args.capture_block_id = kat_adapter.obs_params['capture_block_id']
+            args.capture_block_id = kat_ds.obs_params['capture_block_id']
         except KeyError:
-            args.capture_block_id = kat_adapter.experiment_id
+            args.capture_block_id = kat_ds.experiment_id
 
             log.warn("No capture block ID was specified or "
                      "found in katdal. "
                      "Using experiment_id '%s' instead.",
-                     kat_adapter.experiment_id)
+                     kat_ds.experiment_id)
 
     return args
 
@@ -278,7 +279,7 @@ def log_exception(logger):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except:
+            except Exception:
                 logger.exception("Exception in '%s'", func.__name__)
                 raise
 
@@ -407,15 +408,52 @@ def setup_aips_disks():
     Creates a SPACE file within the aips disks.
     """
     cfg = kc.get_config()
-    for url, aipsdir in cfg['aipsdirs'] + cfg['fitsdirs']:
+    for url, aipsdir in cfg['aipsdirs']:
         # Create directory if it doesn't exist
         if not os.path.exists(aipsdir):
             log.info("Creating AIPS Disk '%s'", aipsdir)
             os.makedirs(aipsdir)
-
-    for url, aipsdir in cfg['aipsdirs']:
         # Create SPACE file
         space = os.path.join(aipsdir, 'SPACE')
 
         with open(space, 'a'):
             os.utime(space, None)
+
+    for url, fitsdir in cfg['fitsdirs']:
+        # Create directory if it doesn't exist
+        if not os.path.exists(fitsdir):
+            log.info("Creating FITS Disk '%s'", fitsdir)
+            os.makedirs(fitsdir)
+
+
+def normalise_target_name(name, used=[], max_length=None):
+    """
+        Check that name[:max_length] is not in used and
+        append a integer suffix if it is.
+    """
+    def generate_name(name, i, ml):
+        # Create suffix string
+        i_name = '' if i is 0 else '_' + str(i)
+        # Return concatenated string if ml is not set
+        if ml is None:
+            ml = len(name) + len(i_name)
+            t_name = name
+        else:
+            # Work out amount of name to drop
+            length = len(name) + len(i_name) - ml
+            t_name = name if length <= 0 else name[:-length]
+        # If the length of i_name is greater than ml
+        # just warn and revert to straight append
+        if len(i_name) >= ml:
+            log.warn('Too many repetitions of name %s.' % name)
+            t_name = name
+        o_name = ''.join(filter(None, [t_name, i_name]))
+        return '{:{ml}.{ml}}'.format(o_name, ml=ml)
+
+    name = re.sub(r'[^-A-Za-z0-9_]', '_', name)
+    i = 0
+    test_name = generate_name(name, i, max_length)
+    while test_name in used:
+        i += 1
+        test_name = generate_name(name, i, max_length)
+    return test_name
