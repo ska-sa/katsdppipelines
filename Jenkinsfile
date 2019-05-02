@@ -3,7 +3,7 @@
 @Library('katsdpjenkins') _
 katsdp.killOldJobs()
 
-def maintainer = 'bmerry@ska.ac.za sperkins@ska.ac.za kmcalpine@ska.ac.za'
+def maintainer = 'bmerry@ska.ac.za tmauch@ska.ac.za kmcalpine@ska.ac.za'
 if (!katsdp.isTegra()) {
     katsdp.setDependencies([
         'ska-sa/katsdpdockerbase/master',
@@ -25,6 +25,7 @@ katsdp.standardBuild(
     subdir: 'katsdpimager',
     cuda: true,
     python3: true,
+    python2: false,
     prepare_timeout: [time: 90, unit: 'MINUTES'],
     test_timeout: [time: 90, unit: 'MINUTES'])
 katsdp.mail(maintainer)

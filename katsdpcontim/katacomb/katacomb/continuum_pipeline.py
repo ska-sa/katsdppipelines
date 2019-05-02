@@ -12,10 +12,12 @@ from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       uv_history_obs_description,
                       uv_history_selection,
                       export_calibration_solutions,
-                      export_clean_components)
+                      export_clean_components,
+                      export_images)
 from katacomb.aips_path import next_seq_nr
 from katacomb.util import (fractional_bandwidth,
                            log_obit_err)
+import katacomb.configuration as kc
 
 log = logging.getLogger('katacomb')
 
@@ -75,21 +77,24 @@ class ContinuumPipeline(object):
         self.uvblavg_params = kwargs.pop("uvblavg_params", {})
         self.mfimage_params = kwargs.pop("mfimage_params", {})
         self.clobber = kwargs.pop("clobber", set(['scans', 'avgscans']))
-
+        # Use highest numbered FITS disk for FITS output.
+        self.odisk = len(kc.get_config()['fitsdirs'])
         self.__merge_scans = kwargs.get("__merge_scans", False)
 
     def execute(self):
         """ Execute the Continuum Pipeline """
         with obit_context():
             try:
+                uv_files, clean_files = [], []
                 result_tuple = self._export_and_merge_scans()
                 uv_sources, target_indices, uv_files, clean_files = result_tuple
-
                 self._run_mfimage(uv_sources, uv_files, clean_files)
 
                 export_calibration_solutions(uv_files, self.ka, self.telstate)
                 export_clean_components(clean_files, target_indices,
                                         self.ka, self.telstate)
+                export_images(clean_files, target_indices,
+                            self.odisk, self.ka)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
                 raise
@@ -280,14 +285,17 @@ class ContinuumPipeline(object):
 
         target_indices = self.ka.target_indices[:]
 
+        # Use output_id for labels
+        label = kc.get_config()['output_id']
+
         # Source names
         uv_sources = [s["SOURCE"][0].strip() for s in self.ka.uv_source_rows]
 
-        uv_files = [AIPSPath(name=s, disk=self.disk,
+        uv_files = [AIPSPath(name=s, disk=self.disk, label=label,
                     aclass=UV_CLASS, atype="UV")
                     for s in uv_sources]
 
-        clean_files = [AIPSPath(name=s, disk=self.disk,
+        clean_files = [AIPSPath(name=s, disk=self.disk, label=label,
                        aclass=IMG_CLASS, atype="MA")
                        for s in uv_sources]
 

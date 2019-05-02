@@ -3,17 +3,14 @@ import logging
 import katdal
 import katpoint
 import numpy as np
-import six
 
-import UVDesc
 import OTObit
 
-from katacomb import uv_factory
-from katacomb.katdal_adapter import (aips_source_name,
-                                        time_chunked_scans)
+from katacomb.katdal_adapter import time_chunked_scans
 from katacomb.util import fmt_bytes
 
 log = logging.getLogger('katacomb')
+
 
 def _write_buffer(uvf, firstVis, numVisBuff, lrec):
     """
@@ -46,7 +43,7 @@ def _write_buffer(uvf, firstVis, numVisBuff, lrec):
 
     nbytes = numVisBuff * lrec * np.dtype(np.float32).itemsize
     log.debug("Writing '%s' visibilities. firstVis=%s numVisBuff=%s",
-                            fmt_bytes(nbytes), firstVis, numVisBuff)
+              fmt_bytes(nbytes), firstVis, numVisBuff)
 
     # If firstVis is passed through to this method, it uses FORTRAN
     # indexing (1)
@@ -54,6 +51,7 @@ def _write_buffer(uvf, firstVis, numVisBuff, lrec):
 
     # Pass through new firstVis and 0 numVisBuff
     return firstVis + numVisBuff, 0
+
 
 def uv_history_obs_description(kat_adapter, uvf):
     """
@@ -78,6 +76,7 @@ def uv_history_obs_description(kat_adapter, uvf):
     uvf.append_history("katdal.__version__=%s" % katdal.__version__)
     uvf.append_history("katpoint.__version__=%s" % katpoint.__version__)
 
+
 def uv_history_selection(selection, uvf):
     """
     Record katdal data selection parameters in AIPS history
@@ -94,8 +93,9 @@ def uv_history_selection(selection, uvf):
     uvf.append_history("KATDAL SELECTION PARAMETERS")
     uvf.append_history("="*70)
 
-    for k,v in selection.items():
-        uvf.append_history("%s=%s" % (k,v))
+    for k, v in selection.items():
+        uvf.append_history("%s=%s" % (k, v))
+
 
 def uv_export(kat_adapter, uvf):
     """
@@ -151,7 +151,7 @@ def uv_export(kat_adapter, uvf):
         nbytes = fmt_bytes(kat_adapter.size)
 
         log.info("'%s - %s' 'scan % 4d' writing '%s' of source '%s'",
-                                    start, end, si, nbytes, source_name)
+                 start, end, si, nbytes, source_name)
 
         # Retrieve observational data from the data generator
         for u, v, w, time, baselines, vis in data_gen:
@@ -206,4 +206,3 @@ def uv_export(kat_adapter, uvf):
     uvf.tables["AIPS NX"].rows = nx_rows
     uvf.tables["AIPS NX"].write()
     uvf.attach_CL_from_NX_table(kat_adapter.max_antenna_number)
-

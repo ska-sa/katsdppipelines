@@ -8,12 +8,14 @@ bs4 == 0.0.1
 cerberus == 1.1
 certifi
 chardet
+cycler
 dask
 defusedxml
 docutils
 enum34
 fakeredis
 funcsigs == 0.4
+functools32
 future
 futures
 h5py
@@ -23,6 +25,7 @@ ipaddress
 jmespath == 0.9.3
 katversion
 llvmlite
+matplotlib
 msgpack
 netifaces
 nose
@@ -33,9 +36,11 @@ pretty == 0.1
 py == 1.5.2
 pyephem
 pygelf
+pyparsing
 pytest == 3.3.2
 python-dateutil
 python-lzf
+pytz
 PyYAML == 3.13
 rdbtools
 redis
@@ -45,6 +50,7 @@ ruamel.ordereddict == 0.4.13
 scipy
 singledispatch
 six
+subprocess32
 toolz
 tornado
 trollius

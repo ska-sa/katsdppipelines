@@ -1,5 +1,4 @@
 FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-build:latest as build
-MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
 USER root
@@ -62,9 +61,9 @@ ENV OBIT_REPO https://github.com/bill-cotton/Obit/trunk/ObitSystem
 ENV OBIT_BASE_PATH=/home/kat/Obit
 ENV OBIT=/home/kat/Obit/ObitSystem/Obit
 
-# Retrieve Obit r592
+# Retrieve Obit r598
 RUN mkdir -p $OBIT_BASE_PATH && \
-    svn co -q -r 592 $OBIT_REPO ${OBIT_BASE_PATH}/ObitSystem
+    svn co -q -r 598 $OBIT_REPO ${OBIT_BASE_PATH}/ObitSystem
 
 WORKDIR $OBIT_BASE_PATH
 
@@ -124,7 +123,6 @@ RUN pip install $KATHOME/src/katacomb
 #######################################################################
 
 FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-runtime:latest
-MAINTAINER sperkins@ska.ac.za
 
 # Switch to root for package install
 USER root

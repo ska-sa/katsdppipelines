@@ -4,6 +4,7 @@ import unittest
 from katacomb import obit_context, uv_factory, AIPSPath
 from katacomb.aips_path import parse_aips_path, next_seq_nr
 
+
 @contextmanager
 def file_cleaner(paths):
     """
@@ -24,6 +25,7 @@ def file_cleaner(paths):
             with uv_factory(aips_path=path, mode="w") as f:
                 f.Zap()
 
+
 class TestAipsPath(unittest.TestCase):
     """
     Test AIPS path functionalityy
@@ -34,32 +36,25 @@ class TestAipsPath(unittest.TestCase):
 
         # Create two AIPS paths, one with with sequence number 10 and 11
         p1 = AIPSPath(name='test', disk=1, aclass="klass", seq=10)
-        p2  = p1.copy(seq=p1.seq+1)
+        p2 = p1.copy(seq=p1.seq+1)
 
-        with obit_context(), file_cleaner([p1, p2]) as fc:
+        with obit_context(), file_cleaner([p1, p2]):
             # Create the first file and test highest sequence number
-            with uv_factory(aips_path=p1, mode="w") as uvc1: pass
+            with uv_factory(aips_path=p1, mode="w"):
+                pass
             self.assertEquals(next_seq_nr(p1), p1.seq+1)
 
             # Create the second file and test highest sequence number
-            with uv_factory(aips_path=p2, mode="w") as uvc2: pass
+            with uv_factory(aips_path=p2, mode="w"):
+                pass
             self.assertEquals(next_seq_nr(p1), p1.seq+2)
             self.assertEquals(next_seq_nr(p2), p2.seq+1)
 
-
-
     def test_parse_aips_path(self):
         """ Test AIPS path parsing """
-        default_disk = 1
-        default_class = "aips"
-        default_seq = 1
-        default_atype = "UV"
-        default_label = "katuv"
-        default_dtype = "AIPS"
-
         attrs = ["name", "disk", "aclass", "seq", "atype", "label", "dtype"]
-        test_values = ["plort",10,"klass",2,"UV","alabel","AIPS"]
-        defaults = ["plort",1,"aips",1,"UV","katuv", "AIPS"]
+        test_values = ["plort", 10, "klass", 2, "UV", "alabel", "AIPS"]
+        defaults = ["plort", 1, "aips", 1, "UV", "katuv", "AIPS"]
 
         def _test_wrapper(elements):
             """ Wrapper for testing multiple instances """
@@ -74,9 +69,8 @@ class TestAipsPath(unittest.TestCase):
             self.assertEquals([getattr(path, a) for a in attrs], expected)
 
         # Iterate through available tuple permutations
-        for i in range(1,len(test_values)):
+        for i in range(1, len(test_values)):
             _test_wrapper(test_values[0:i])
-
 
     def test_parse_aips_path_fail(self):
         """ Test for an invalid tuple """

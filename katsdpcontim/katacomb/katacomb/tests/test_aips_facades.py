@@ -6,18 +6,16 @@ import katpoint
 import numpy as np
 
 from katacomb.mock_dataset import (MockDataSet,
-                    ANTENNA_DESCRIPTIONS,
-                    DEFAULT_METADATA,
-                    DEFAULT_SUBARRAYS,
-                    DEFAULT_TIMESTAMPS)
+                                   ANTENNA_DESCRIPTIONS,
+                                   DEFAULT_TIMESTAMPS)
 
 from katacomb import (AIPSPath,
-                    KatdalAdapter,
-                    obit_context,
-                    uv_factory,
-                    uv_export)
+                      KatdalAdapter,
+                      obit_context,
+                      uv_factory)
 
 from katacomb.tests.test_aips_path import file_cleaner
+
 
 class TestAipsFacades(unittest.TestCase):
     """
@@ -36,28 +34,28 @@ class TestAipsFacades(unittest.TestCase):
         nchan = 4
 
         spws = [{
-            'centre_freq' : .856e9 + .856e9 / 2.,
-            'num_chans' : nchan,
-            'channel_width' : .856e9 / nchan,
-            'sideband' : 1,
-            'band' : 'L',
+            'centre_freq': .856e9 + .856e9 / 2.,
+            'num_chans': nchan,
+            'channel_width': .856e9 / nchan,
+            'sideband': 1,
+            'band': 'L',
         }]
 
         # Use first four antenna to create the subarray
-        subarrays = [{'antenna' : ANTENNA_DESCRIPTIONS[:4]}]
+        subarrays = [{'antenna': ANTENNA_DESCRIPTIONS[:4]}]
 
         # Pick 5 random stars as targets
         targets = [katpoint.Target("%s, star" % t) for t in
-                                random.sample(stars.keys(), 5)]
+                   random.sample(stars.keys(), 5)]
 
         # track for 5 on each target
         slew_track_dumps = (('track', 5),)
         scans = [(e, nd, t) for t in targets
-                        for e, nd in slew_track_dumps]
+                 for e, nd in slew_track_dumps]
 
         # Create Mock dataset and wrap it in a KatdalAdapter
         KA = KatdalAdapter(MockDataSet(timestamps=DEFAULT_TIMESTAMPS,
-                subarrays=subarrays, spws=spws, dumps=scans))
+                           subarrays=subarrays, spws=spws, dumps=scans))
 
         with obit_context(), file_cleaner(uv_file_path):
             # Create the UV file
@@ -69,8 +67,6 @@ class TestAipsFacades(unittest.TestCase):
 
                 uv_desc = uvf.Desc.Dict
 
-                # Number of random parameters
-                nrparm = uv_desc['nrparm']
                 # Length of visibility buffer record
                 lrec = uv_desc['lrec']
                 # Random parameter indices
@@ -99,8 +95,6 @@ class TestAipsFacades(unittest.TestCase):
 
                 uv_desc = uvf.Desc.Dict
 
-                # Number of random parameters
-                nrparm = uv_desc['nrparm']
                 # Length of visibility buffer record
                 lrec = uv_desc['lrec']
                 nvis = uv_desc['nvis']
@@ -120,6 +114,7 @@ class TestAipsFacades(unittest.TestCase):
                     times = np.arange(firstVis, firstVis+numVisBuff, dtype=np.float32)
                     buf_times = buf[iloct:lrec*numVisBuff:lrec]
                     self.assertTrue(np.all(times == buf_times))
+
 
 if __name__ == "__main__":
     unittest.main()
