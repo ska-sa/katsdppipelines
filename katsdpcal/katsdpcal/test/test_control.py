@@ -1,33 +1,27 @@
 """Tests for control module"""
 
-from __future__ import print_function, division, absolute_import
-import unittest
 from multiprocessing import Process
 import multiprocessing
 import multiprocessing.dummy
 import tempfile
 import shutil
-import functools
 import os
 import itertools
+from unittest import mock
+import asyncio
 
 import numpy as np
 from nose.tools import (
     assert_equal, assert_is_instance, assert_in, assert_not_in, assert_false, assert_true,
-    assert_regexp_matches, assert_almost_equal, assert_not_equal,
-    nottest)
-import mock
-
-import tornado.gen
-from tornado.platform.asyncio import AsyncIOMainLoop
-import trollius
-from trollius import From, Return
+    assert_almost_equal, assert_not_equal, assert_raises_regex)
+import asynctest
 
 import spead2
-import katcp
+import aiokatcp
+from aiokatcp import FailReply
+import async_timeout
 import katsdptelstate
 from katsdptelstate.endpoint import Endpoint
-from katsdpservices.asyncio import to_tornado_future
 import katpoint
 from katdal.h5datav3 import FLAG_NAMES
 from katdal.applycal import complex_interp
@@ -65,17 +59,18 @@ class PingTask(control.Task):
     """
 
     def __init__(self, task_class, master_queue, slave_queue):
-        super(PingTask, self).__init__(task_class, master_queue, 'PingTask')
+        super().__init__(task_class, master_queue, 'PingTask')
         self.slave_queue = slave_queue
 
     def get_sensors(self):
         return [
-            katcp.Sensor.integer('last-value', 'last number received on the queue'),
-            katcp.Sensor.integer('error', 'sensor that is set to error state')
+            aiokatcp.Sensor(int, 'last-value', 'last number received on the queue'),
+            aiokatcp.Sensor(int, 'error', 'sensor that is set to error state')
         ]
 
     def run(self):
-        self.sensors['error'].set_value(0, status=katcp.Sensor.ERROR, timestamp=123456789.0)
+        self.sensors['error'].set_value(0, status=aiokatcp.Sensor.Status.ERROR,
+                                        timestamp=123456789.0)
         while True:
             number = self.slave_queue.get()
             if number < 0:
@@ -84,7 +79,7 @@ class PingTask(control.Task):
         self.master_queue.put(control.StopEvent())
 
 
-class BaseTestTask(object):
+class BaseTestTask:
     """Tests for :class:`katsdpcal.control.Task`.
 
     This is a base class, which is subclassed for each process class.
@@ -94,7 +89,8 @@ class BaseTestTask(object):
         self.master_queue = self.module.Queue()
         self.slave_queue = self.module.Queue()
 
-    def _check_reading(self, event, name, value, status=katcp.Sensor.NOMINAL, timestamp=None):
+    def _check_reading(self, event, name, value,
+                       status=aiokatcp.Sensor.Status.NOMINAL, timestamp=None):
         assert_is_instance(event, control.SensorReadingEvent)
         assert_equal(name, event.name)
         assert_equal(value, event.reading.value)
@@ -110,7 +106,7 @@ class BaseTestTask(object):
         task.start()
 
         event = self.master_queue.get()
-        self._check_reading(event, 'error', 0, katcp.Sensor.ERROR, 123456789.0)
+        self._check_reading(event, 'error', 0, aiokatcp.Sensor.Status.ERROR, 123456789.0)
         assert_true(task.is_alive())
 
         self.slave_queue.put(3)
@@ -139,16 +135,7 @@ class TestTaskDummy(BaseTestTask):
     module = multiprocessing.dummy
 
 
-@nottest
-def async_test(func):
-    """Decorator to run a test inside the Tornado event loop"""
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return tornado.ioloop.IOLoop.current().run_sync(lambda: func(*args, **kwargs))
-    return wrapper
-
-
-class ServerData(object):
+class ServerData:
     """Test data associated with a single simulated cal server"""
 
     def make_parameters(self, telstate_l0):
@@ -184,32 +171,33 @@ class ServerData(object):
                 continuum_factor=4)
         ]
         self.server = control.create_server(
-            False, 'localhost', 0, buffers,
+            False, '127.0.0.1', 0, buffers,
             'sdp_l0test', testcase.l0_endpoints, None,
             flags_streams, 1.0,
             testcase.telstate_cal, self.parameters, self.report_path, self.log_path, None)
-        self.server.start()
+        self.client = None
+        self.testcase = testcase
+
+    async def start(self):
+        await self.server.start()
         # We can't simply do an addCleanup to stop the server, because the servers
         # need to be shut down together (otherwise the dump alignment code in
         # Accumulator._accumulate will deadlock). Instead, tell the testcase that
         # we require cleanup.
-        testcase.cleanup_servers.append(self)
+        self.testcase.cleanup_servers.append(self)
 
-        bind_address = self.server.bind_address
-        self.client = katcp.AsyncClient(bind_address[0], bind_address[1], timeout=15)
-        self.client.set_ioloop(testcase.ioloop)
-        self.client.start()
-        testcase.addCleanup(self.client.stop)
-        testcase.addCleanup(self.client.disconnect)
-        testcase.ioloop.run_sync(self.client.until_protocol)
+        bind_address = self.server.server.sockets[0].getsockname()
+        self.client = await aiokatcp.Client.connect(
+            bind_address[0], bind_address[1], auto_reconnect=False)
+        self.testcase.addCleanup(self.client.wait_closed)
+        self.testcase.addCleanup(self.client.close)
 
-    @tornado.gen.coroutine
-    def stop_server(self):
-        yield to_tornado_future(self.server.shutdown())
-        self.server.stop()
+    async def stop_server(self):
+        await self.server.shutdown()
+        await self.server.stop()
 
 
-class TestCalDeviceServer(unittest.TestCase):
+class TestCalDeviceServer(asynctest.TestCase):
     """Tests for :class:`katsdpcal.control.CalDeviceServer.
 
     This does not test the quality of the solutions that are produced, merely
@@ -305,7 +293,7 @@ class TestCalDeviceServer(unittest.TestCase):
         self.output_streams[key] = stream
         return stream
 
-    def setUp(self):
+    async def setUp(self):
         self.n_channels = 4096
         self.n_substreams = 8    # L0 substreams
         self.n_endpoints = 4     # L0 endpoints
@@ -321,10 +309,6 @@ class TestCalDeviceServer(unittest.TestCase):
         self.telstate_cal = self.telstate.view('cal')
         self.telstate_l0 = self.telstate.view('sdp_l0test')
         self.populate_telstate(self.telstate_l0)
-
-        self.ioloop = AsyncIOMainLoop()
-        self.ioloop.install()
-        self.addCleanup(tornado.ioloop.IOLoop.clear_instance)
 
         self.l0_endpoints = [Endpoint('239.102.255.{}'.format(i), 7148)
                              for i in range(self.n_endpoints)]
@@ -363,7 +347,7 @@ class TestCalDeviceServer(unittest.TestCase):
             queue = self.l0_queues[Endpoint(bind_hostname, port)]
             stream.add_inproc_reader(queue)
 
-        self.patch('spead2.recv.trollius.Stream.add_udp_reader', _add_udp_reader)
+        self.patch('spead2.recv.asyncio.Stream.add_udp_reader', _add_udp_reader)
         self.output_streams = {}
         self.patch('spead2.send.UdpStream', self._get_output_stream)
 
@@ -373,11 +357,12 @@ class TestCalDeviceServer(unittest.TestCase):
         self.patch('dask.distributed.Client')
 
         self.cleanup_servers = []
-        self.addCleanup(self.ioloop.run_sync, self._stop_servers)
+        self.addCleanup(self._stop_servers)
         self.servers = [ServerData(self, i) for i in range(self.n_servers)]
+        for server in self.servers:
+            await server.start()
 
-    @tornado.gen.coroutine
-    def make_request(self, name, *args, **kwargs):
+    async def make_request(self, name, *args, timeout=15):
         """Issue a request to all the servers, and check that the result is ok.
 
         Parameters
@@ -386,25 +371,21 @@ class TestCalDeviceServer(unittest.TestCase):
             Request name
         args : list
             Arguments to the request
-        kwargs : dict
-            Arguments to ``future_request``
+        timeout : float
+            Time limit for the request
 
         Returns
         -------
         informs : list of lists
             Informs returned with the reply from each server
         """
-        futures = [server.client.future_request(katcp.Message.request(name, *args), **kwargs)
-                   for server in self.servers]
-        results = yield futures
-        all_informs = []
-        for reply, informs in results:
-            assert_true(reply.reply_ok(), str(reply))
-            all_informs.append(informs)
-        raise tornado.gen.Return(all_informs)
+        with async_timeout.timeout(timeout):
+            coros = [server.client.request(name, *args)
+                     for server in self.servers]
+            results = await asyncio.gather(*coros)
+            return [informs for reply, informs in results]
 
-    @tornado.gen.coroutine
-    def get_sensor(self, name):
+    async def get_sensor(self, name):
         """Retrieves a sensor value and checks that the value is well-defined.
 
         Returns
@@ -413,73 +394,62 @@ class TestCalDeviceServer(unittest.TestCase):
             The sensor values (per-server), in the string form it is sent in the protocol
         """
         values = []
-        informs_list = yield self.make_request('sensor-value', name)
+        informs_list = await self.make_request('sensor-value', name)
         for informs in informs_list:
             assert_equal(1, len(informs))
-            assert_in(informs[0].arguments[3], ('nominal', 'warn', 'error'))
+            assert_in(informs[0].arguments[3], (b'nominal', b'warn', b'error'))
             values.append(informs[0].arguments[4])
-        raise tornado.gen.Return(values)
+        return values
 
-    @tornado.gen.coroutine
-    def assert_sensor_value(self, name, expected):
+    async def assert_sensor_value(self, name, expected):
         """Retrieves a sensor value and compares its value.
 
         The returned string is automatically cast to the type of `expected`.
         """
-        values = yield self.get_sensor(name)
+        values = await self.get_sensor(name)
         for i, value in enumerate(values):
             value = type(expected)(value)
             assert_equal(expected, value,
                          "Wrong value for {} ({!r} != {!r})".format(name, expected, value))
 
-    @tornado.gen.coroutine
-    def assert_request_fails(self, msg_re, name, *args):
+    async def assert_request_fails(self, msg_re, name, *args):
         """Assert that a request fails, and test the error message against
         a regular expression."""
         for server in self.servers:
-            reply, informs = yield server.client.future_request(
-                katcp.Message.request(name, *args))
-            assert_equal(2, len(reply.arguments))
-            assert_equal('fail', reply.arguments[0])
-            assert_regexp_matches(reply.arguments[1], msg_re)
+            with assert_raises_regex(FailReply, msg_re):
+                await server.client.request(name, *args)
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_empty_capture(self):
+    async def test_empty_capture(self):
         """Terminating a capture with no data must succeed and not write a report.
 
         It must also correctly remove the capture block from capture-block-state.
         """
-        yield self.make_request('capture-init', 'cb')
-        yield self.assert_sensor_value('capture-block-state', '{"cb": "CAPTURING"}')
+        await self.make_request('capture-init', 'cb')
+        await self.assert_sensor_value('capture-block-state', b'{"cb": "CAPTURING"}')
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.make_request('capture-done')
-        yield self.make_request('shutdown')
+        await self.make_request('capture-done')
+        await self.make_request('shutdown')
         for server in self.servers:
             assert_equal([], os.listdir(server.report_path))
-        yield self.assert_sensor_value('reports-written', 0)
-        yield self.assert_sensor_value('capture-block-state', '{}')
+        await self.assert_sensor_value('reports-written', 0)
+        await self.assert_sensor_value('capture-block-state', b'{}')
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_init_when_capturing(self):
+    async def test_init_when_capturing(self):
         """capture-init fails when already capturing"""
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.make_request('capture-init', 'cb')
-        yield self.assert_request_fails(r'capture already in progress', 'capture-init', 'cb')
+        await self.make_request('capture-init', 'cb')
+        await self.assert_request_fails(r'capture already in progress', 'capture-init', 'cb')
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_done_when_not_capturing(self):
+    async def test_done_when_not_capturing(self):
         """capture-done fails when not capturing"""
-        yield self.assert_request_fails(r'no capture in progress', 'capture-done')
-        yield self.make_request('capture-init', 'cb')
+        await self.assert_request_fails(r'no capture in progress', 'capture-done')
+        await self.make_request('capture-init', 'cb')
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.make_request('capture-done')
-        yield self.assert_request_fails(r'no capture in progress', 'capture-done')
+        await self.make_request('capture-done')
+        await self.assert_request_fails(r'no capture in progress', 'capture-done')
 
     @classmethod
     def normalise_phase(cls, value, ref):
@@ -487,21 +457,18 @@ class TestCalDeviceServer(unittest.TestCase):
         ref_phase = ref / np.abs(ref)
         return value * ref_phase.conj()
 
-    @tornado.gen.coroutine
-    def _stop_servers(self):
+    async def _stop_servers(self):
         """Similar to shutdown_servers, but run as part of cleanup"""
-        futures = [server.stop_server() for server in self.cleanup_servers]
-        yield futures
+        await asyncio.gather(*[server.stop_server() for server in self.cleanup_servers])
 
-    @tornado.gen.coroutine
-    def shutdown_servers(self, timeout):
-        inform_lists = yield self.make_request('shutdown', timeout=timeout)
+    async def shutdown_servers(self, timeout):
+        inform_lists = await self.make_request('shutdown', timeout=timeout)
         for informs in inform_lists:
             progress = [inform.arguments[0] for inform in informs]
-            assert_equal(['Accumulator stopped',
-                          'Pipeline stopped',
-                          'Sender stopped',
-                          'ReportWriter stopped'], progress)
+            assert_equal([b'Accumulator stopped',
+                          b'Pipeline stopped',
+                          b'Sender stopped',
+                          b'ReportWriter stopped'], progress)
 
     def interp_B(self, B):
         """
@@ -616,7 +583,8 @@ class TestCalDeviceServer(unittest.TestCase):
         """
         corrupted_vis = vis + 1e9j
         corrupt_times = (4, 17)
-        channel_slices = [np.s_[i * self.n_channels_per_substream: (i + 1) * self.n_channels_per_substream]
+        channel_slices = [np.s_[i * self.n_channels_per_substream :
+                                (i + 1) * self.n_channels_per_substream]
                           for i in range(self.n_substreams)]
         heaps = []
         for i in range(n_times):
@@ -638,9 +606,7 @@ class TestCalDeviceServer(unittest.TestCase):
             ts += self.telstate.sdp_l0test_int_time
         return heaps
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_capture(self, expected_g=1):
+    async def test_capture(self, expected_g=1):
         """Tests the capture with some data, and checks that solutions are
         computed and a report written.
         """
@@ -670,28 +636,28 @@ class TestCalDeviceServer(unittest.TestCase):
         heaps = self.prepare_vis_heaps(n_times, rs, ts, vis, flags, weights, weights_channel)
         for endpoint, heap in heaps:
             self.l0_streams[endpoint].send_heap(heap)
-        yield self.make_request('capture-init', 'cb')
-        yield tornado.gen.sleep(1)
-        yield self.assert_sensor_value('accumulator-capture-active', 1)
-        yield self.assert_sensor_value('capture-block-state', '{"cb": "CAPTURING"}')
+        await self.make_request('capture-init', 'cb')
+        await asyncio.sleep(1)
+        await self.assert_sensor_value('accumulator-capture-active', 1)
+        await self.assert_sensor_value('capture-block-state', b'{"cb": "CAPTURING"}')
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.shutdown_servers(180)
-        yield self.assert_sensor_value('accumulator-capture-active', 0)
-        yield self.assert_sensor_value('input-heaps-total',
+        await self.shutdown_servers(180)
+        await self.assert_sensor_value('accumulator-capture-active', 0)
+        await self.assert_sensor_value('input-heaps-total',
                                        n_times * self.n_substreams // self.n_servers)
-        yield self.assert_sensor_value('accumulator-batches', 1)
-        yield self.assert_sensor_value('accumulator-observations', 1)
-        yield self.assert_sensor_value('pipeline-last-slots', n_times)
-        yield self.assert_sensor_value('reports-written', 1)
+        await self.assert_sensor_value('accumulator-batches', 1)
+        await self.assert_sensor_value('accumulator-observations', 1)
+        await self.assert_sensor_value('pipeline-last-slots', n_times)
+        await self.assert_sensor_value('reports-written', 1)
         # Check that the slot accounting all balances
-        yield self.assert_sensor_value('slots', 60)
-        yield self.assert_sensor_value('accumulator-slots', 0)
-        yield self.assert_sensor_value('pipeline-slots', 0)
-        yield self.assert_sensor_value('free-slots', 60)
-        yield self.assert_sensor_value('capture-block-state', '{}')
+        await self.assert_sensor_value('slots', 60)
+        await self.assert_sensor_value('accumulator-slots', 0)
+        await self.assert_sensor_value('pipeline-slots', 0)
+        await self.assert_sensor_value('free-slots', 60)
+        await self.assert_sensor_value('capture-block-state', b'{}')
 
-        report_last_path = yield self.get_sensor('report-last-path')
+        report_last_path = await self.get_sensor('report-last-path')
         for server in self.servers:
             reports = os.listdir(server.report_path)
             assert_equal(1, len(reports))
@@ -784,20 +750,18 @@ class TestCalDeviceServer(unittest.TestCase):
         for key in ['bandwidth', 'n_bls', 'bls_ordering', 'sync_time', 'int_time', 'excise']:
             assert_equal(ts_flags[key], self.telstate_l0[key])
 
-    def test_capture_separate_tags(self):
+    async def test_capture_separate_tags(self):
         # Change the target to one with different tags
         target = ('3C286, radec delaycal gaincal bpcal polcal single_accumulation, '
                   '13:31:08.29, +30:30:33.0, (0 43200.0 1.2515 -0.4605 -0.1715 0.0336')
         self.telstate.add('cbf_target', target, ts=0.001)
-        self.test_capture(expected_g=2)
+        await self.test_capture(expected_g=2)
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_set_refant(self):
+    async def test_set_refant(self):
         """Tests the capture with a noisy antenna, and checks that the reference antenna is
          not set to the noisiest antenna.
         """
-        first_ts = ts = 100.0
+        ts = 100.0
         n_times = 25
         rs = np.random.RandomState(seed=1)
 
@@ -835,12 +799,12 @@ class TestCalDeviceServer(unittest.TestCase):
         heaps = self.prepare_vis_heaps(n_times, rs, ts, vis, flags, weights, weights_channel)
         for endpoint, heap in heaps:
             self.l0_streams[endpoint].send_heap(heap)
-        yield self.make_request('capture-init', 'cb')
-        yield tornado.gen.sleep(1)
+        await self.make_request('capture-init', 'cb')
+        await asyncio.sleep(1)
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.shutdown_servers(180)
-        yield self.assert_sensor_value('accumulator-capture-active', 0)
+        await self.shutdown_servers(180)
+        await self.assert_sensor_value('accumulator-capture-active', 0)
         telstate_cb_cal = control.make_telstate_cb(self.telstate_cal, 'cb')
         refant_name = katpoint.Antenna(telstate_cb_cal['refant']).name
         assert_not_equal(self.antennas[worst_index], refant_name)
@@ -875,7 +839,8 @@ class TestCalDeviceServer(unittest.TestCase):
             weights_channel = np.arange(1, n_times * self.n_channels + 1,
                                         dtype=np.float32).reshape(n_times, -1)
         ts = 100.0
-        channel_slices = [np.s_[i * self.n_channels_per_substream: (i + 1) * self.n_channels_per_substream]
+        channel_slices = [np.s_[i * self.n_channels_per_substream :
+                                (i + 1) * self.n_channels_per_substream]
                           for i in range(self.n_substreams)]
         heaps = []
         for i in range(n_times):
@@ -895,9 +860,7 @@ class TestCalDeviceServer(unittest.TestCase):
             ts += self.telstate.sdp_l0test_int_time
         return heaps
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_buffer_wrap(self):
+    async def test_buffer_wrap(self):
         """Test capture with more heaps than buffer slots, to check that it handles
         wrapping around the end of the buffer.
         """
@@ -917,12 +880,12 @@ class TestCalDeviceServer(unittest.TestCase):
         telstate_cb.add('obs_activity', 'slew', ts=slew_start)
         telstate_cb.add('obs_activity', 'track', ts=slew_end)
         # Start the capture
-        yield self.make_request('capture-init', 'cb')
+        await self.make_request('capture-init', 'cb')
         # Wait until all the heaps have been delivered, timing out eventually.
         # This will take a while because it needs to allow the pipeline to run.
         for i in range(240):
-            yield tornado.gen.sleep(1)
-            heaps = (yield self.get_sensor('input-heaps-total'))
+            await asyncio.sleep(1)
+            heaps = await self.get_sensor('input-heaps-total')
             total_heaps = sum(int(x) for x in heaps)
             if total_heaps == n_times * self.n_substreams:
                 print('all heaps received')
@@ -932,11 +895,9 @@ class TestCalDeviceServer(unittest.TestCase):
             raise RuntimeError('Timed out waiting for the heaps to be received')
         for stream in self.l0_streams.values():
             stream.send_heap(self.ig.get_end())
-        yield self.shutdown_servers(60)
+        await self.shutdown_servers(60)
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_out_of_order(self):
+    async def test_out_of_order(self):
         """A heap received from the past should be processed (if possible).
 
         Missing heaps are filled with data_lost.
@@ -965,11 +926,11 @@ class TestCalDeviceServer(unittest.TestCase):
             server_id = self.substream_endpoints.index(endpoint) // n_substreams_per_server
             heaps_expected[server_id] += 1
         # Run the capture
-        yield self.make_request('capture-init', 'cb')
-        yield tornado.gen.sleep(1)
-        yield self.make_request('shutdown', timeout=60)
+        await self.make_request('capture-init', 'cb')
+        await asyncio.sleep(1)
+        await self.make_request('shutdown', timeout=60)
         # Check that all heaps were accepted
-        heaps_received = [int(x) for x in (yield self.get_sensor('input-heaps-total'))]
+        heaps_received = [int(x) for x in await self.get_sensor('input-heaps-total')]
         assert_equal(heaps_expected, heaps_received)
         # Check that they were written to the right places and that timestamps are correct
         for t in range(n_times):
@@ -977,8 +938,8 @@ class TestCalDeviceServer(unittest.TestCase):
                 server_id = s // n_substreams_per_server
                 s_rel = s % n_substreams_per_server
                 buffers = self.servers[server_id].buffers
-                channel_slice = np.s_[
-                    s_rel * self.n_channels_per_substream: (s_rel + 1) * self.n_channels_per_substream]
+                channel_slice = np.s_[s_rel * self.n_channels_per_substream :
+                                      (s_rel + 1) * self.n_channels_per_substream]
                 channel0 = self.servers[server_id].parameters['channel_slice'].start
                 channel0 += channel_slice.start
                 flags = buffers['flags'][t, channel_slice]
@@ -996,9 +957,7 @@ class TestCalDeviceServer(unittest.TestCase):
             assert_equal(buffers['dump_indices'][t], t)
             assert_equal(buffers['times'][t], 1400000100.0 + 4 * t)
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_weights_power_scale(self):
+    async def test_weights_power_scale(self):
         """Test the application of need_weights_power_scale"""
         n_times = 2
         # This is the same as the default provided by prepare_heaps, but we
@@ -1030,9 +989,9 @@ class TestCalDeviceServer(unittest.TestCase):
         # Send the data and capture it
         for endpoint, heap in heaps:
             self.l0_streams[endpoint].send_heap(heap)
-        yield self.make_request('capture-init', 'cb')
-        yield tornado.gen.sleep(1)
-        yield self.make_request('shutdown', timeout=60)
+        await self.make_request('capture-init', 'cb')
+        await asyncio.sleep(1)
+        await self.make_request('shutdown', timeout=60)
         # Reassemble the buffered data from the individual servers
         actual = np.zeros_like(expected)
         for server in self.servers:
@@ -1043,18 +1002,16 @@ class TestCalDeviceServer(unittest.TestCase):
         np.testing.assert_allclose(expected[1, 100], actual[1, 100], rtol=1e-4)
         np.testing.assert_allclose(expected, actual, rtol=1e-4)
 
-    @async_test
-    @tornado.gen.coroutine
-    def test_pipeline_exception(self):
+    async def test_pipeline_exception(self):
         with mock.patch.object(control.Pipeline, 'run_pipeline', side_effect=ZeroDivisionError):
-            yield self.assert_sensor_value('pipeline-exceptions', 0)
+            await self.assert_sensor_value('pipeline-exceptions', 0)
             for endpoint, heap in self.prepare_heaps(np.random.RandomState(seed=1), 5):
                 self.l0_streams[endpoint].send_heap(heap)
-            yield self.make_request('capture-init', 'cb')
-            yield tornado.gen.sleep(1)
-            yield self.assert_sensor_value('capture-block-state', '{"cb": "CAPTURING"}')
+            await self.make_request('capture-init', 'cb')
+            await asyncio.sleep(1)
+            await self.assert_sensor_value('capture-block-state', b'{"cb": "CAPTURING"}')
             for stream in self.l0_streams.values():
                 stream.send_heap(self.ig.get_end())
-            yield self.shutdown_servers(60)
-            yield self.assert_sensor_value('pipeline-exceptions', 1)
-            yield self.assert_sensor_value('capture-block-state', '{}')
+            await self.shutdown_servers(60)
+            await self.assert_sensor_value('pipeline-exceptions', 1)
+            await self.assert_sensor_value('capture-block-state', b'{}')

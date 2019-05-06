@@ -37,7 +37,7 @@ def _rfi(vis, flags, flagger, out_bit):
     return out_flags[:, :, np.newaxis, :] * out_value
 
 
-class ScanData(object):
+class ScanData:
     """Data in a scan with particular chunking scheme.
 
     A :class:`Scan` stores several instances of :class:`ScanData`, representing
@@ -94,7 +94,7 @@ class ScanData(object):
         return array
 
 
-class ScanDataPair(object):
+class ScanDataPair:
     """Wraps a pair of :class:`ScanData` objects, one for auto-polarisations,
     the other for cross-hand polarisations.
     """
@@ -109,7 +109,7 @@ class ScanDataPair(object):
         return ScanDataPair(self.auto_pol.rechunk(idx), self.cross_pol.rechunk(idx))
 
 
-class ScanDataGroupBl(object):
+class ScanDataGroupBl:
     """
     Selects a subset of baselines from a :class: `ScanData` object
 
@@ -152,7 +152,7 @@ class ScanDataGroupBl(object):
         self.pb = self.orig.rechunk((None, None, 1, 16))
 
 
-class Scan(object):
+class Scan:
     """
     Single scan of data with auxillary information.
 
@@ -605,7 +605,7 @@ class Scan(object):
 
     @logsolutiontime
     def b_norm(self, b_soln, bchan=1, echan=None):
-	"""
+        """
         Calculates an array of complex numbers which normalises
         b_soln in the specified channel range
 

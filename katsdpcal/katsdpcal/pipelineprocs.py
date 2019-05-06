@@ -3,7 +3,6 @@ Pipeline procedures for MeerKAT calibration pipeline
 ====================================================
 """
 
-from __future__ import print_function, division, absolute_import
 import glob    # for model files
 import pickle
 import logging
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------------------------------
 
 
-class Converter(object):
+class Converter:
     """Converts parameters between representations.
 
     A parameter starts with a requested value, which is directly given by the
@@ -74,7 +73,7 @@ class AttrConverter(Converter):
 
 
 @attr.s
-class Parameter(object):
+class Parameter:
     name = attr.ib()
     help = attr.ib()
     type = attr.ib()
@@ -276,7 +275,7 @@ def finalise_parameters(parameters, telstate_l0, servers, server_id, rfi_filenam
 
     parameters['refant_index'] = None
     if rfi_filename is not None:
-        with open(rfi_filename) as rfi_file:
+        with open(rfi_filename, 'rb') as rfi_file:
             parameters['rfi_mask'] = pickle.load(rfi_file)
         if parameters['rfi_mask'].shape != (n_chans,):
             raise ValueError('Incorrect shape in RFI mask ({}, expected {})'

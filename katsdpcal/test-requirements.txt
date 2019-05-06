@@ -1,5 +1,3 @@
+asynctest
 coverage
-funcsigs
-mock
 nose
-pbr
