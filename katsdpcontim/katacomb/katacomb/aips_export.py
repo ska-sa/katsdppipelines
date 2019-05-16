@@ -55,27 +55,33 @@ def _integration_time(target, katds):
         https://skaafrica.atlassian.net/browse/SR-1732
     """
     n_dumps = 0
+    selection = katds._selection
+    katds.select(reset='T')
     for _, _, scan_targ in katds.scans():
         if scan_targ == target:
             n_dumps += len(katds.dumps)
+    katds.select(**selection)
     return n_dumps * katds.dump_period / 3600.
 
 
-def _get_target_metadata(image, target, katds, filebase):
-    """ Populate target metadata dictionary. """
-    target_metadata = {}
-    target_metadata['FITSImageFileName'] = filebase + FITS_EXT
-    target_metadata['PNGImageFileName'] = filebase + PNG_EXT
-    target_metadata['PNGThumbNailFileName'] = filebase + TNAIL_EXT
-    target_metadata['IntegrationTime'] = _integration_time(target, katds)
+def _update_target_metadata(target_metadata, image, target, tn, katds, filebase):
+    """ Append target metadata to target_metadata lists. """
+    target_metadata.setdefault('FITSImageFilename', []).append(filebase + FITS_EXT)
+    target_metadata.setdefault('PNGImageFileName', []).append(filebase + PNG_EXT)
+    target_metadata.setdefault('PNGThumbNailFileName', []).append(filebase + TNAIL_EXT)
+    target_metadata.setdefault('IntegrationTime', []).append(_integration_time(target, katds))
     image.GetPlane(None, [IMG_PLANE, 1, 1, 1, 1])
-    target_metadata['RMSNoise'] = str(image.FArray.RMS)
-    target_metadata['RightAscension'] = str(target.radec()[0])
-    target_metadata['Declination'] = str(target.radec()[1])
+    target_metadata.setdefault('RMSNoise', []).append(str(image.FArray.RMS))
+    target_metadata.setdefault('RightAscension', []).append(str(target.radec()[0]))
+    target_metadata.setdefault('Declination', []).append(str(target.radec()[1]))
+    radec = np.rad2deg(target.radec())
+    target_metadata.setdefault('DecRa', []).append(','.join(map(str, radec[::-1])))
+    target_metadata.setdefault('Targets', []).append(tn)
+    target_metadata.setdefault('KatpointTargets', []).append(target.description)
     return target_metadata
 
 
-def _metadata(katds, cb_id, targets, target_metadata, katpoint_targets, decra):
+def _metadata(katds, cb_id, target_metadata):
     """ Construct metadata dictionary """
     obs_params = katds.obs_params
     metadata = {}
@@ -91,16 +97,14 @@ def _metadata(katds, cb_id, targets, target_metadata, katpoint_targets, decra):
     metadata['Description'] = obs_params['description'] + ': Continuum image'
     metadata['ProposalID'] = obs_params['proposal_id']
     metadata['Observer'] = obs_params['observer']
-    metadata['Targets'] = targets
-    metadata['TargetMetaData'] = target_metadata
-    metadata['KatpointTargets'] = katpoint_targets
-    metadata['DecRa'] = decra
+    # Add per-target metadata lists
+    metadata.update(target_metadata)
     return metadata
 
 
 def export_images(clean_files, target_indices, disk, kat_adapter):
     """
-    Write out FITS and PNG files for each image in clean_files.
+    Write out FITS, PNG and metadata.json files for each image in clean_files.
 
     Parameters
     ----------
@@ -114,10 +118,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
         Katdal Adapter
     """
 
-    all_targets = []
-    all_katpoint_targets = []
-    all_decra = []
-    target_metadata_dict = {}
+    target_metadata = {}
     targets = kat_adapter.katdal.catalogue.targets
     for clean_file, ti in zip(clean_files, target_indices):
         try:
@@ -133,7 +134,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
 
                 # Get and sanitise target name
                 targ = targets[ti]
-                tn = normalise_target_name(targ.name, all_targets)
+                tn = normalise_target_name(targ.name, target_metadata.get('Targets', []))
 
                 # Output file name
                 out_strings = [cb_id, ap.label, tn, ap.aclass]
@@ -143,20 +144,15 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
                 cf.writefits(disk, out_filebase + FITS_EXT)
 
                 # Export PNG and a thumbnail PNG
+                log.info('Write PNG image output: %s' % (out_filebase + PNG_EXT))
                 out_pngfile = pjoin(out_dir, out_filebase + PNG_EXT)
                 save_image(cf, out_pngfile, plane=IMG_PLANE)
                 out_pngthumbnail = pjoin(out_dir, out_filebase + TNAIL_EXT)
                 save_image(cf, out_pngthumbnail, plane=IMG_PLANE, display_size=5., dpi=100)
 
-                log.info('Write PNG image output: %s' % (out_filebase + PNG_EXT))
-
                 # Set up metadata for this target
-                target_metadata_dict[tn] = _get_target_metadata(cf, targ, kat_adapter.katdal,
-                                                                out_filebase)
-                all_targets.append(tn)
-                all_katpoint_targets.append(targ.description)
-                radec = np.rad2deg(targ.radec())
-                all_decra.append(','.join(map(str, radec[::-1])))
+                _update_target_metadata(target_metadata, cf, targ, tn,
+                                        kat_adapter.katdal, out_filebase)
 
         except Exception as e:
             log.warn("Export of FITS and PNG images from %s failed.\n%s",
@@ -164,12 +160,11 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
 
     # Export metadata json
     try:
-        metadata = _metadata(kat_adapter.katdal, cb_id, all_targets, target_metadata_dict,
-                             all_katpoint_targets, all_decra)
+        metadata = _metadata(kat_adapter.katdal, cb_id, target_metadata)
         metadata_file = pjoin(out_dir, METADATA_JSON)
+        log.info('Write metadata JSON: %s' % (METADATA_JSON))
         with open(metadata_file, 'w') as meta:
             json.dump(metadata, meta)
-        log.info('Write metadata JSON: %s' % (METADATA_JSON))
     except Exception as e:
             log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
 

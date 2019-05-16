@@ -94,7 +94,7 @@ class ContinuumPipeline(object):
                 export_clean_components(clean_files, target_indices,
                                         self.ka, self.telstate)
                 export_images(clean_files, target_indices,
-                            self.odisk, self.ka)
+                              self.odisk, self.ka)
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
                 raise
