@@ -5,10 +5,9 @@ Simulator class for HDF5 files produced by KAT-7 correlator,
 for testing of the MeerKAT pipeline.
 """
 
-from __future__ import print_function, division, absolute_import
-
 import logging
 import time
+import asyncio
 
 from casacore.tables import table
 import spead2
@@ -18,7 +17,8 @@ from .calprocs import get_reordering_nopol
 import katdal
 from katdal.h5datav3 import FLAG_NAMES
 import katpoint
-import katcp
+import aiokatcp
+import async_timeout
 
 import numpy as np
 from random import random
@@ -65,7 +65,7 @@ def get_antdesc_relative(names, diameters, positions):
     return antdesc
 
 
-class SimData(object):
+class SimData:
     """Base class for simulated data.
 
     Subclasses wrap an existing data set to provide a common interface.
@@ -85,8 +85,7 @@ class SimData(object):
     """
     def __init__(self, filename, server=None, bchan=0, echan=None):
         if server is not None:
-            self.client = katcp.BlockingClient(server.host, server.port)
-            self.client.start()
+            self.client = aiokatcp.Client(server.host, server.port)
         else:
             self.client = None
         self.filename = filename
@@ -105,28 +104,33 @@ class SimData(object):
         raise WrongFileType('File does not exist, or is not of compatible format! '
                             '(Must be katdal or MS.)')
 
-    def capture_init(self):
+    async def capture_init(self):
         if self.client is not None:
-            self.client.wait_protocol()
+            await self.client.wait_connected()
             cbid = '{}'.format(int(time.time()))
-            reply, informs = self.client.blocking_request(
-                katcp.Message.request('capture-init', cbid))
-            if not reply.reply_ok():
-                raise RuntimeError('capture-init failed: {}'.format(reply.arguments[1]))
+            await self.client.request('capture-init', cbid)
             self.cbid = cbid
 
-    def capture_done(self):
+    async def capture_done(self):
         if self.client is not None:
-            self.client.wait_protocol(10)
-            reply, informs = self.client.blocking_request(katcp.Message.request('capture-done'))
-            if not reply.reply_ok():
-                raise RuntimeError('capture-done failed: {}'.format(reply.arguments[1]))
+            try:
+                with async_timeout.timeout(10):
+                    await self.client.wait_connected()
+                    await self.client.request('capture-done')
+            except asyncio.TimeoutError:
+                pass
 
-    def close(self):
+    async def close(self):
         if self.client is not None:
-            self.client.stop()
-            self.client.join()
+            self.client.close()
+            await self.client.wait_closed()
             self.client = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.close()
 
     def setup_telstate(self, telstate):
         """
@@ -338,12 +342,12 @@ class SimDataMS(SimData):
     """
 
     def __init__(self, filename, server=None, bchan=0, echan=None, mode='r'):
-        super(SimDataMS, self).__init__(filename, server, bchan, echan)
+        super().__init__(filename, server, bchan, echan)
         readonly = mode != 'r+'
         try:
             self.file = table(filename, readonly=readonly)
         except RuntimeError as error:
-            raise WrongFileType(str(error))
+            raise WrongFileType(str(error)) from error
         self.intent_to_tag = {
             'CALIBRATE_PHASE,CALIBRATE_AMPLI': 'gaincal',
             'CALIBRATE_BANDPASS,CALIBRATE_FLUX,CALIBRATE_DELAY,CALIBRATE_POLARIZATION':
@@ -408,7 +412,7 @@ class SimDataMS(SimData):
         List of field IDs
         """
         with self.subtable('FIELD') as t:
-            return range(t.nrows())
+            return list(range(t.nrows()))
 
     def get_params(self):
         """
@@ -489,7 +493,9 @@ class SimDataMS(SimData):
         else:
             raise ValueError('Weird polarisation setup!')
         # combine antenna and polarisation strings to get full correlator product ordering
-        corrprods = np.array([[c1+p1, c2+p2] for c1, c2 in corrprods_nopol for p1, p2 in bls_pol_order])
+        corrprods = np.array([[c1+p1, c2+p2]
+                             for c1, c2 in corrprods_nopol
+                             for p1, p2 in bls_pol_order])
 
         return corrprods, corrprods_nopol
 
@@ -628,7 +634,8 @@ class SimDataMS(SimData):
         # write MS polarisation table
         pol_num = {'h': 0, 'v': 1}
         pol_types = {'hh': 9, 'vv': 12, 'hv': 10, 'vh': 11}
-        pol_type_array = np.array([pol_types[p1+p2] for p1, p2 in cal_bls_pol_ordering])[np.newaxis, :]
+        pol_type_array = np.array([pol_types[p1+p2]
+                                  for p1, p2 in cal_bls_pol_ordering])[np.newaxis, :]
         pol_index_array = np.array([[pol_num[p1], pol_num[p2]] for p1, p2 in cal_bls_pol_ordering],
                                    dtype=np.int32)[np.newaxis, :]
         with self.subtable('POLARIZATION', readonly=False) as poltable:
@@ -650,9 +657,9 @@ class SimDataMS(SimData):
             if ti == ti_max-1:
                 break
 
-    def close(self):
+    async def close(self):
         self.file.close()
-        super(SimDataMS, self).close()
+        await super().close()
 
 
 # -------------------------------------------------------------------------------------------------
@@ -662,12 +669,12 @@ class SimDataMS(SimData):
 
 
 class SimDataKatdal(SimData):
-    def __init__(self, filename, server=None, bchan=0, echan=None, mode='r'):
-        super(SimDataKatdal, self).__init__(filename, server, bchan, echan)
+    def __init__(self, filename, server=None, bchan=0, echan=None):
+        super().__init__(filename, server, bchan, echan)
         try:
-            self.file = katdal.open(filename, mode=mode)
+            self.file = katdal.open(filename, upgrade_flags=False)
         except IOError as error:
-            raise WrongFileType(str(error))
+            raise WrongFileType(str(error)) from error
         self.file.select(channels=slice(bchan, echan))
         self.num_scans = len(self.file.scan_indices)
 

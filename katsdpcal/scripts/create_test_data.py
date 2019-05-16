@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # ----------------------------------------------------------
 # Create sumulated data files from existing KAT-7 h5 files
 
@@ -55,7 +55,7 @@ def extract_scans(msfile, num_scans):
     outs, errs = proc.communicate()
     # if the MS file already exists, raise an error
     if 'already exists' in errs:
-        print 'ms file {0} already exists - using it!'.format(new_ms,)
+        print('ms file {0} already exists - using it!'.format(new_ms,))
     return new_ms
 
 

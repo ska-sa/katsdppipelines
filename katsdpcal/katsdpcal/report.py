@@ -13,6 +13,7 @@ from docutils.core import publish_file
 
 import matplotlib.pylab as plt
 import katpoint
+from katdal.sensordata import to_str
 import json
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,16 @@ TAG_WHITELIST = ['gaincal', 'bfcal', 'delaycal', 'polcal', 'bpcal', 'target']
 # --------------------------------------------------------------------------------------------------
 
 
-class rstReport(file):
+class rstReport:
     """
     RST style report
     """
+
+    def __init__(self, filename):
+        self._file = open(filename, 'w')
+
+    def write(self, text):
+        self._file.write(text)
 
     def write_heading(self, heading, symbol):
         heading_len = len(heading)
@@ -60,6 +67,12 @@ class rstReport(file):
         if line is not None:
             self.write(line)
         self.write('\n')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._file.close()
 
 
 # --------------------------------------------------------------------------------------------------
@@ -158,7 +171,7 @@ def metadata(ts, capture_block_id, report_path, st=None):
     dict
     """
     telstate_cb = ts.root().view(capture_block_id)
-    obs_params = telstate_cb['obs_params']
+    obs_params = to_str(telstate_cb['obs_params'])
     metadata = {}
     product_type = {}
     product_type['ProductTypeName'] = 'MeerKATReductionProduct'
@@ -432,7 +445,7 @@ def write_hv(report, report_path, av_corr, antenna_names, correlator_freq, pol=[
         report.write_heading_1(
             'Calibrated Cross Hand Phase')
         report.write_heading_2(
-            'Delay Corrected Phase vs Frequency')
+            'Corrected Phase vs Frequency')
         report.write_heading_3(
             'Cross Hand Auto-correlations, all antennas')
         # Get cross hand auto-correlation data
@@ -803,6 +816,13 @@ def write_products(report, report_path, ts, parameters,
                                        antenna_names, pol)
         insert_fig(report_path, report, plot, name='No_{0}'.format(cal))
 
+    cal = 'BCROSS_DIODE'
+    vals, times = get_cal(ts, cal, product_names[cal], st, et)
+    if len(times) > 0:
+        cal_heading(report, cal, 'Cross polarisation phase {0}'.format(pol[0] + pol[1]))
+        write_BCROSS_DIODE(report, report_path, times, vals, antenna_names,
+                           correlator_freq, pol)
+
     # ---------------------------------
     # bandpass
     cal = 'B'
@@ -976,8 +996,8 @@ def write_B(report, report_path, times, vals, antenna_names, correlator_freq, po
         bandpass solutions
     antenna_names : list
         list of antenna names
-    chanidx : float
-        number of channels solutions
+    correlator_freq : :class:`np.ndarray`
+        array of correlator channel frequencies
     pol : list
         description of polarisation axes, optional
     """
@@ -1008,6 +1028,58 @@ def write_B(report, report_path, times, vals, antenna_names, correlator_freq, po
     report.writeln()
     cal = 'B'
     title = 'Number of slns : {0}'.format(cal)
+    b_slns = ~np.all(np.isnan(vals), axis=1)
+    no_slns = np.sum(b_slns, axis=0, dtype=np.uint32)
+    plot = plotting.plot_v_antenna(no_slns, 'No of slns: {0}'.format(cal), title,
+                                   antenna_names, pol)
+    insert_fig(report_path, report, plot, name='No_{0}'.format(cal))
+
+
+def write_BCROSS_DIODE(report, report_path, times, vals, antenna_names, correlator_freq, pol):
+    """
+    Include plots of bcross_diode solutions at all given times in report
+
+    Parameters
+    ----------
+    report : file-like
+        report file to write to
+    report_path : str
+        path where report is written
+    times : list
+        list of times for delay solutions
+    vals : array
+        bandpass solutions
+    antenna_names : list
+        list of antenna names
+    correlator_freq : :class:`np.ndarray`
+        array of correlator channel frequencies
+    pol : list
+        description of polarisation axes, optional
+    """
+    freq_range = [correlator_freq[0], correlator_freq[-1]]
+    chan_no = np.arange(0, len(correlator_freq))
+    for ti in range(len(times)):
+        t = utc_tstr(times[ti])
+        report.writeln('Times: {}'.format(t,))
+        report.writeln()
+        # summarize bad antenn
+        report.writeln('Antennas flagged for all channels:')
+        report.writeln()
+        antenna_labels = write_bad_antennas(report, vals[ti], antenna_names, pol)
+
+        for idx in range(0, vals.shape[-1], ANT_CHUNKS):
+            plot = plotting.plot_phaseonly_spec(
+                vals[ti, :, 0:1, idx : idx + ANT_CHUNKS], chan_no,
+                antenna_labels[idx : idx + ANT_CHUNKS],
+                freq_range, pol=[pol[0]+pol[1]])
+            insert_fig(report_path, report, plot,
+                       name='BCROSS_DIODE_ti_{0}_{1}'.format(ti, idx))
+
+    # plot number of solutions
+    report.writeln()
+    report.writeln()
+    cal = 'BCROSS_DIODE'
+    title = 'Number of slns : {}'.format(cal)
     b_slns = ~np.all(np.isnan(vals), axis=1)
     no_slns = np.sum(b_slns, axis=0, dtype=np.uint32)
     plot = plotting.plot_v_antenna(no_slns, 'No of slns: {0}'.format(cal), title,
@@ -1264,7 +1336,7 @@ def make_cal_report(ts, capture_block_id, stream_name, parameters, report_path, 
     # --------------------------------------------------------------------
     # write heading
     with _lock:
-        with rstReport(report_file, 'w') as cal_rst:
+        with rstReport(report_file) as cal_rst:
             cal_rst.write_heading_0('Calibration pipeline report')
 
             # --------------------------------------------------------------------

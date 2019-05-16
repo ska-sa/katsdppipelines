@@ -33,27 +33,27 @@ opts = parse_opts()
 
 if opts.file == '':
     # if we are not provided with a file, simulate interferometer data
-    print
-    print 'Data: simulated {0} antenna array'.format(opts.nants,)
+    print()
+    print('Data: simulated {0} antenna array'.format(opts.nants,))
 
     vis_av, bls_lookup, gains = calprocs.fake_vis(opts.nants, noise=False)
     if opts.nchans > 1: vis_av = np.repeat(vis_av[:,np.newaxis],opts.nchans,axis=1).T
 
 else:
     # if we are provided with a file, extract data  and metadata from the file
-    print
-    print 'Data: open file {0}'.format(opts.file,)
+    print()
+    print('Data: open file {0}'.format(opts.file,))
     simdata = init_simdata(opts.file)
 
-    print "Data: use HH pol only"
+    print("Data: use HH pol only")
     simdata.select(pol='hh')
-    print "Data: use 100 timestamps only"
+    print("Data: use 100 timestamps only")
     vis = simdata.vis[0:100]
 
-    print "Data: average over time"
+    print("Data: average over time")
     vis_av = np.mean(vis,axis=0)
-    print "Data: shape {0}".format(vis_av.shape,)
-    print
+    print("Data: shape {0}".format(vis_av.shape,))
+    print()
 
     # get data parameters for solver
     antlist = ','.join([a.name for a in simdata.ants])

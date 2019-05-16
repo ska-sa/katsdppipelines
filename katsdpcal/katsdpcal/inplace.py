@@ -3,8 +3,6 @@
 Refer to :func:`store_inplace` for details.
 """
 
-from __future__ import print_function, division, absolute_import
-
 import numpy as np
 import dask.array as da
 import dask.base
@@ -13,7 +11,7 @@ import dask.optimization
 import dask.array.optimization
 
 
-class _ArrayDependency(object):
+class _ArrayDependency:
     """An array that a task depends on. To make this object hashable, two
     arrays to be equal if they refer to the same data with the same type,
     shape etc, even if they are different views.
@@ -50,7 +48,7 @@ class UnsafeInplaceError(Exception):
     def __init__(self, source_key, target_key):
         self.source_key = source_key
         self.target_key = target_key
-        super(UnsafeInplaceError, self).__init__(
+        super().__init__(
             'Data hazard between source key {} and target key {}'.format(source_key, target_key))
 
 

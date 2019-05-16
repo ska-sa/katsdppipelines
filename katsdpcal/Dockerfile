@@ -1,8 +1,7 @@
 FROM sdp-docker-registry.kat.ac.za:5000/docker-base-build as build
-MAINTAINER Tom Mauch "tmauch@ska.ac.za"
 
-# Enable Python 2 venv
-ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
+# Enable Python 3 venv
+ENV PATH="$PATH_PYTHON3" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON3"
 
 # Install python dependencies
 COPY requirements.txt /tmp/install/
@@ -19,11 +18,10 @@ WORKDIR /tmp
 
 #######################################################################
 
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime:18.04
-MAINTAINER Tom Mauch "tmauch@ska.ac.za"
+FROM sdp-docker-registry.kat.ac.za:5000/docker-base-runtime
 
-COPY --from=build --chown=kat:kat /home/kat/ve /home/kat/ve
-ENV PATH="$PATH_PYTHON2" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON2"
+COPY --from=build --chown=kat:kat /home/kat/ve3 /home/kat/ve3
+ENV PATH="$PATH_PYTHON3" VIRTUAL_ENV="$VIRTUAL_ENV_PYTHON3"
 
 # katcp port
 EXPOSE 2048

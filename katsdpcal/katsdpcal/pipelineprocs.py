@@ -3,7 +3,6 @@ Pipeline procedures for MeerKAT calibration pipeline
 ====================================================
 """
 
-from __future__ import print_function, division, absolute_import
 import glob    # for model files
 import pickle
 import logging
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------------------------------
 
 
-class Converter(object):
+class Converter:
     """Converts parameters between representations.
 
     A parameter starts with a requested value, which is directly given by the
@@ -74,7 +73,7 @@ class AttrConverter(Converter):
 
 
 @attr.s
-class Parameter(object):
+class Parameter:
     name = attr.ib()
     help = attr.ib()
     type = attr.ib()
@@ -276,15 +275,15 @@ def finalise_parameters(parameters, telstate_l0, servers, server_id, rfi_filenam
 
     parameters['refant_index'] = None
     if rfi_filename is not None:
-        with open(rfi_filename) as rfi_file:
+        with open(rfi_filename, 'rb') as rfi_file:
             parameters['rfi_mask'] = pickle.load(rfi_file)
         if parameters['rfi_mask'].shape != (n_chans,):
             raise ValueError('Incorrect shape in RFI mask ({}, expected {})'
                              .format(parameters['rfi_mask'].shape, (n_chans,)))
     else:
         parameters['rfi_mask'] = np.zeros((n_chans,), np.bool_)
-    # Only use static channel mask on baselines shorter than 1000 meters
-    bl_mask = get_baseline_mask(parameters['bls_lookup'], antennas, 1000)
+    # Only use static channel mask on baselines greater than 1 and less than 1000 meters
+    bl_mask = get_baseline_mask(parameters['bls_lookup'], antennas, (1, 1000))
     rfi_mask_shape = (1, n_chans, 1, len(parameters['bls_lookup']))
     rfi_mask = np.zeros(rfi_mask_shape, np.bool_)
     channel_mask = parameters['rfi_mask'][np.newaxis, :, np.newaxis, np.newaxis]
@@ -310,7 +309,8 @@ def finalise_parameters(parameters, telstate_l0, servers, server_id, rfi_filenam
         'K': 'product_K',
         'KCROSS': 'product_KCROSS',
         'KCROSS_DIODE': 'product_KCROSS_DIODE',
-        'B': 'product_B{}'.format(server_id)
+        'B': 'product_B{}'.format(server_id),
+        'BCROSS_DIODE': 'product_BCROSS_DIODE{}'.format(server_id)
     }
     parameters['product_B_parts'] = servers
 
@@ -359,11 +359,11 @@ def parameters_to_telstate(parameters, telstate_cal, l0_name):
     telstate_cal.add('src_streams', [l0_name], immutable=True)
 
 
-def get_baseline_mask(bls_lookup, ants, limit):
+def get_baseline_mask(bls_lookup, ants, limits):
     """
     Compute a mask of the same length as bls_lookup that indicates
-    whether the baseline length of the given correlation product is
-    shorter than limit in meters
+    whether the baseline length of the given correlation product is within
+    the given limits (in meters)
 
     Parameters
     ----------
@@ -371,15 +371,15 @@ def get_baseline_mask(bls_lookup, ants, limit):
         indices of antenna pairs in each correlation product
     ants: list of :class:`katpoint.Antenna`
         antennas in bls_lookup
-    limit : float
-        limit in meters
+    limits : tuple
+        (lower_limit, upper_limit) in meters
     """
     baseline_mask = np.zeros(bls_lookup.shape[0], dtype=np.bool)
 
     for prod, baseline in enumerate(bls_lookup):
         bl_vector = ants[baseline[0]].baseline_toward(ants[baseline[1]])
         bl_length = np.linalg.norm(bl_vector)
-        if bl_length < limit:
+        if (bl_length >= limits[0]) & (bl_length < limits[1]):
             baseline_mask[prod] = True
     return baseline_mask
 

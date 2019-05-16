@@ -1,8 +1,9 @@
 import time
 import logging
 import threading
-import cPickle as pickle
+import pickle
 import katpoint
+from numbers import Integral
 
 import numpy as np
 
@@ -112,7 +113,7 @@ def check_noise_diode(telstate, ant_names, time_range):
             pass
         else:
             # Set to True if any noise diode value is positive, per antenna
-            values = zip(*value_times)[0]
+            values = list(zip(*value_times))[0]
             nd_on[n] = max(values) > 0
     return nd_on
 
@@ -252,11 +253,13 @@ def shared_solve(telstate, parameters, solution_store, bchan, echan,
                     info = ('CalSolution', soln.soltype, values, soln.time)
                 else:
                     info = ('CalSolutions', soln.soltype, values, soln.times)
-            elif isinstance(soln, (int, np.ndarray)):
+            elif isinstance(soln, (Integral, np.ndarray)):
                 info = ('soln', soln)
                 if solution_store is not None:
                     logger.warn('Solution is not of type :class:`~.CalSolution` or `~.CalSolutions`'
                                 ' and won\'t be stored in solution store')
+            else:
+                raise TypeError('Unhandled solution type {}'.format(type(soln)))
         except Exception as error:
             add_info(('Exception', pickle.dumps(error)))
             raise
@@ -490,9 +493,9 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
             # use single solution interval
             dumps_per_solint = scan_slice.stop - scan_slice.start
             g_solint = dumps_per_solint * dump_period
-            shared_solve(ts, parameters, solution_stores['G'],
-                         parameters['g_bchan'], parameters['g_echan'],
-                         s.g_sol, g_solint, g0_h, pre_apply=solns_to_apply)
+            g_soln = shared_solve(ts, parameters, solution_stores['G'],
+                                  parameters['g_bchan'], parameters['g_echan'],
+                                  s.g_sol, g_solint, g0_h, pre_apply=solns_to_apply)
 
             # ----------------------------------------
             # KCROSS solution
@@ -507,19 +510,27 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
                 elif s.ac_mask.size == 0:
                     logger.info("No AC data, can't solve for KCROSS_DIODE without AC data")
                 else:
-                    solns_to_apply = [s.interpolate(k_soln)]
+                    solns_to_apply = [s.interpolate(k_soln), s.interpolate(b_soln),
+                                      s.interpolate(g_soln)]
+
                     kcross_soln = shared_solve(ts, parameters, solution_stores['KCROSS_DIODE'],
                                                parameters['k_bchan'], parameters['k_echan'],
                                                s.kcross_sol, pre_apply=solns_to_apply,
                                                nd=nd_on, auto_ant=True)
 
-                    # apply solutions and put corrected data into the av_corr dictionary
+                    # solve for bcross_diode and save solution
                     solns_to_apply.append(s.interpolate(kcross_soln))
+                    logger.info('Solving for BCROSS_DIODE on beamformer calibrator %s', target_name)
+                    bcross_soln = s.bcross_sol(solns_to_apply, nd_on)
+                    save_solution(ts, parameters['product_names']['BCROSS_DIODE'],
+                                  solution_stores['BCROSS_DIODE'], bcross_soln)
+
+                    # apply solutions and put corrected data into the av_corr dictionary
+                    solns_to_apply.append(s.interpolate(bcross_soln))
                     vis = s.auto_ant.tf.cross_pol.vis
                     for soln in solns_to_apply:
                         vis = s.apply(soln, vis, cross_pol=True)
                     logger.info('Averaging corrected auto-corr data for %s:', target_name)
-
                     data = (vis, s.auto_ant.tf.cross_pol.flags, s.auto_ant.tf.cross_pol.weights)
                     s.summarize(av_corr, 'auto_cross', data, nchans=1024)
             else:

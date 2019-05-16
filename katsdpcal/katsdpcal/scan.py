@@ -37,7 +37,7 @@ def _rfi(vis, flags, flagger, out_bit):
     return out_flags[:, :, np.newaxis, :] * out_value
 
 
-class ScanData(object):
+class ScanData:
     """Data in a scan with particular chunking scheme.
 
     A :class:`Scan` stores several instances of :class:`ScanData`, representing
@@ -94,7 +94,7 @@ class ScanData(object):
         return array
 
 
-class ScanDataPair(object):
+class ScanDataPair:
     """Wraps a pair of :class:`ScanData` objects, one for auto-polarisations,
     the other for cross-hand polarisations.
     """
@@ -109,7 +109,7 @@ class ScanDataPair(object):
         return ScanDataPair(self.auto_pol.rechunk(idx), self.cross_pol.rechunk(idx))
 
 
-class ScanDataGroupBl(object):
+class ScanDataGroupBl:
     """
     Selects a subset of baselines from a :class: `ScanData` object
 
@@ -152,7 +152,7 @@ class ScanDataGroupBl(object):
         self.pb = self.orig.rechunk((None, None, 1, 16))
 
 
-class Scan(object):
+class Scan:
     """
     Single scan of data with auxillary information.
 
@@ -365,6 +365,51 @@ class Scan(object):
         return CalSolutions('G', g_soln, ave_times)
 
     @logsolutiontime
+    def bcross_sol(self, pre_apply=[], nd=None):
+        """
+        Solve for cross hand bandpass phase
+
+        Parameters
+        ----------
+        pre_apply : list of :class:`~.CalSolutions` CalSolutions, optional
+            calibration solutions to apply
+        nd : :class:`np.ndarray` of bool, optional
+            True for antennas with noise diode on, otherwise False,
+            sets solutions with nd False to NaN
+        Returns
+        -------
+        :class:`~.CalSolution`
+            Cross hand phase CalSolution with soltype `BCROSS_DIODE`, shape (pol, nant). The
+            second polarisation has phase set to zero.
+        """
+        corr = self.auto_ant
+
+        modvis = self.pre_apply(pre_apply, corr, cross_pol=True)
+
+        # average over all time
+        av_vis, av_flags, av_weights = calprocs_dask.wavg_full(modvis, corr.tf.cross_pol.flags,
+                                                               corr.tf.cross_pol.weights)
+
+        # Average the HV and complex conjugate of VH together per antenna
+        weighted_data, flagged_weights = calprocs_dask.weight_data(av_vis, av_flags, av_weights)
+        av_weights = da.sum(flagged_weights, axis=-2)
+        av_vis = (weighted_data[:, 0, :] +
+                  np.conjugate(weighted_data[:, 1, :]) /
+                  av_weights)
+
+        # Set phase in the second polarisation axis to zero
+        bcross_phase = da.angle(av_vis)
+        bcross_phase = da.stack([bcross_phase, np.zeros_like(bcross_phase)], axis=1)
+        # Set amplitudes to one
+        bcross_soln = da.exp(1j * bcross_phase)
+        bcross_soln = bcross_soln.compute()
+
+        # Set soln to NaN for antennas where the noise diode didn't fire
+        if nd is not None:
+            bcross_soln = np.where(~nd, np.nan, bcross_soln)
+        return CalSolution('BCROSS_DIODE', bcross_soln, np.average(self.timestamps))
+
+    @logsolutiontime
     def kcross_sol(self, bchan=1, echan=None, chan_ave=1, pre_apply=[], nd=None, auto_ant=False):
         """
         Solve for cross hand delay offset, for full pol data sets (four polarisation products)
@@ -560,7 +605,7 @@ class Scan(object):
 
     @logsolutiontime
     def b_norm(self, b_soln, bchan=1, echan=None):
-	"""
+        """
         Calculates an array of complex numbers which normalises
         b_soln in the specified channel range
 
@@ -645,13 +690,20 @@ class Scan(object):
                               * channel_freqs[np.newaxis, :, np.newaxis, np.newaxis])
             return self._apply(g_from_k, vis, cross_pol)
         elif soln.soltype in ['KCROSS_DIODE', 'KCROSS']:
-            # average HV delay over all antennas
+            # select HV delay at refant
             channel_freqs = da.asarray(self.channel_freqs)
-            soln = np.nanmedian(soln.values, axis=-1, keepdims=True)
+            soln = soln.values[..., self.refant][..., np.newaxis]
+            soln = np.repeat(soln, self.nant, axis=-1)
+
             g_from_k = da.exp(2j * np.pi * soln[:, np.newaxis, :, :]
                               * channel_freqs[np.newaxis, :, np.newaxis, np.newaxis])
-            g_from_k = da.tile(g_from_k, self.nant)
             return self._apply(g_from_k, vis, cross_pol)
+
+        elif soln.soltype in ['BCROSS_DIODE']:
+            # select HV phase at refant
+            soln = soln.values[..., self.refant][..., np.newaxis]
+            soln = np.repeat(soln, self.nant, axis=-1)
+            return self._apply(soln, vis, cross_pol)
 
         elif soln.soltype is 'B':
             return self._apply(soln_values, vis, cross_pol)
