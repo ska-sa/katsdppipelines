@@ -89,6 +89,7 @@ def _metadata(katds, cb_id, target_metadata):
     product_type['ProductTypeName'] = 'FITSImageProduct'
     product_type['ReductionName'] = 'Continuum Image'
     metadata['ProductType'] = product_type
+    metadata['Run'] = str(katds.target_indices[0])
     # Format time as required
     start_time = datetime.datetime.utcfromtimestamp(katds.start_time)
     metadata['StartTime'] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
