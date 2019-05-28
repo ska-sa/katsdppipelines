@@ -14,6 +14,7 @@ import katacomb.configuration as kc
 from katacomb import obit_config_from_aips
 
 import ObitTask
+from OTObit import addParam
 import OSystem
 
 import __builtin__
@@ -346,11 +347,11 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
         except AttributeError as e:
             attr_err = "ObitTask instance has no attribute '{}'".format(k)
             if attr_err in e.message:
-                log.warn("Key '%s' is not valid for this "
-                         "task and will be ignored", k)
+                # Assume this is a "hidden" parameter and add it to
+                # the task parameters via addParam
+                addParam(task, k, paramVal=v)
             else:
                 raise
-
     return task
 
 
