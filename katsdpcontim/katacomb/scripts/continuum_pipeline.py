@@ -71,6 +71,13 @@ def create_parser():
                         default='', type=str,
                         help="Address of the telstate server")
 
+    parser.add_argument("-tsid", "--telstate-id",
+                        default=None, type=str,
+                        help="Namespace of the telstate key unique "
+                             "to the continuum pipeline. Appended to "
+                             "'--cbid' and a view is passed. Default is "
+                             "--output-id value.")
+
     parser.add_argument("-oid", "--output-id",
                         default="continuum_image", type=str,
                         help="Label the product of the continuum pipeline. "
@@ -181,7 +188,7 @@ kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_
 # Set up telstate link then create
 # a view based the capture block ID and output ID
 telstate = TelescopeState(args.telstate)
-view = telstate.SEPARATOR.join((args.capture_block_id, args.output_id))
+view = telstate.join(args.capture_block_id, args.telstate_id)
 ts_view = telstate.view(view)
 
 katdal_select = args.select
