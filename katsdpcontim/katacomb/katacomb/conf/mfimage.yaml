@@ -36,4 +36,4 @@ refAnt: 0                   # SC Reference antenna
 Reuse: 20.0                 # Number of sigma to reuse CCs
 doGPU: True                 # Use GPU predict
 minFList: [0.0001]          # Minimum flux density to CLEAN per Self-cal cycle after first
-maxRealtime: 21600          # Wall time after which MFImage will begin to shut down
+maxRealtime: 21600.0        # Wall time after which MFImage will begin to shut down
