@@ -191,7 +191,7 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
                     data = {'description': description, 'components': katpoint_rows}
 
                     # Store them in telstate
-                    key = telstate.SEPARATOR.join([target, "clean_components"])
+                    key = telstate.join(target, "clean_components")
                     telstate.add(key, data, immutable=True)
 
         except Exception as e:
