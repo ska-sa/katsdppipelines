@@ -87,6 +87,8 @@ def post_process_args(args, kat_ds):
     1. Capture Block ID set to katdal experiment ID if not present or
     found in kat_ds.obs_params.
 
+    2. Telstate ID set to value of output-id if not present.
+
     Parameters
     ----------
     args : object
@@ -111,7 +113,8 @@ def post_process_args(args, kat_ds):
                      "found in katdal. "
                      "Using experiment_id '%s' instead.",
                      kat_ds.experiment_id)
-
+    if args.telstate_id is None:
+        args.telstate_id = args.output_id
     return args
 
 
