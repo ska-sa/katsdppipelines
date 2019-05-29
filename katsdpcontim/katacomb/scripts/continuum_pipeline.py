@@ -73,15 +73,14 @@ def create_parser():
 
     parser.add_argument("-tsid", "--telstate-id",
                         default=None, type=str,
-                        help="Namespace of the telstate key unique "
-                             "to the continuum pipeline. Appended to "
-                             "'--cbid' and a view is passed. Default is "
-                             "--output-id value.")
+                        help="Namespace for output telescope "
+                             "state keys (within the '-cbid' namespace). "
+                             "Default is the value of --output-id")
 
     parser.add_argument("-oid", "--output-id",
                         default="continuum_image", type=str,
                         help="Label the product of the continuum pipeline. "
-                             "Used to generate telstate keys.")
+                             "Used to generate FITS and PNG filenames.")
 
     parser.add_argument("-ks", "--select",
                         default="scans='track'; spw=0; corrprods='cross'",
