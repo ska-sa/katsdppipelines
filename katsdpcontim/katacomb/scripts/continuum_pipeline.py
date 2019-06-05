@@ -14,10 +14,8 @@ Basic version of the continuum imaging pipeline.
 
 import argparse
 import logging
-import os
 import os.path
 from os.path import join as pjoin
-import time
 
 import katdal
 from katsdpservices import setup_logging
@@ -32,10 +30,6 @@ from katacomb.util import (parse_python_assigns,
                            setup_aips_disks)
 
 log = logging.getLogger('katacomb')
-# Tag to append to the output directory while the pipeline runs
-WRITE_TAG = '.writing'
-OUTDIR_SEPARATOR = '_'
-START_TIME = time.strftime('%s')
 
 
 def create_parser():
@@ -60,9 +54,10 @@ def create_parser():
                              "will be created in this space.")
 
     parser.add_argument("-o", "--outputdir",
-                        default='/var/kat/data', type=str,
-                        help="Location to store output FITS, PNG files "
-                             "and metadata dictionary. Default is /var/kat/data")
+                        default=None, type=str,
+                        help="Location to store output FITS files "
+                             "and metadata dictionary. Default is --workdir "
+                             "location.")
 
     parser.add_argument("--nvispio", default=10240, type=int)
 
@@ -76,10 +71,16 @@ def create_parser():
                         default='', type=str,
                         help="Address of the telstate server")
 
+    parser.add_argument("-tsid", "--telstate-id",
+                        default=None, type=str,
+                        help="Namespace for output telescope "
+                             "state keys (within the '-cbid' namespace). "
+                             "Default is the value of --output-id")
+
     parser.add_argument("-oid", "--output-id",
                         default="continuum_image", type=str,
                         help="Label the product of the continuum pipeline. "
-                             "Used to generate telstate keys.")
+                             "Used to generate FITS and PNG filenames.")
 
     parser.add_argument("-ks", "--select",
                         default="scans='track'; spw=0; corrprods='cross'",
@@ -166,17 +167,16 @@ log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
-outputname = args.capture_block_id + OUTDIR_SEPARATOR + \
-             args.output_id + OUTDIR_SEPARATOR + START_TIME
-outputdir = pjoin(args.outputdir, outputname)
-# Set writing tag for duration of the pipeline
-work_outputdir = outputdir + WRITE_TAG
-# Append outputdir to fitsdirs
+# Append args.outputdir to fitsdirs if it is set
 # NOTE: Pipeline is set up to always place its output in the
 # highest numbered fits disk so we ensure that is the case
 # here.
-fitsdirs += [(None, work_outputdir)]
-log.info('Using output data area: %s' % (outputdir))
+if args.outputdir is not None:
+    fitsdirs += [(None, args.outputdir)]
+# Otherwise append args.workdir
+elif args.workdir is not None:
+    fitsdirs += [(None, args.workdir)]
+log.info('Using output data area: %s' % (fitsdirs[-1][1]))
 kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
 
 setup_aips_disks()
@@ -187,7 +187,7 @@ kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_
 # Set up telstate link then create
 # a view based the capture block ID and output ID
 telstate = TelescopeState(args.telstate)
-view = telstate.SEPARATOR.join((args.capture_block_id, args.output_id))
+view = telstate.join(args.capture_block_id, args.telstate_id)
 ts_view = telstate.view(view)
 
 katdal_select = args.select
@@ -202,6 +202,3 @@ pipeline = ContinuumPipeline(katdata, ts_view,
 
 # Execute it
 pipeline.execute()
-
-# Remove the writing tag from the output directory
-os.rename(work_outputdir, outputdir)

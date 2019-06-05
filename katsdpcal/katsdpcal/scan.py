@@ -587,11 +587,11 @@ class Scan:
             # turn bandpass NaN's into input flags for the flagger,
             # the input flags are stored in bit 0
             flags = da.isnan(b_soln).astype(np.uint8)
-            rfi_flags = da.atop(_rfi, 'TFpa', b_soln, 'tfpa', flags, 'tfpa',
-                                dtype=np.uint8,
-                                new_axes={'T': b_soln.shape[0], 'F': b_soln.shape[1]},
-                                concatenate=True,
-                                flagger=bp_flagger, out_bit=1)
+            rfi_flags = da.blockwise(_rfi, 'TFpa', b_soln, 'tfpa', flags, 'tfpa',
+                                     dtype=np.uint8,
+                                     new_axes={'T': b_soln.shape[0], 'F': b_soln.shape[1]},
+                                     concatenate=True,
+                                     flagger=bp_flagger, out_bit=1)
 
             # OR flags across polarisation
             rfi_flags |= da.flip(rfi_flags, axis=2)
@@ -705,7 +705,7 @@ class Scan:
             soln = np.repeat(soln, self.nant, axis=-1)
             return self._apply(soln, vis, cross_pol)
 
-        elif soln.soltype is 'B':
+        elif soln.soltype == 'B':
             return self._apply(soln_values, vis, cross_pol)
         else:
             raise ValueError('Solution type {} is invalid.'.format(soln.soltype))
@@ -1156,7 +1156,7 @@ class Scan:
             if mask is not None:
                 data[key + '_flags'] |= (mask * np.uint8(2**static_bit))
 
-        rfi_flags = da.atop(
+        rfi_flags = da.blockwise(
             _rfi, 'TFpb', data['cross_pol'].vis, 'tfpb', data['cross_pol_flags'], 'tfpb',
             dtype=np.uint8,
             new_axes={'T': data['cross_pol'].vis.shape[0], 'F': data['cross_pol'].vis.shape[1]},

@@ -140,11 +140,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends $PACKAGES && \
     rm -rf /var/lib/apt/lists/*
 
-# Set up area for image/metadata output
-RUN mkdir -p /var/kat/data
-RUN chown -R kat:kat /var/kat
-VOLUME ['/var/kat/data/']
-
 # Now downgrade to kat
 USER kat
 

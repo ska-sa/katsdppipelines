@@ -32,10 +32,10 @@ setup(
     python_requires=">=3.5",
     install_requires=[
         "numpy>=1.15", "scipy>=0.17", "numba>=0.19.0",
-        "dask[array,distributed]>=0.17.0", "distributed>=1.12.0", "bokeh",
+        "dask[array,distributed]>=1.1.0", "distributed>=1.12.0", "bokeh",
         "attrs", "sortedcontainers",
         "aiokatcp", "async_timeout",
-        "katpoint", "katdal", "katsdptelstate", "katsdpservices[argparse]",
+        "katpoint", "katdal", "katsdptelstate", "katsdpservices[argparse,aiomonitor]",
         "katsdpsigproc", "spead2>=1.8.0", "docutils", "matplotlib>=2",
         "jsonschema"
     ],
