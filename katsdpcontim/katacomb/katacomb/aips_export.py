@@ -37,6 +37,63 @@ def _condition(row):
             for k, v in row.items() if k not in _DROP}
 
 
+def _integration_time(target, katds):
+    """ Work out integration time (in hours) on a target,
+        preserving katdal selection.
+        NOTE:
+        This is a plceholder until we can manipulate katdal
+        target selection as described in JIRA ticket SR-1732:
+        https://skaafrica.atlassian.net/browse/SR-1732
+    """
+    n_dumps = 0
+    selection = katds._selection
+    katds.select(reset='T')
+    for _, _, scan_targ in katds.scans():
+        if scan_targ == target:
+            n_dumps += len(katds.dumps)
+    katds.select(**selection)
+    return n_dumps * katds.dump_period / 3600.
+
+
+def _update_target_metadata(target_metadata, image, target, tn, katds, filebase):
+    """ Append target metadata to target_metadata lists. """
+    target_metadata.setdefault('FITSImageFilename', []).append(filebase + FITS_EXT)
+    target_metadata.setdefault('PNGImageFileName', []).append(filebase + PNG_EXT)
+    target_metadata.setdefault('PNGThumbNailFileName', []).append(filebase + TNAIL_EXT)
+    target_metadata.setdefault('IntegrationTime', []).append(_integration_time(target, katds))
+    image.GetPlane(None, [IMG_PLANE, 1, 1, 1, 1])
+    target_metadata.setdefault('RMSNoise', []).append(str(image.FArray.RMS))
+    target_metadata.setdefault('RightAscension', []).append(str(target.radec()[0]))
+    target_metadata.setdefault('Declination', []).append(str(target.radec()[1]))
+    radec = np.rad2deg(target.radec())
+    target_metadata.setdefault('DecRa', []).append(','.join(map(str, radec[::-1])))
+    target_metadata.setdefault('Targets', []).append(tn)
+    target_metadata.setdefault('KatpointTargets', []).append(target.description)
+    return target_metadata
+
+
+def _metadata(katds, cb_id, target_metadata):
+    """ Construct metadata dictionary """
+    obs_params = katds.obs_params
+    metadata = {}
+    product_type = {}
+    product_type['ProductTypeName'] = 'FITSImageProduct'
+    product_type['ReductionName'] = 'Continuum Image'
+    metadata['ProductType'] = product_type
+    metadata['Run'] = str(katds.target_indices[0])
+    # Format time as required
+    start_time = datetime.datetime.utcfromtimestamp(katds.start_time)
+    metadata['StartTime'] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata['CaptureBlockId'] = cb_id
+    metadata['ScheduleBlockIdCode'] = obs_params['sb_id_code']
+    metadata['Description'] = obs_params['description'] + ': Continuum image'
+    metadata['ProposalId'] = obs_params['proposal_id']
+    metadata['Observer'] = obs_params['observer']
+    # Add per-target metadata lists
+    metadata.update(target_metadata)
+    return metadata
+
+
 def export_images(clean_files, target_indices, disk, kat_adapter):
     """
     Write out FITS and PNG files for each image in clean_files.
