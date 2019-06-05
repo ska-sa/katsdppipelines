@@ -1,5 +1,7 @@
 from __future__ import with_statement
 
+import datetime
+import json
 import logging
 from os.path import join as pjoin
 
@@ -27,6 +29,13 @@ log = logging.getLogger('katacomb')
 _DROP = {"Table name", "NumFields", "_status"}
 
 OFILE_SEPARATOR = '_'
+# Default image plane to write as FITS.
+IMG_PLANE = 1
+# File extensions for FITS, PNG and thumbnails
+FITS_EXT = '.fits'
+PNG_EXT = '.png'
+TNAIL_EXT = OFILE_SEPARATOR + 'tnail.png'
+METADATA_JSON = 'metadata.json'
 
 
 def _condition(row):
@@ -37,9 +46,66 @@ def _condition(row):
             for k, v in row.items() if k not in _DROP}
 
 
+def _integration_time(target, katds):
+    """ Work out integration time (in hours) on a target,
+        preserving katdal selection.
+        NOTE:
+        This is a plceholder until we can manipulate katdal
+        target selection as described in JIRA ticket SR-1732:
+        https://skaafrica.atlassian.net/browse/SR-1732
+    """
+    n_dumps = 0
+    selection = katds._selection
+    katds.select(reset='T')
+    for _, _, scan_targ in katds.scans():
+        if scan_targ == target:
+            n_dumps += len(katds.dumps)
+    katds.select(**selection)
+    return n_dumps * katds.dump_period / 3600.
+
+
+def _update_target_metadata(target_metadata, image, target, tn, katds, filebase):
+    """ Append target metadata to target_metadata lists. """
+    target_metadata.setdefault('FITSImageFilename', []).append(filebase + FITS_EXT)
+    target_metadata.setdefault('PNGImageFileName', []).append(filebase + PNG_EXT)
+    target_metadata.setdefault('PNGThumbNailFileName', []).append(filebase + TNAIL_EXT)
+    target_metadata.setdefault('IntegrationTime', []).append(_integration_time(target, katds))
+    image.GetPlane(None, [IMG_PLANE, 1, 1, 1, 1])
+    target_metadata.setdefault('RMSNoise', []).append(str(image.FArray.RMS))
+    target_metadata.setdefault('RightAscension', []).append(str(target.radec()[0]))
+    target_metadata.setdefault('Declination', []).append(str(target.radec()[1]))
+    radec = np.rad2deg(target.radec())
+    target_metadata.setdefault('DecRa', []).append(','.join(map(str, radec[::-1])))
+    target_metadata.setdefault('Targets', []).append(tn)
+    target_metadata.setdefault('KatpointTargets', []).append(target.description)
+    return target_metadata
+
+
+def _metadata(katds, cb_id, target_metadata):
+    """ Construct metadata dictionary """
+    obs_params = katds.obs_params
+    metadata = {}
+    product_type = {}
+    product_type['ProductTypeName'] = 'FITSImageProduct'
+    product_type['ReductionName'] = 'Continuum Image'
+    metadata['ProductType'] = product_type
+    metadata['Run'] = str(katds.target_indices[0])
+    # Format time as required
+    start_time = datetime.datetime.utcfromtimestamp(katds.start_time)
+    metadata['StartTime'] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata['CaptureBlockID'] = cb_id
+    metadata['ScheduleBlockIDCode'] = obs_params['sb_id_code']
+    metadata['Description'] = obs_params['description'] + ': Continuum image'
+    metadata['ProposalID'] = obs_params['proposal_id']
+    metadata['Observer'] = obs_params['observer']
+    # Add per-target metadata lists
+    metadata.update(target_metadata)
+    return metadata
+
+
 def export_images(clean_files, target_indices, disk, kat_adapter):
     """
-    Write out FITS and PNG files for each image in clean_files.
+    Write out FITS, PNG and metadata.json files for each image in clean_files.
 
     Parameters
     ----------
@@ -53,7 +119,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
         Katdal Adapter
     """
 
-    used = []
+    target_metadata = {}
     targets = kat_adapter.katdal.catalogue.targets
     for clean_file, ti in zip(clean_files, target_indices):
         try:
@@ -69,28 +135,39 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
 
                 # Get and sanitise target name
                 targ = targets[ti]
-                tn = normalise_target_name(targ.name, used)
-                used.append(tn)
+                tn = normalise_target_name(targ.name, target_metadata.get('Targets', []))
 
                 # Output file name
                 out_strings = [cb_id, ap.label, tn, ap.aclass]
                 out_filebase = OFILE_SEPARATOR.join(filter(None, out_strings))
-                out_fitsfilename = out_filebase + '.fits'
 
-                log.info('Write FITS image output: %s' % (pjoin(out_dir, out_fitsfilename)))
-                cf.writefits(disk, out_fitsfilename)
+                log.info('Write FITS image output: %s' % (out_filebase + FITS_EXT))
+                cf.writefits(disk, out_filebase + FITS_EXT)
 
                 # Export PNG and a thumbnail PNG
-                out_pngfilename = pjoin(out_dir, out_filebase + '.png')
-                save_image(cf, out_pngfilename)
-                out_pngthumbnail = pjoin(out_dir, out_filebase + OFILE_SEPARATOR + 'tnail.png')
-                save_image(cf, out_pngthumbnail, display_size=5., dpi=100)
+                log.info('Write PNG image output: %s' % (out_filebase + PNG_EXT))
+                out_pngfile = pjoin(out_dir, out_filebase + PNG_EXT)
+                save_image(cf, out_pngfile, plane=IMG_PLANE)
+                out_pngthumbnail = pjoin(out_dir, out_filebase + TNAIL_EXT)
+                save_image(cf, out_pngthumbnail, plane=IMG_PLANE, display_size=5., dpi=100)
 
-                log.info('Write PNG image output: %s' % (pjoin(out_dir, out_filebase + '.png')))
+                # Set up metadata for this target
+                _update_target_metadata(target_metadata, cf, targ, tn,
+                                        kat_adapter.katdal, out_filebase)
 
         except Exception as e:
             log.warn("Export of FITS and PNG images from %s failed.\n%s",
                      clean_file, str(e))
+
+    # Export metadata json
+    try:
+        metadata = _metadata(kat_adapter.katdal, cb_id, target_metadata)
+        metadata_file = pjoin(out_dir, METADATA_JSON)
+        log.info('Write metadata JSON: %s' % (METADATA_JSON))
+        with open(metadata_file, 'w') as meta:
+            json.dump(metadata, meta)
+    except Exception as e:
+            log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
 
 
 def export_calibration_solutions(uv_files, kat_adapter, telstate):
