@@ -94,7 +94,7 @@ def _metadata(katds, cb_id, target_metadata):
     start_time = datetime.datetime.utcfromtimestamp(katds.start_time)
     metadata['StartTime'] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
     metadata['CaptureBlockId'] = cb_id
-    metadata['ScheduleBlockIDCode'] = obs_params['sb_id_code']
+    metadata['ScheduleBlockIdCode'] = obs_params['sb_id_code']
     metadata['Description'] = obs_params['description'] + ': Continuum image'
     metadata['ProposalId'] = obs_params['proposal_id']
     metadata['Observer'] = obs_params['observer']
