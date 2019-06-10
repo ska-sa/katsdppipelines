@@ -620,6 +620,11 @@ class KatdalAdapter(object):
         """
         return datetime.date.today().strftime('%Y-%m-%d')
 
+    @property
+    def obs_params(self):
+        """ Proxies :attr:`katdal.DataSet.obs_params` """
+        return getattr(self._katds, 'obs_params', {})
+
     """ Map correlation characters to correlation id """
     CORR_ID_MAP = {
         ('h', 'h'): 0,
