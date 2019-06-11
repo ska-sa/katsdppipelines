@@ -35,7 +35,7 @@ log = logging.getLogger('katacomb')
 # Tag to append to the output directory while the pipeline runs
 WRITE_TAG = '.writing'
 OUTDIR_SEPARATOR = '_'
-
+START_TIME = '%d'%(int(time.time()*1000))
 
 def create_parser():
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
@@ -173,7 +173,8 @@ log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
 
-outputname = args.capture_block_id + OUTDIR_SEPARATOR + args.telstate_id
+outputname = args.capture_block_id + OUTDIR_SEPARATOR + args.telstate_id + \
+             OUTDIR_SEPARATOR + START_TIME
 outputdir = pjoin(args.outputdir, outputname)
 # Set writing tag for duration of the pipeline
 work_outputdir = outputdir + WRITE_TAG
