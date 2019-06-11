@@ -14,8 +14,10 @@ Basic version of the continuum imaging pipeline.
 
 import argparse
 import logging
+import os
 import os.path
 from os.path import join as pjoin
+import time
 
 import katdal
 from katsdpservices import setup_logging
@@ -30,7 +32,10 @@ from katacomb.util import (parse_python_assigns,
                            setup_aips_disks)
 
 log = logging.getLogger('katacomb')
-
+# Tag to append to the output directory while the pipeline runs
+WRITE_TAG = '.writing'
+OUTDIR_SEPARATOR = '_'
+START_TIME = '%d'%(int(time.time()*1000))
 
 def create_parser():
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
@@ -55,9 +60,9 @@ def create_parser():
 
     parser.add_argument("-o", "--outputdir",
                         default=None, type=str,
-                        help="Location to store output FITS files "
-                             "and metadata dictionary. Default is --workdir "
-                             "location.")
+                        help="Location to store output FITS, PNG files "
+                             "and metadata dictionary. Default is "
+                             "'/var/kat/data'.")
 
     parser.add_argument("--nvispio", default=10240, type=int)
 
@@ -167,16 +172,19 @@ log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
-# Append args.outputdir to fitsdirs if it is set
+
+outputname = args.capture_block_id + OUTDIR_SEPARATOR + args.telstate_id + \
+             OUTDIR_SEPARATOR + START_TIME
+outputdir = pjoin(args.outputdir, outputname)
+# Set writing tag for duration of the pipeline
+work_outputdir = outputdir + WRITE_TAG
+# Append outputdir to fitsdirs
 # NOTE: Pipeline is set up to always place its output in the
 # highest numbered fits disk so we ensure that is the case
 # here.
-if args.outputdir is not None:
-    fitsdirs += [(None, args.outputdir)]
-# Otherwise append args.workdir
-elif args.workdir is not None:
-    fitsdirs += [(None, args.workdir)]
-log.info('Using output data area: %s' % (fitsdirs[-1][1]))
+fitsdirs += [(None, work_outputdir)]
+log.info('Using output data area: %s' % (outputdir))
+
 kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
 
 setup_aips_disks()
@@ -202,3 +210,6 @@ pipeline = ContinuumPipeline(katdata, ts_view,
 
 # Execute it
 pipeline.execute()
+
+# Remove the writing tag from the output directory
+os.rename(work_outputdir, outputdir)
