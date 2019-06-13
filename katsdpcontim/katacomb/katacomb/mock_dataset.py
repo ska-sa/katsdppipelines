@@ -307,7 +307,8 @@ class MockDataSet(DataSet):
         self.end_time = self.start_time + dump_period*ndumps
         self.dump_period = dump_period
         self.dumps = np.arange(ndumps)
-        self._timestamps = np.arange(self.start_time.secs, self.end_time.secs,
+        self._timestamps = np.arange(self.start_time.secs + (dump_period / 2.),
+                                     self.end_time.secs,
                                      step=dump_period, dtype=np.float64)
 
     def _create_subarrays(self, subarray_defs):

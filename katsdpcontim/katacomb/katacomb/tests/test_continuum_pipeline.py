@@ -10,7 +10,7 @@ from scipy import constants
 
 import katpoint
 from katsdptelstate import TelescopeState
- 
+
 from katacomb import ContinuumPipeline, obit_context
 from katacomb.aips_export import (fit_flux_model,
                                   obit_flux_model,
@@ -52,12 +52,14 @@ def vis(dataset, sources):
         out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent) / n
     return out_vis
 
+
 def weights(dataset):
     return np.ones(dataset.shape, dtype=np.float32)
 
 
 def flags(dataset):
     return np.zeros(dataset.shape, dtype=np.bool)
+
 
 class TestContinuumPipeline(unittest.TestCase):
 
@@ -303,30 +305,29 @@ class TestContinuumPipeline(unittest.TestCase):
 
         def construct_SN_desc(nif, rows):
             dummy_SN = {}
-            dummy_SN["AIPS SN"] = {"attach": {'version': 1, 'numIF': nif, 'numPol':2},
+            dummy_SN["AIPS SN"] = {"attach": {'version': 1, 'numIF': nif, 'numPol': 2},
                                    "rows": rows,
-                                   "write": True,}
+                                   "write": True}
             return dummy_SN
 
         def construct_SN_default_rows(timestamps, ants, nif):
-            """ 
+            """
             Construct list of ants dicts for each
             timestamp with REAL, IMAG, WEIGHT = 1.0
             """
             default_nif = [1.0] * nif
             rows = []
             for ts in timestamps:
-                rows += [{
-                'TIME': [ts],
-                'TIME INTERVAL': [0.1],
-                'ANTENNA NO.': [antn],
-                'REAL1': default_nif,
-                'REAL2': default_nif,
-                'IMAG1': default_nif,
-                'IMAG2': default_nif,
-                'WEIGHT 1': default_nif,
-                'WEIGHT 2': default_nif,
-                } for antn in ants]
+                rows += [{'TIME': [ts],
+                          'TIME INTERVAL': [0.1],
+                          'ANTENNA NO.': [antn],
+                          'REAL1': default_nif,
+                          'REAL2': default_nif,
+                          'IMAG1': default_nif,
+                          'IMAG2': default_nif,
+                          'WEIGHT 1': default_nif,
+                          'WEIGHT 2': default_nif}
+                         for antn in ants]
             return rows
 
         ant_ordering = ['m000', 'm001', 'm002', 'm003', 'm004', 'm005']
@@ -334,7 +335,7 @@ class TestContinuumPipeline(unittest.TestCase):
         with obit_context():
             nif = 1
             ap = AIPSPath("Flosshilde")
-            rows = construct_SN_default_rows([0.5], [1,2,3,4,5,6], nif)
+            rows = construct_SN_default_rows([0.5], [1, 2, 3, 4, 5, 6], nif)
             # Modify some gains
             rows[1]['REAL1'] = [AIPS_NAN]
             rows[2]['REAL1'] = rows[2]['REAL2'] = [AIPS_NAN]
@@ -379,3 +380,119 @@ class TestContinuumPipeline(unittest.TestCase):
             ts, result = _massage_gains(sntab, ant_ordering)
             self.assertEqual(ts, [])
             self.assertEqual(result, [])
+
+    def test_gains_export(self):
+        """Check l2 export to telstate"""
+        nchan = 128
+        nif = 4
+        dump_period = 1.0
+        centre_freq = 1200.e6
+        bandwidth = 100.e6
+        solPint = dump_period / 2.
+        solAint = dump_period
+        AP_telstate = 'product_GAMP_PHASE'
+        P_telstate = 'product_GPHASE'
+
+        spws = [{'centre_freq': centre_freq,
+                 'num_chans': nchan,
+                 'channel_width': bandwidth / nchan,
+                 'sideband': 1,
+                 'band': 'L'}]
+        ka_select = {'pol': 'HH,VV', 'scans': 'track',
+                     'corrprods': 'cross', 'nif': nif}
+        uvblavg_params = {'maxFact': 1.0, 'avgFreq': 0,
+                          'FOV': 100.0, 'maxInt': 1.e-6}
+        mfimage_params = {'Niter': 50, 'FOV': 0.1,
+                          'xCells': 5., 'yCells': 5.,
+                          'doGPU': False, 'Robust': -1.5,
+                          'minFluxPSC': 0.1, 'solPInt': solPint / 60.,
+                          'solPMode': 'P', 'minFluxASC': 0.1,
+                          'solAInt': solAint / 60., 'maxFBW': 0.02}
+
+        # Simulate a '10Jy' source at the phase center
+        cat = katpoint.Catalogue()
+        cat.add(katpoint.Target("Alberich, radec, 20.0, -30.0, (856. 1712. 1. 0. 0.)"))
+
+        telstate = TelescopeState()
+
+        # Set up a scratch space in /tmp
+        fd = kc.get_config()['fitsdirs']
+        fd += [(None, '/tmp/FITS')]
+        kc.set_config(fitsdirs=fd)
+        setup_aips_disks()
+
+        scan = [('track', 4, cat.targets[0])]
+
+        # Construct a simulated dataset with our
+        # point source at the centre of the field
+        ds = MockDataSet(timestamps={'start_time': 0.0, 'dump_period': dump_period},
+                         subarrays=DEFAULT_SUBARRAYS,
+                         spws=spws,
+                         dumps=scan,
+                         vis=partial(vis, sources=cat),
+                         weights=weights,
+                         flags=flags)
+
+        # Try one round of phase only self-cal & Amp+Phase self-cal
+        mfimage_params['maxPSCLoop'] = 1
+        mfimage_params['maxASCLoop'] = 1
+
+        # Run the pipeline
+        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+                                     uvblavg_params=uvblavg_params,
+                                     mfimage_params=mfimage_params)
+        pipeline.execute()
+
+        ts = telstate.view('selfcal')
+        # Check what we have in telstate agrees with what we put in
+        self.assertEqual(len(ts['antlist']), len(ANTENNA_DESCRIPTIONS))
+        self.assertEqual(ts['bandwidth'], bandwidth)
+        self.assertEqual(ts['n_chans'], nif)
+        pol_ordering = [pol[0] for pol in sorted(CORR_ID_MAP, key=CORR_ID_MAP.get)
+                        if pol[0] == pol[1]]
+        self.assertEqual(ts['pol_ordering'], pol_ordering)
+        if_width = bandwidth / nif
+        centre_if = nif // 2
+        start_freq = centre_freq - (bandwidth / 2.)
+        self.assertEqual(ts['centre_freq'], start_freq + if_width * (centre_if + 0.5))
+
+        self.assertIn(ts.join('selfcal', P_telstate), ts.keys())
+        self.assertIn(ts.join('selfcal', AP_telstate), ts.keys())
+
+        def check_gains_timestamps(gains, expect_timestamps):
+            timestamps = []
+            for gain, timestamp in gains:
+                np.testing.assert_array_almost_equal(np.abs(gain), 1.0, decimal=3)
+                np.testing.assert_array_almost_equal(np.angle(gain), 0.0)
+                timestamps.append(timestamp)
+            np.testing.assert_array_almost_equal(timestamps, expect_timestamps, decimal=1)
+
+        # Check phase-only gains and timestamps
+        P_times = np.arange(solPint, ds.end_time.secs, 2. * solPint)
+        check_gains_timestamps(ts.get_range(P_telstate, st=0), P_times)
+        # Check Amp+Phase gains
+        AP_times = np.arange(solAint, ds.end_time.secs, 2. * solAint)
+        check_gains_timestamps(ts.get_range(AP_telstate, st=0), AP_times)
+
+        # Check with no Amp+Phase self-cal
+        mfimage_params['maxASCLoop'] = 0
+        telstate.clear()
+        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+                                     uvblavg_params=uvblavg_params,
+                                     mfimage_params=mfimage_params)
+        pipeline.execute()
+        self.assertIn(telstate.join('selfcal', P_telstate), ts.keys())
+        self.assertNotIn(telstate.join('selfcal', AP_telstate), ts.keys())
+
+        # Check with no self-cal
+        mfimage_params['maxPSCLoop'] = 0
+        telstate.clear()
+        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+                                     uvblavg_params=uvblavg_params,
+                                     mfimage_params=mfimage_params)
+        pipeline.execute()
+        self.assertNotIn(telstate.join('selfcal', P_telstate), ts.keys())
+        self.assertNotIn(telstate.join('selfcal', AP_telstate), ts.keys())
+
+        # Cleanup workspace
+        shutil.rmtree(fd[-1][1])

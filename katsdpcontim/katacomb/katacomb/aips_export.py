@@ -243,7 +243,8 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
                         raise ValueError("Only dual-pol self-calibration "
                                          "solutions are supported")
                     for timestamp, gain in zip(*_massage_gains(sntab, ant_ordering)):
-                        ts.add('product_GPHASE', gain, ts=katdal_timestamps(timestamp, kat_adapter.midnight))
+                        ts.add('product_GPHASE', gain,
+                               ts=katdal_timestamps(timestamp, kat_adapter.midnight))
 
                 # Only export amp+phase solutions if we have them
                 if apSN > 0:
@@ -255,7 +256,8 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
                         log.warn("Requested amp+phase calibration solution not in '%s'", uv_file)
                     else:
                         for timestamp, gain in zip(*_massage_gains(sntab, ant_ordering)):
-                            ts.add('product_GAMP_PHASE', gain, ts=katdal_timestamps(timestamp, kat_adapter.midnight))
+                            ts.add('product_GAMP_PHASE', gain,
+                                   ts=katdal_timestamps(timestamp, kat_adapter.midnight))
         except Exception as e:
             log.warn("Export of calibration solutions from '%s' failed.\n%s",
                      uv_file, str(e))
@@ -263,6 +265,7 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
 
 AIPS_NAN = np.float32(np.array(b'INDE').view(np.float32))
 NP_NAN = np.complex64(complex(np.nan, np.nan))
+
 
 def _massage_gains(sntab, ant_ordering):
     """ Convert sntab object to a list of ndarrays of gains with
