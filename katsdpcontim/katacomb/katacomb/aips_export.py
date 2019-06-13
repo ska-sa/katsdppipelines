@@ -264,7 +264,6 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
 AIPS_NAN = np.float32(np.array(b'INDE').view(np.float32))
 NP_NAN = np.complex64(complex(np.nan, np.nan))
 
-
 def _massage_gains(sntab, ant_ordering):
     """ Convert sntab object to a list of ndarrays of gains with
         shape (nif, npol, len(ant_ordering)) and a list of unique

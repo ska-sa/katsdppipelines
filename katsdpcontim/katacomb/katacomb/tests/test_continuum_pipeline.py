@@ -3,25 +3,61 @@ import shutil
 import unittest
 from functools import partial
 
-import katpoint
+
 import numpy as np
 import six
 from scipy import constants
 
+import katpoint
 from katsdptelstate import TelescopeState
-
+ 
+from katacomb import ContinuumPipeline, obit_context
+from katacomb.aips_export import (fit_flux_model,
+                                  obit_flux_model,
+                                  _massage_gains,
+                                  AIPS_NAN, NP_NAN)
+from katacomb.aips_path import AIPSPath
+from katacomb.continuum_pipeline import IMG_CLASS
+from katacomb.katdal_adapter import CORR_ID_MAP
 from katacomb.mock_dataset import (MockDataSet,
                                    DEFAULT_METADATA,
                                    DEFAULT_SUBARRAYS,
-                                   DEFAULT_TIMESTAMPS)
-
-from katacomb import ContinuumPipeline
-from katacomb.continuum_pipeline import IMG_CLASS
-from katacomb.aips_export import fit_flux_model, obit_flux_model
+                                   DEFAULT_TIMESTAMPS,
+                                   ANTENNA_DESCRIPTIONS)
 from katacomb.util import (parse_python_assigns,
                            setup_aips_disks)
+from katacomb.uv_facade import uv_factory
 import katacomb.configuration as kc
 
+
+def vis(dataset, sources):
+    """Compute visibilities for a list of katpoint Targets
+    with flux density models. These are can be passed to
+    MockDataSet via sources.
+    """
+    pc = dataset.catalogue.targets[0]
+    out_vis = np.zeros(dataset.shape, dtype=np.complex64)
+    wl = constants.c / dataset.freqs
+    # uvw in wavelengths for each channel
+    uvw = np.array([dataset.u, dataset.v, dataset.w])
+    uvw_wl = uvw[:, :, np.newaxis, :] / wl[np.newaxis, np.newaxis, :, np.newaxis]
+    for target in sources:
+        flux_freq = target.flux_density(dataset.freqs/1.e6)
+        lmn = np.array(pc.lmn(*target.radec()))
+        n = lmn[2]
+        lmn[2] -= 1.
+        # uvw_wl has shape (uvw, ntimes, nchannels, nbl), move uvw to
+        # the last axis before np.dot
+        exponent = 2j * np.pi * np.dot(np.moveaxis(uvw_wl, 0, -1), lmn)
+        out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent) / n
+    return out_vis
+
+def weights(dataset):
+    return np.ones(dataset.shape, dtype=np.float32)
+
+
+def flags(dataset):
+    return np.zeros(dataset.shape, dtype=np.bool)
 
 class TestContinuumPipeline(unittest.TestCase):
 
@@ -154,33 +190,6 @@ class TestContinuumPipeline(unittest.TestCase):
     def test_cc_export(self):
         """Check CC models returned by MFImage
         """
-        def vis(dataset, sources):
-            """Compute visibilities for a list of katpoint Targets
-            with flux density models. These are passed via sources
-            """
-            pc = dataset.catalogue.targets[0]
-            out_vis = np.zeros(dataset.shape, dtype=np.complex64)
-            wl = constants.c / dataset.freqs
-            # uvw in wavelengths for each channel
-            uvw = np.array([dataset.u, dataset.v, dataset.w])
-            uvw_wl = uvw[:, :, np.newaxis, :] / wl[np.newaxis, np.newaxis, :, np.newaxis]
-            for target in sources:
-                flux_freq = target.flux_density(dataset.freqs/1.e6)
-                lmn = np.array(pc.lmn(*target.radec()))
-                n = lmn[2]
-                lmn[2] -= 1.
-                # uvw_wl has shape (uvw, ntimes, nchannels, nbl), move uvw to
-                # the last axis before np.dot
-                exponent = 2j * np.pi * np.dot(np.moveaxis(uvw_wl, 0, -1), lmn)
-                out_vis += flux_freq[np.newaxis, :, np.newaxis] * np.exp(exponent) / n
-            return out_vis
-
-        def weights(dataset):
-            return np.ones(dataset.shape, dtype=np.float32)
-
-        def flags(dataset):
-            return np.zeros(dataset.shape, dtype=np.bool)
-
         nchan = 128
 
         spws = [{'centre_freq': .856e9 + .856e9 / 2.,
@@ -288,3 +297,85 @@ class TestContinuumPipeline(unittest.TestCase):
 
         # Empty the scratch space
         shutil.rmtree(fd[-1][1])
+
+    def test_SN_to_telstate(self):
+        """Check conversion of SN table"""
+
+        def construct_SN_desc(nif, rows):
+            dummy_SN = {}
+            dummy_SN["AIPS SN"] = {"attach": {'version': 1, 'numIF': nif, 'numPol':2},
+                                   "rows": rows,
+                                   "write": True,}
+            return dummy_SN
+
+        def construct_SN_default_rows(timestamps, ants, nif):
+            """ 
+            Construct list of ants dicts for each
+            timestamp with REAL, IMAG, WEIGHT = 1.0
+            """
+            default_nif = [1.0] * nif
+            rows = []
+            for ts in timestamps:
+                rows += [{
+                'TIME': [ts],
+                'TIME INTERVAL': [0.1],
+                'ANTENNA NO.': [antn],
+                'REAL1': default_nif,
+                'REAL2': default_nif,
+                'IMAG1': default_nif,
+                'IMAG2': default_nif,
+                'WEIGHT 1': default_nif,
+                'WEIGHT 2': default_nif,
+                } for antn in ants]
+            return rows
+
+        ant_ordering = ['m000', 'm001', 'm002', 'm003', 'm004', 'm005']
+        # Make a dummy AIPS UV and attach an SN Table
+        with obit_context():
+            nif = 1
+            ap = AIPSPath("Flosshilde")
+            rows = construct_SN_default_rows([0.5], [1,2,3,4,5,6], nif)
+            # Modify some gains
+            rows[1]['REAL1'] = [AIPS_NAN]
+            rows[2]['REAL1'] = rows[2]['REAL2'] = [AIPS_NAN]
+            rows[3]['REAL1'], rows[3]['WEIGHT 1'] = ([AIPS_NAN], [-1.0])
+            rows[4]['WEIGHT 1'] = rows[4]['WEIGHT 2'] = [-1.0]
+            rows[5]['REAL1'] = rows[5]['REAL2'] = [AIPS_NAN]
+            rows[5]['IMAG1'] = rows[5]['IMAG2'] = [AIPS_NAN]
+            rows[5]['WEIGHT 1'] = rows[5]['WEIGHT 2'] = [-1.0]
+            sn_tab_desc = construct_SN_desc(nif, rows)
+            uvf = uv_factory(aips_path=ap, mode="w", table_cmds=sn_tab_desc)
+            sntab = uvf.tables["AIPS SN"]
+            ts, result = _massage_gains(sntab, ant_ordering)
+            # Do the gains and timestamps have the right values/shapes
+            self.assertEqual(ts, [0.5])
+            self.assertEqual(len(ts), len(result))
+            self.assertEqual(result[0].shape, (nif, 2, len(ant_ordering)))
+            expected_result = np.full((1, 2, len(ant_ordering)), 1.+1.j, dtype=np.complex64)
+            expected_result[0, 0, 1] = AIPS_NAN + 1.j
+            expected_result[0, :, 2] = AIPS_NAN + 1.j
+            expected_result[0, 0, 3] = NP_NAN
+            expected_result[0, :, 5] = NP_NAN
+            np.testing.assert_array_equal(result[0], expected_result)
+
+            # Change ntimes, nif and antennas and recheck shapes
+            nif = 8
+            ntimes = 5
+            rows = construct_SN_default_rows(np.linspace(0., 1., ntimes), [1, 3, 5, 6], nif)
+            sn_tab_desc = construct_SN_desc(nif, rows)
+            uvf = uv_factory(aips_path=ap, mode="w", table_cmds=sn_tab_desc)
+            sntab = uvf.tables["AIPS SN"]
+            ts, result = _massage_gains(sntab, ant_ordering)
+            np.testing.assert_array_equal(ts, np.linspace(0., 1., ntimes))
+            self.assertEqual(len(ts), len(result))
+            self.assertEqual(result[0].shape, (nif, 2, len(ant_ordering)))
+            # Are the missing antennas nans?
+            np.testing.assert_array_equal(result[0][:, :, [1, 3]], NP_NAN)
+
+            # Empty SN table should return empty lists
+            sn_tab_desc = construct_SN_desc(8, [])
+            uvf = uv_factory(aips_path=ap, mode="w", table_cmds=sn_tab_desc)
+            sntab = uvf.tables["AIPS SN"]
+            ts, result = _massage_gains(sntab, ant_ordering)
+            self.assertEqual(ts, [])
+            self.assertEqual(result, [])
