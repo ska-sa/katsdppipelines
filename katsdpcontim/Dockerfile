@@ -176,4 +176,4 @@ WORKDIR /obitconf
 RUN cfg_aips_disks.py
 
 # Execute test cases
-RUN nosetests katacomb -s -v --debug katacomb
+RUN nosetests katacomb
