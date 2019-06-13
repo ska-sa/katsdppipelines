@@ -14,6 +14,7 @@ from katacomb import (uv_factory,
                       save_image,
                       task_defaults)
 import katacomb.configuration as kc
+from katacomb.katdal_adapter import CORR_ID_MAP
 
 import katpoint
 import numpy as np
@@ -200,6 +201,30 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
     # Amp+phase gains are in SN version maxPSCLoop + maxASCLoop (if maxASCLoop > 0)
     apSN = mfimage_params.get('maxASCLoop', mfimage_defaults['maxASCLoop'])
 
+    subband_info = kat_adapter.uv_spw_rows[0]
+    bandwidth = np.sum(subband_info['TOTAL BANDWIDTH'])
+    centre_if = kat_adapter.nif // 2
+    centre_if_reffreq = subband_info['IF FREQ'][centre_if]
+    centre_freq = kat_adapter.reffreq + centre_if_reffreq + \
+        subband_info['TOTAL BANDWIDTH'][centre_if] / 2.
+    # Use hard-coded pol ordering from katdal_adapter.
+    # katdal_adapter only supports X,Y visibility data
+    # (e.g. no single pol) so we only support that here.
+    # i.e. STOKES == -5 && NSTOK >= 2 (cf. AIPS MEMO 117).
+    # The uv files might have had their pol ordering changed
+    # by MFImage so we check for dual-pol solutions in the
+    # loop over files as well.
+    pol_ordering = [pol[0] for pol in sorted(CORR_ID_MAP, key=CORR_ID_MAP.get)
+                    if pol[0] == pol[1]]
+    ant_ordering = [ant.name for ant in kat_adapter._katds.ants]
+    ts = telstate.view(telstate.prefixes[0] + 'selfcal')
+    # Populate immutable telstate keys
+    ts['n_chans'] = kat_adapter.nif
+    ts['antlist'] = ant_ordering
+    ts['bandwidth'] = bandwidth
+    ts['centre_freq'] = centre_freq
+    ts['pol_ordering'] = pol_ordering
+
     # MFImage outputs a UV file per source.  Iterate through each source:
     # (1) Extract relevant complex gains from attached "AIPS SN" tables
     # (2) Write them to telstate
@@ -211,17 +236,15 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
                 except KeyError:
                     log.warn("No calibration solutions in '%s'", uv_file)
                 else:
-                    # Handle cases for single/dual pol gains
-                    if "REAL2" in sntab.rows[0]:
-                        def _extract_gains(row):
-                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                            row["REAL2"] + 1j*row["IMAG2"]],
-                                            dtype=np.complex64)
-                    else:
-                        def _extract_gains(row):
-                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                            row["REAL1"] + 1j*row["IMAG1"]],
-                                            dtype=np.complex64)
+                    # Only export dual-pol solutions
+                    if sntab.keywords["NO_POL"] < 2:
+                        raise ValueError("Only dual-pol self-calibration "
+                                         "solutions are supported")
+
+                    def _extract_gains(row):
+                        return np.array([row["REAL1"] + 1j*row["IMAG1"],
+                                         row["REAL2"] + 1j*row["IMAG2"]],
+                                        dtype=np.complex64)
 
                     # Write each complex gain out per antenna
                     for row in (_condition(r) for r in sntab.rows):
