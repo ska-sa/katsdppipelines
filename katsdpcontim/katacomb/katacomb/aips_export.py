@@ -11,7 +11,8 @@ from katacomb import (uv_factory,
                       katdal_ant_name,
                       obit_image_mf_rms,
                       normalise_target_name,
-                      save_image)
+                      save_image,
+                      task_defaults)
 import katacomb.configuration as kc
 
 import katpoint
@@ -170,7 +171,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
         log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
 
 
-def export_calibration_solutions(uv_files, kat_adapter, telstate):
+def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate):
     """
     Exports calibration solutions from each file
     in ``uv_files`` into ``telstate``.
@@ -181,12 +182,26 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
         List of :class:`katacomb.UVFacade` objects
     kat_adapter : :class:`KatdalAdapter`
         Katdal Adapter
+    mfimage_params : dict
+￼       Optional parameters passed to MFImage that override defaults
     telstate : :class:`katsdptelstate.Telescope`
         telstate object
     """
 
+    # Work out which SN tables to export (from MFImage parameters)
+    mfimage_defaults = task_defaults('MFImage')
+    # Phase only selfcal solutions are in SN table with
+    # version number corresponding to the MFImage parameter: maxPSCLoop
+    pSN = mfimage_params.get('maxPSCLoop', mfimage_defaults['maxPSCLoop'])
+    # If maxPSCLoop is 0 or less then there was no self-calibration
+    if pSN < 1:
+        log.warn('No self-calibration solutions available for export')
+        return
+    # Amp+phase gains are in SN version maxPSCLoop + maxASCLoop (if maxASCLoop > 0)
+    apSN = mfimage_params.get('maxASCLoop', mfimage_defaults['maxASCLoop'])
+
     # MFImage outputs a UV file per source.  Iterate through each source:
-    # (1) Extract complex gains from attached "AIPS SN" table
+    # (1) Extract relevant complex gains from attached "AIPS SN" tables
     # (2) Write them to telstate
     for si, uv_file in enumerate(uv_files):
         try:

@@ -358,6 +358,15 @@ def task_factory(name, aips_cfg_file=None, **kwargs):
     return task
 
 
+def task_defaults(name):
+    """
+    Return a dict containing the default paramaters associated
+    with the Obit task provided in `name`.
+    """
+    task = ObitTask.ObitTask(name)
+    return task._default_dict
+
+
 def fractional_bandwidth(uv_desc):
     """
     Returns the fractional bandwidth, given a uv descriptor dictionary
