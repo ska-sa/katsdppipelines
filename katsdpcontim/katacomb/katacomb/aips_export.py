@@ -269,7 +269,7 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
 
                     # Store them in telstate
                     key = telstate.join(target, "clean_components")
-                    telstate.add(key, data, immutable=True)
+                    telstate[key] = data
 
         except Exception as e:
             log.warn("Export of clean components from '%s' failed.\n%s",
