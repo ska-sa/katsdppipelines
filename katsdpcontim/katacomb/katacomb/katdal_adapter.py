@@ -1151,6 +1151,16 @@ def time_chunked_scans(kat_adapter, time_step=4):
     out_vis = np.empty((time_step, nbl, nchan, nstokes, 3),
                        dtype=kat_adapter.uv_vis.dtype)
 
+    vis_size = out_vis.dtype.itemsize
+    vis_size_estimate = np.product(out_vis.shape, dtype=np.int64)*vis_size
+
+    FOUR_GB = 4*1024**3
+
+    if vis_size_estimate > FOUR_GB:
+        log.warn("Visibility chunk '%s' is greater than '%s'. "
+                 "Check that sufficient memory is available"
+                 % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
+
     def _get_data(time_start, time_end):
         """
         Retrieve data for the given time index range.
@@ -1178,17 +1188,6 @@ def time_chunked_scans(kat_adapter, time_step=4):
             AIPS visibilities
         """
         ntime = time_end - time_start
-
-        chunk_shape = (ntime, nchan, ncorrprods)
-        cplx_size = np.dtype('complex64').itemsize
-        vis_size_estimate = np.product(chunk_shape, dtype=np.int64)*cplx_size
-
-        FOUR_GB = 4*1024**3
-
-        if vis_size_estimate > FOUR_GB:
-            log.warn("Visibility chunk '%s' is greater than '%s'. "
-                     "Check that sufficient memory is available"
-                     % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
 
         # Retrieve scan data (ntime, nchan, nbl*nstokes)
         # nbl*nstokes is all mixed up at this point
