@@ -5,6 +5,7 @@ import time
 
 import attr
 import six
+import numba
 import numpy as np
 from dask import array as da
 
@@ -1087,7 +1088,7 @@ class KatdalAdapter(object):
         return desc
 
 
-def time_chunked_scans(kat_adapter, time_step=2):
+def time_chunked_scans(kat_adapter, time_step=4):
     """
     Generator returning vibility data each scan, chunked
     on the time dimensions in chunks of ``time_step``.
@@ -1103,9 +1104,9 @@ def time_chunked_scans(kat_adapter, time_step=2):
     kat_adapter : `KatdalAdapter`
         Katdal Adapter
     time_step : integer
-        Size of time chunks (Default 2).
-        2 timesteps x 32768 channels x 2016 baselines x 4 stokes x 8 bytes
-        works out to about ~3.9375 GB
+        Size of time chunks (Default 4).
+        4 timesteps x 1024 channels x 2016 baselines x 4 stokes x 12 bytes
+        works out to about 0.5 GB.
 
     Yields
     ------
@@ -1145,6 +1146,11 @@ def time_chunked_scans(kat_adapter, time_step=2):
     fits_desc = kat_adapter.fits_descriptor()
     inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
 
+    _, nchan, ncorrprods = kat_adapter.shape
+    # Get some memory to hold reorganised visibilities
+    out_vis = np.empty((time_step, nbl, nchan, nstokes, 3),
+                       dtype=kat_adapter.uv_vis.dtype)
+
     def _get_data(time_start, time_end):
         """
         Retrieve data for the given time index range.
@@ -1171,7 +1177,6 @@ def time_chunked_scans(kat_adapter, time_step=2):
         vis : np.ndarray
             AIPS visibilities
         """
-        _, nchan, ncorrprods = kat_adapter.shape
         ntime = time_end - time_start
 
         chunk_shape = (ntime, nchan, ncorrprods)
@@ -1205,17 +1210,14 @@ def time_chunked_scans(kat_adapter, time_step=2):
         assert (ntime, ncorrprods) == aips_v.shape
         assert (ntime, ncorrprods) == aips_w.shape
 
-        # Reorganise correlation product dim so that
-        # correlations are grouped per baseline.
-        # Then reshape to separate the two dimensions
-        aips_vis = aips_vis[:, :, cp_argsort, :].reshape(
-            ntime, nchan, nbl, nstokes, 3)
+        # Reorganise correlation product dim of aips_vis so that
+        # correlations are grouped into nstok per baseline and
+        # baselines are in increasing order.
+        aips_vis = _reorganise_product(aips_vis, cp_argsort.reshape(nbl, nstokes), out_vis[:ntime])
 
-        # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
-        # (2) reshape to include the full inaxes shape,
-        #     including singleton nif, ra and dec dimensions
-        aips_vis = (aips_vis.transpose(0, 2, 1, 3, 4)
-                    .reshape((ntime, nbl,) + inaxes))
+        # Reshape to include the full AIPS UV inaxes shape,
+        # including singleton ra and dec dimensions
+        aips_vis.reshape((ntime, nbl,) + inaxes)
 
         # Select UVW coordinate of each baseline
         aips_u = aips_u[:, bl_argsort]
@@ -1233,8 +1235,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
     # Iterate through scans
     for si, state, target in kat_adapter.scans():
-        # Work out the data shape
-        ntime, nchan, ncorrprods = kat_adapter.shape
+        ntime = kat_adapter.shape[0]
 
         # Create a generator returning data
         # associated with chunks of time data.
@@ -1243,3 +1244,26 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
         # Yield scan variables and the generator
         yield si, state, target, data_gen
+
+@numba.jit(nopython=True, parallel=True)
+def _reorganise_product(vis, cp_argsort, out_vis):
+    """ Reorganise correlation product dim of vis so that
+        correlations are grouped as given in cp_argsort.
+    """
+    n_time = vis.shape[0]
+    n_chan = vis.shape[1]
+    n_bl = cp_argsort.shape[0]
+    n_stok = cp_argsort.shape[1]
+    for tm in range(n_time):
+        bstep = 128
+        bblocks = (n_bl + bstep - 1) // bstep
+        for bblock in numba.prange(bblocks):
+            bstart = bblock * bstep
+            bstop = min(n_bl, bstart + bstep)
+            for prod in range(bstart, bstop):
+                in_cp = cp_argsort[prod]
+                for stok in range(n_stok):
+                    in_stok = in_cp[stok]
+                    for chan in range(n_chan):
+                        out_vis[tm, prod, chan, stok] = vis[tm, chan, in_stok]
+    return out_vis
