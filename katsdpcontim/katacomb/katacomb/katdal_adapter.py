@@ -6,13 +6,14 @@ import time
 import attr
 import six
 import numpy as np
+from dask import array as da
 
 import UVDesc
 
 from katacomb import AIPSPath, normalise_target_name
 from katacomb.util import fmt_bytes
 
-from katdal.lazy_indexer import DaskLazyIndexer
+from katdal.lazy_indexer import DaskLazyIndexer, dask_getitem
 
 log = logging.getLogger('katacomb')
 
@@ -395,18 +396,20 @@ class KatdalAdapter(object):
             into AIPS visiblities.
             """
             if isinstance(self._katds.vis, DaskLazyIndexer):
-                vis, weights, flags = self._katds.vis.get([self._katds.vis,
-                                                           self._katds.weights,
-                                                           self._katds.flags],
-                                                          np.s_[index, :, :])
+                arrays = [self._katds.vis, self._katds.weights, self._katds.flags]
+                vis, weights, flags = [dask_getitem(array.dataset, np.s_[index, :, :])
+                                       for array in arrays]
             else:
-                vis = self._katds.vis[index]
-                weights = self._katds.weights[index]
-                flags = self._katds.flags[index]
-
+                vis = da.from_array(self._katds.vis[index])
+                weights = da.from_array(self._katds.weights[index])
+                flags = da.from_array(self._katds.flags[index])
             # Apply flags by negating weights
-            weights[np.where(flags)] = -32767.0
-            return np.stack([vis.real, vis.imag, weights], axis=3)
+            weights = da.where(flags, -32767.0, weights)
+            # Split complex64 vis into 2xweights.dtype
+            vis = vis.view(self._katds.weights.dtype).reshape(vis.shape + (2,))
+            out_array = np.empty(weights.shape + (3,), dtype=self._katds.weights.dtype)
+            da.store([vis, weights], [out_array[..., 0:2], out_array[..., 2]], lock=False)
+            return out_array
 
         def _time_xformer(index):
             """
