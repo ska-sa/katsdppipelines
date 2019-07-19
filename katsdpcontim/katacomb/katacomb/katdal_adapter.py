@@ -1255,19 +1255,19 @@ def _reorganise_product(vis, cp_argsort, out_vis):
         ----------
         vis : np.ndarray
             Input array of visibilities and weights.
-            Shape: (ntime, nchannels, nproducts, 3)
+            Shape: (ntime, nchan, nproducts, 3)
             where nproducts is the number of correlation products
-            (i.e. nbaseline*nstokes). The last axis holds
+            (i.e. nbaselines*nstokes). The last axis holds
             (real_vis, imag_vis, weight).
         cp_argsort : np.ndarray
-            2d array of indices to the 2nd axis of vis that are
+            2D array of indices to the 3rd axis of vis that are
             grouped into increasing AIPS baseline order and the 
             Stokes order required of AIPS UV.
-            Shape: (nbaseline, nstokes)
+            Shape: (nbaselines, nstokes)
         out_vis : np.ndarray
             Output array to store reorganised visibilities in
             AIPS UV order.
-            Shape: (ntime, nbaseline, nchan, nstokes, 3)
+            Shape: (ntime, nbaselines, nchan, nstokes, 3)
 
         Returns
         -------
