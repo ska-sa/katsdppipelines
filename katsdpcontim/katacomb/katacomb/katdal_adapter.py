@@ -7,7 +7,7 @@ import attr
 import six
 import numba
 import numpy as np
-from dask import array as da
+import dask.array as da
 
 import UVDesc
 
@@ -406,9 +406,10 @@ class KatdalAdapter(object):
                 flags = da.from_array(self._katds.flags[index])
             # Apply flags by negating weights
             weights = da.where(flags, -32767.0, weights)
-            # Split complex64 vis into 2xweights.dtype
-            vis = vis.view(self._katds.weights.dtype).reshape(vis.shape + (2,))
-            out_array = np.empty(weights.shape + (3,), dtype=self._katds.weights.dtype)
+            # Split complex vis dtype into real and imaginary parts
+            vis_dtype = vis.dtype.type(0).real.dtype
+            vis = vis.view(vis_dtype).reshape(vis.shape + (2,))
+            out_array = np.empty(weights.shape + (3,), dtype=vis_dtype)
             da.store([vis, weights], [out_array[..., 0:2], out_array[..., 2]], lock=False)
             return out_array
 
@@ -1147,12 +1148,10 @@ def time_chunked_scans(kat_adapter, time_step=4):
     inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
 
     _, nchan, ncorrprods = kat_adapter.shape
-    # Get some memory to hold reorganised visibilities
-    out_vis = np.empty((time_step, nbl, nchan, nstokes, 3),
-                       dtype=kat_adapter.uv_vis.dtype)
 
-    vis_size = out_vis.dtype.itemsize
-    vis_size_estimate = np.product(out_vis.shape, dtype=np.int64)*vis_size
+    out_vis_size = kat_adapter.uv_vis.dtype.itemsize
+    out_vis_shape = (time_step, nbl, nchan, nstokes, 3)
+    vis_size_estimate = np.product(out_vis_shape, dtype=np.int64)*out_vis_size
 
     FOUR_GB = 4*1024**3
 
@@ -1160,6 +1159,9 @@ def time_chunked_scans(kat_adapter, time_step=4):
         log.warn("Visibility chunk '%s' is greater than '%s'. "
                  "Check that sufficient memory is available"
                  % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
+
+    # Get some memory to hold reorganised visibilities
+    out_vis = np.empty(out_vis_shape, dtype=kat_adapter.uv_vis.dtype)
 
     def _get_data(time_start, time_end):
         """
@@ -1210,7 +1212,7 @@ def time_chunked_scans(kat_adapter, time_step=4):
         assert (ntime, ncorrprods) == aips_w.shape
 
         # Reorganise correlation product dim of aips_vis so that
-        # correlations are grouped into nstok per baseline and
+        # correlations are grouped into nstokes per baseline and
         # baselines are in increasing order.
         aips_vis = _reorganise_product(aips_vis, cp_argsort.reshape(nbl, nstokes), out_vis[:ntime])
 
@@ -1248,6 +1250,28 @@ def time_chunked_scans(kat_adapter, time_step=4):
 def _reorganise_product(vis, cp_argsort, out_vis):
     """ Reorganise correlation product dim of vis so that
         correlations are grouped as given in cp_argsort.
+        
+        Parameters
+        ----------
+        vis : np.ndarray
+            Input array of visibilities and weights.
+            Shape: (ntime, nchannels, nproducts, 3)
+            where nproducts is the number of correlation products
+            (i.e. nbaseline*nstokes). The last axis holds
+            (real_vis, imag_vis, weight).
+        cp_argsort : np.ndarray
+            2d array of indices to the 2nd axis of vis that are
+            grouped into increasing AIPS baseline order and the 
+            Stokes order required of AIPS UV.
+            Shape: (nbaseline, nstokes)
+        out_vis : np.ndarray
+            Output array to store reorganised visibilities in
+            AIPS UV order.
+            Shape: (ntime, nbaseline, nchan, nstokes, 3)
+
+        Returns
+        -------
+        out_vis : np.ndarray
     """
     n_time = vis.shape[0]
     n_chan = vis.shape[1]
