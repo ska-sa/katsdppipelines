@@ -203,10 +203,10 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
 
     subband_info = kat_adapter.uv_spw_rows[0]
     bandwidth = np.sum(subband_info['TOTAL BANDWIDTH'])
-    centre_if = kat_adapter.nif // 2
-    centre_if_reffreq = subband_info['IF FREQ'][centre_if]
-    centre_freq = kat_adapter.reffreq + centre_if_reffreq + \
-        subband_info['TOTAL BANDWIDTH'][centre_if] / 2.
+    center_if = kat_adapter.nif // 2
+    center_if_reffreq = subband_info['IF FREQ'][center_if]
+    center_freq = kat_adapter.reffreq + center_if_reffreq + \
+        subband_info['TOTAL BANDWIDTH'][center_if] / 2.
     # Use hard-coded pol ordering from katdal_adapter.
     # katdal_adapter only supports X,Y visibility data
     # (e.g. no single pol) so we only support that here.
@@ -222,7 +222,7 @@ def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate
     ts['n_chans'] = kat_adapter.nif
     ts['antlist'] = ant_ordering
     ts['bandwidth'] = bandwidth
-    ts['centre_freq'] = centre_freq
+    ts['center_freq'] = center_freq
     ts['pol_ordering'] = pol_ordering
 
     # MFImage outputs a UV file per source.  Iterate through each source:
@@ -296,7 +296,7 @@ def _massage_gains(sntab, ant_ordering):
     # Rows are grouped by antenna for a given timestamp,
     # so loop over chunks of equal timestamp and look up
     # all of the associated antennas.
-    time_chunks = np.where(times[1:] != times[:-1])[0] + 1
+    time_chunks = np.where(np.diff(times))[0] + 1
     if len(times) > 0:
         time_chunks = np.insert([0, len(times)], 1, time_chunks)
     for start, stop in zip(time_chunks[:-1], time_chunks[1:]):

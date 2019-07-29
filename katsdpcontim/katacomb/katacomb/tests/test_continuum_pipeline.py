@@ -452,9 +452,9 @@ class TestContinuumPipeline(unittest.TestCase):
                         if pol[0] == pol[1]]
         self.assertEqual(ts['pol_ordering'], pol_ordering)
         if_width = bandwidth / nif
-        centre_if = nif // 2
+        center_if = nif // 2
         start_freq = centre_freq - (bandwidth / 2.)
-        self.assertEqual(ts['centre_freq'], start_freq + if_width * (centre_if + 0.5))
+        self.assertEqual(ts['center_freq'], start_freq + if_width * (center_if + 0.5))
 
         self.assertIn(ts.join('selfcal', P_telstate), ts.keys())
         self.assertIn(ts.join('selfcal', AP_telstate), ts.keys())
