@@ -21,6 +21,11 @@ log = logging.getLogger('katacomb')
 ONE_DAY_IN_SECONDS = 24*60*60.0
 MAX_AIPS_PATH_LEN = 10
 MAX_AIPS_STRING_LEN = 16
+""" Map correlation characters to correlation id """
+CORR_ID_MAP = {('h', 'h'): 0,
+               ('v', 'v'): 1,
+               ('h', 'v'): 2,
+               ('v', 'h'): 3}
 
 
 def aips_timestamps(timestamps, midnight):
@@ -630,14 +635,6 @@ class KatdalAdapter(object):
         """ Proxies :attr:`katdal.DataSet.obs_params` """
         return getattr(self._katds, 'obs_params', {})
 
-    """ Map correlation characters to correlation id """
-    CORR_ID_MAP = {
-        ('h', 'h'): 0,
-        ('v', 'v'): 1,
-        ('h', 'v'): 2,
-        ('v', 'h'): 3,
-    }
-
     def correlator_products(self):
         """
         Returns
@@ -695,7 +692,7 @@ class KatdalAdapter(object):
 
             # Derive the correlation id
             try:
-                cid = self.CORR_ID_MAP[(a1_type, a2_type)]
+                cid = CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError:
                 raise ValueError("Invalid Correlator Product "
                                  "['%s, '%s']" % (a1_corr, a2_corr))
