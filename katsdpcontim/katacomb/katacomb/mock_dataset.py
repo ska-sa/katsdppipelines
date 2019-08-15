@@ -420,6 +420,11 @@ class MockDataSet(DataSet):
             ant_catdata = CategoricalData([ant], [0, self._ndumps])
             self.sensor['Antennas/%s/antenna' % (ant.name,)] = ant_catdata
 
+        # Extract array reference from first antenna (first 5 fields of description)
+        array_ant_fields = ['array'] + antenna[0].description.split(',')[1:5]
+        array_ant = katpoint.Antenna(','.join(array_ant_fields))
+        self.sensor['Antennas/array/antenna'] = CategoricalData([array_ant], [0, self._ndumps])
+
     def _create_scans(self, ref_ant, dumps_def):
         """
         Setup reference antenna, as well as scans
