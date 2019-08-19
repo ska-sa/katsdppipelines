@@ -371,7 +371,7 @@ def main():
     bokeh_kwargs = {'prefix': opts.dask_prefix}
     server = create_server(not opts.threading, opts.host, opts.port, buffers,
                            opts.l0_name, opts.l0_spead, l0_interface_address,
-                           opts.flags_streams, opts.clock_ratio,
+                           opts.flags_streams, opts.clock_ratio, opts.cal_name,
                            telstate_cal, parameters, opts.report_path, log_path, log_name,
                            opts.dask_diagnostics, bokeh_kwargs, opts.pipeline_profile,
                            opts.workers, opts.max_scans)

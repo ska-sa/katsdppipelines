@@ -1305,8 +1305,8 @@ def refant_antlabels(bls_lookup, refant_index, antenna_names):
 _lock = threading.Lock()
 
 
-def make_cal_report(ts, capture_block_id, stream_name, parameters, report_path, av_corr,
-                    st=None, et=None):
+def make_cal_report(ts, capture_block_id, stream_name, cal_name, parameters, report_path,
+                    av_corr, st=None, et=None):
     """
     Creates pdf calibration pipeline report (from RST source),
     using data from the Telescope State
@@ -1319,6 +1319,8 @@ def make_cal_report(ts, capture_block_id, stream_name, parameters, report_path, 
         capture block ID
     stream_name : str
         name of the L0 data stream
+    cal_name : str
+        name of the cal output in telstate
     parameters : dict
         Pipeline parameters
     report_path : str
@@ -1353,15 +1355,13 @@ def make_cal_report(ts, capture_block_id, stream_name, parameters, report_path, 
             cal_rst.writeln('Stream: {}'.format(stream_name))
             cal_rst.writeln()
 
+            telstate_cal = ts.view(cal_name)
             # Obtain reference antenna selected by the pipeline
             refant_index = parameters['refant_index']
             if refant_index is None:
-                refant = ts.get('refant')
-                if refant is not None:
-                    refant = katpoint.Antenna(refant)
-                    refant_index = parameters['antenna_names'].index(refant.name)
-                    parameters['refant'] = refant
-                    parameters['refant_index'] = refant_index
+                refant_index = telstate_cal.get('refant_index')
+                parameters['refant'] = parameters['antennas'][refant_index]
+                parameters['refant_index'] = refant_index
 
             antennas = parameters['antennas']
             if av_corr:

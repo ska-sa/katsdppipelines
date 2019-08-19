@@ -1034,7 +1034,7 @@ class Pipeline(Task):
 
     def __init__(self, task_class, buffers,
                  accum_pipeline_queue, pipeline_sender_queue, pipeline_report_queue, master_queue,
-                 l0_name, telstate_cal, parameters,
+                 l0_name, cal_name, telstate_cal, parameters,
                  diagnostics=None, bokeh_kwargs=None, profile_file=None, num_workers=None):
         super().__init__(task_class, master_queue, 'Pipeline', profile_file)
         self.buffers = buffers
@@ -1044,6 +1044,7 @@ class Pipeline(Task):
         self.telstate_cal = telstate_cal
         self.parameters = parameters
         self.l0_name = l0_name
+        self.cal_name = cal_name
         self.diagnostics = diagnostics
         self.bokeh_kwargs = bokeh_kwargs
         if num_workers is None:
@@ -1173,7 +1174,8 @@ class Pipeline(Task):
         # run pipeline calibration
         telstate_cb_cal = make_telstate_cb(self.telstate_cal, capture_block_id)
         target_slices, avg_corr = pipeline(data, telstate_cb_cal, self.parameters,
-                                           self.solution_stores, self.l0_name, self.sensors)
+                                           self.solution_stores, self.l0_name, self.cal_name,
+                                           self.sensors)
         # put corrected data into pipeline_report_queue
         self.pipeline_report_queue.put(avg_corr)
 
@@ -1400,7 +1402,7 @@ class Sender(Task):
 
 class ReportWriter(Task):
     def __init__(self, task_class, pipeline_report_queue, master_queue,
-                 l0_name, telstate_cal, parameters,
+                 l0_name, cal_name, telstate_cal, parameters,
                  report_path, log_path, full_log, max_scans):
         super().__init__(task_class, master_queue, 'ReportWriter')
         if not report_path:
@@ -1410,6 +1412,7 @@ class ReportWriter(Task):
         self.telstate = telstate_cal.root()
         self.telstate_cal = telstate_cal
         self.l0_name = l0_name
+        self.cal_name = cal_name
         self.parameters = parameters
         self.report_path = report_path
         self.log_path = log_path
@@ -1460,8 +1463,8 @@ class ReportWriter(Task):
 
         # create pipeline report
         try:
-            make_cal_report(telstate_cb_cal, capture_block_id, self.l0_name, self.parameters,
-                            current_report_dir, av_corr,
+            make_cal_report(telstate_cb_cal, capture_block_id, self.l0_name, self.cal_name,
+                            self.parameters, current_report_dir, av_corr,
                             st=obs_start, et=obs_end)
         except Exception as error:
             logger.warn('Report generation failed: %s', error, exc_info=True)
@@ -1727,7 +1730,7 @@ def create_buffer_arrays(buffer_shape, use_multiprocessing=True):
 
 def create_server(use_multiprocessing, host, port, buffers,
                   l0_name, l0_endpoints, l0_interface_address,
-                  flags_streams, clock_ratio, telstate_cal, parameters,
+                  flags_streams, clock_ratio, cal_name, telstate_cal, parameters,
                   report_path, log_path, full_log,
                   diagnostics=None, bokeh_kwargs=None,
                   pipeline_profile_file=None, num_workers=None,
@@ -1750,7 +1753,7 @@ def create_server(use_multiprocessing, host, port, buffers,
     pipeline = Pipeline(
         module.Process, buffers,
         accum_pipeline_queue, pipeline_sender_queue, pipeline_report_queue, master_queue,
-        l0_name, telstate_cal, parameters, diagnostics, bokeh_kwargs,
+        l0_name, cal_name, telstate_cal, parameters, diagnostics, bokeh_kwargs,
         pipeline_profile_file, num_workers)
     # Set up the sender
     sender = Sender(
@@ -1758,8 +1761,8 @@ def create_server(use_multiprocessing, host, port, buffers,
         flags_streams, clock_ratio, telstate_cal, parameters)
     # Set up the report writer
     report_writer = ReportWriter(
-        module.Process, pipeline_report_queue, master_queue, l0_name, telstate_cal, parameters,
-        report_path, log_path, full_log, max_scans)
+        module.Process, pipeline_report_queue, master_queue, l0_name, cal_name, telstate_cal,
+        parameters, report_path, log_path, full_log, max_scans)
 
     # Start the child tasks.
     running_tasks = []

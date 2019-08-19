@@ -374,7 +374,7 @@ def shared_B_interp_nans(telstate, parameters, b_soln, st, et):
     return solutions.CalSolution('B', b_interp, b_soln.time)
 
 
-def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
+def pipeline(data, ts, parameters, solution_stores, stream_name, cal_name, sensors=None):
     """
     Pipeline calibration
 
@@ -391,6 +391,8 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
         Solution stores for the capture block, indexed by solution type
     stream_name : str
         Name of the L0 data stream
+    cal_name : str
+        Name of the cal output in telstate
     sensors : dict, optional
         Sensors available in the calling parent
 
@@ -416,6 +418,8 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
     # extract some some commonly used constants from the TS
 
     telstate_l0 = ts.view(stream_name)
+    telstate_cal = ts.view(cal_name)
+
     # solution intervals
     bp_solint = parameters['bp_solint']  # seconds
     k_solint = parameters['k_solint']  # seconds
@@ -515,7 +519,7 @@ def pipeline(data, ts, parameters, solution_stores, stream_name, sensors=None):
                 parameters['refant_index'] = best_refant_index
                 parameters['refant'] = parameters['antennas'][best_refant_index]
                 logger.info('Reference antenna set to %s', parameters['refant'].name)
-                ts['refant'] = parameters['refant'].description
+                telstate_cal['refant_index'] = parameters['refant_index']
                 s.refant = best_refant_index
 
         # run_t0 = time.time()

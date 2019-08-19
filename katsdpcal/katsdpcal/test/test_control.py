@@ -175,7 +175,7 @@ class ServerData:
         self.server = control.create_server(
             False, '127.0.0.1', 0, buffers,
             'sdp_l0test', testcase.l0_endpoints, None,
-            flags_streams, 1.0,
+            flags_streams, 1.0, 'cal',
             testcase.telstate_cal, self.parameters, self.report_path, self.log_path, None)
         self.client = None
         self.testcase = testcase
@@ -840,9 +840,9 @@ class TestCalDeviceServer(asynctest.TestCase):
             stream.send_heap(self.ig.get_end())
         await self.shutdown_servers(180)
         await self.assert_sensor_value('accumulator-capture-active', 0)
-        telstate_cb_cal = control.make_telstate_cb(self.telstate_cal, 'cb')
-        refant_name = katpoint.Antenna(telstate_cb_cal['refant']).name
-        assert_not_equal(self.antennas[worst_index], refant_name)
+
+        refant_index = self.telstate_cal['refant_index']
+        assert_not_equal(worst_index, refant_index)
 
     def prepare_heaps(self, rs, n_times,
                       vis=None, weights=None, weights_channel=None, flags=None):
