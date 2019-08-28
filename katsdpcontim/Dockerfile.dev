@@ -13,7 +13,8 @@ ENV PACKAGES \
     git \
     cvs \
     subversion \
-    rsync
+    rsync \
+    xterm
 
 # Update, upgrade and install packages
 RUN apt-get update && \
@@ -61,6 +62,8 @@ RUN touch /root/.bashrc && \
 # Add Xdefaults
 ADD Xdefaults /root/.Xdefaults
 
+RUN echo "xrdb -merge $HOME/.Xdefaults" >> /root/.bashrc
+
 # Add tightvncserver startup script
 ADD xstartup /root/.vnc/xstartup
 RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
@@ -71,6 +74,9 @@ RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
 
 # Saner xfce4 keyboard settings
 ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+
+# Allow X Forwarding over ssh
+ADD ssh_config /etc/ssh/ssh_config
 
 # Ensure everything under /home/kat belongs to root
 RUN chown -R root:root /home/kat
