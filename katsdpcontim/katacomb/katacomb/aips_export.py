@@ -11,8 +11,10 @@ from katacomb import (uv_factory,
                       katdal_ant_name,
                       obit_image_mf_rms,
                       normalise_target_name,
-                      save_image)
+                      save_image,
+                      task_defaults)
 import katacomb.configuration as kc
+from katacomb.katdal_adapter import CORR_ID_MAP
 
 import katpoint
 import numpy as np
@@ -170,7 +172,7 @@ def export_images(clean_files, target_indices, disk, kat_adapter):
         log.warn("Creation of %s failed.\n%s", METADATA_JSON, str(e))
 
 
-def export_calibration_solutions(uv_files, kat_adapter, telstate):
+def export_calibration_solutions(uv_files, kat_adapter, mfimage_params, telstate):
     """
     Exports calibration solutions from each file
     in ``uv_files`` into ``telstate``.
@@ -181,46 +183,133 @@ def export_calibration_solutions(uv_files, kat_adapter, telstate):
         List of :class:`katacomb.UVFacade` objects
     kat_adapter : :class:`KatdalAdapter`
         Katdal Adapter
+    mfimage_params : dict
+        Optional parameters passed to MFImage that override defaults
     telstate : :class:`katsdptelstate.Telescope`
         telstate object
     """
 
+    # Work out which SN tables to export (from MFImage parameters)
+    mfimage_defaults = task_defaults('MFImage')
+    # Phase only selfcal solutions are in SN table with
+    # version number corresponding to the MFImage parameter: maxPSCLoop
+    pSN = mfimage_params.get('maxPSCLoop', mfimage_defaults['maxPSCLoop'])
+    # If maxPSCLoop is 0 or less then there was no self-calibration
+    if pSN < 1:
+        log.warn('No self-calibration solutions available for export')
+        return
+    # Amp+phase gains are in SN version maxPSCLoop + maxASCLoop (if maxASCLoop > 0)
+    apSN = mfimage_params.get('maxASCLoop', mfimage_defaults['maxASCLoop'])
+
+    subband_info = kat_adapter.uv_spw_rows[0]
+    bandwidth = np.sum(subband_info['TOTAL BANDWIDTH'])
+    center_if = kat_adapter.nif // 2
+    center_if_reffreq = subband_info['IF FREQ'][center_if]
+    center_freq = kat_adapter.reffreq + center_if_reffreq + \
+        subband_info['TOTAL BANDWIDTH'][center_if] / 2.
+    # Use hard-coded pol ordering from katdal_adapter.
+    # katdal_adapter only supports X,Y visibility data
+    # (e.g. no single pol) so we only support that here.
+    # i.e. STOKES == -5 && NSTOK >= 2 (cf. AIPS MEMO 117).
+    # The uv files might have had their pol ordering changed
+    # by MFImage so we check for dual-pol solutions in the
+    # loop over files as well.
+    pol_ordering = [pol[0] for pol in sorted(CORR_ID_MAP, key=CORR_ID_MAP.get)
+                    if pol[0] == pol[1]]
+    ant_ordering = [ant.name for ant in kat_adapter._katds.ants]
+    ts = telstate.view(telstate.prefixes[0] + 'selfcal')
+    # Populate immutable telstate keys
+    ts['n_chans'] = kat_adapter.nif
+    ts['antlist'] = ant_ordering
+    ts['bandwidth'] = bandwidth
+    ts['center_freq'] = center_freq
+    ts['pol_ordering'] = pol_ordering
+
     # MFImage outputs a UV file per source.  Iterate through each source:
-    # (1) Extract complex gains from attached "AIPS SN" table
+    # (1) Extract relevant complex gains from attached "AIPS SN" tables
     # (2) Write them to telstate
     for si, uv_file in enumerate(uv_files):
         try:
             with uv_factory(aips_path=uv_file, mode='r') as uvf:
                 try:
+                    log.info('Extracting phase only self-calibration from AIPS SN: %d' % (pSN))
+                    uvf.attach_table("AIPS SN", pSN)
                     sntab = uvf.tables["AIPS SN"]
                 except KeyError:
-                    log.warn("No calibration solutions in '%s'", uv_file)
+                    log.warn("Requested phase-only calibration solution not in '%s'", uv_file)
                 else:
-                    # Handle cases for single/dual pol gains
-                    if "REAL2" in sntab.rows[0]:
-                        def _extract_gains(row):
-                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                            row["REAL2"] + 1j*row["IMAG2"]],
-                                            dtype=np.complex64)
+                    # Only export dual-pol solutions
+                    if sntab.keywords["NO_POL"] < 2:
+                        raise ValueError("Only dual-pol self-calibration "
+                                         "solutions are supported")
+                    for timestamp, gain in zip(*_massage_gains(sntab, ant_ordering)):
+                        ts.add('product_GPHASE', gain,
+                               ts=katdal_timestamps(timestamp, kat_adapter.midnight))
+
+                # Only export amp+phase solutions if we have them
+                if apSN > 0:
+                    try:
+                        log.info('Extracting amp+phase self-calibration from AIPS SN: %d' % (pSN + apSN))
+                        uvf.attach_table("AIPS SN", pSN + apSN)
+                        sntab = uvf.tables["AIPS SN"]
+                    except KeyError:
+                        log.warn("Requested amp+phase calibration solution not in '%s'", uv_file)
                     else:
-                        def _extract_gains(row):
-                            return np.array([row["REAL1"] + 1j*row["IMAG1"],
-                                            row["REAL1"] + 1j*row["IMAG1"]],
-                                            dtype=np.complex64)
-
-                    # Write each complex gain out per antenna
-                    for row in (_condition(r) for r in sntab.rows):
-                        # Convert time back from AIPS to katdal UTC
-                        time = katdal_timestamps(row["TIME"], kat_adapter.midnight)
-                        # Convert from AIPS FORTRAN indexing to katdal C indexing
-                        ant = "%s_gains" % katdal_ant_name(row["ANTENNA NO."])
-
-                        # Store complex gain for this antenna
-                        # in telstate at this timestamp
-                        telstate.add(ant, _extract_gains(row), ts=time)
+                        for timestamp, gain in zip(*_massage_gains(sntab, ant_ordering)):
+                            ts.add('product_GAMP_PHASE', gain,
+                                   ts=katdal_timestamps(timestamp, kat_adapter.midnight))
         except Exception as e:
             log.warn("Export of calibration solutions from '%s' failed.\n%s",
                      uv_file, str(e))
+
+
+AIPS_NAN = np.float32(np.array(b'INDE').view(np.float32))
+NP_NAN = np.complex64(complex(np.nan, np.nan))
+
+
+def _massage_gains(sntab, ant_ordering):
+    """ Convert sntab object to a list of ndarrays of gains with
+        shape (nif, npol, len(ant_ordering)) and a list of unique
+        timestamps """
+
+    def _extract_gains(row):
+        # Get the gains from row, and make ones with weight<=0 and
+        # real or imaginary value = AIPS_NAN into np.nan
+        r1, r2, i1, i2 = np.atleast_1d(row["REAL1"], row["REAL2"],
+                                       row["IMAG1"], row["IMAG2"])
+        # Work out mask to NaNify gains
+        w1, w2 = np.atleast_1d(row["WEIGHT 1"], row["WEIGHT 2"])
+        m1 = ((r1 == AIPS_NAN) | (i1 == AIPS_NAN)) & (w1 <= 0.)
+        m2 = ((r2 == AIPS_NAN) | (i2 == AIPS_NAN)) & (w2 <= 0.)
+        r1[m1] = i1[m1] = r2[m2] = i2[m2] = np.nan
+        return np.array([r1 + 1j*i1, r2 + 1j*i2],
+                        dtype=np.complex64).T
+
+    alltimes = []
+    allgains = []
+    nif = sntab.keywords['NO_IF']
+    # AipsTable.rows doesn't support slicing so
+    # extract formatted SN table up-front as a list of dicts
+    sntable = [_condition(row) for row in sntab.rows]
+    times = np.array([row["TIME"] for row in sntable])
+    # SN Tables are structured into one timestamp per row.
+    # Rows are grouped by antenna for a given timestamp,
+    # so loop over chunks of equal timestamp and look up
+    # all of the associated antennas.
+    time_chunks = np.where(np.diff(times))[0] + 1
+    if len(times) > 0:
+        time_chunks = np.insert([0, len(times)], 1, time_chunks)
+    for start, stop in zip(time_chunks[:-1], time_chunks[1:]):
+        # Initialise gains array for this timestamp
+        thisgain = np.full((nif, 2, len(ant_ordering)), NP_NAN, dtype=np.complex64)
+        alltimes.append(times[start])
+        for row in sntable[start:stop]:
+            # Convert from AIPS FORTRAN indexing to katdal C indexing
+            aips_ant = row["ANTENNA NO."]
+            antindex = ant_ordering.index(katdal_ant_name(aips_ant))
+            thisgain[..., antindex] = _extract_gains(row)
+        allgains.append(thisgain)
+    return alltimes, allgains
 
 
 NUM_KATPOINT_PARMS = 10
@@ -269,7 +358,7 @@ def export_clean_components(clean_files, target_indices, kat_adapter, telstate):
 
                     # Store them in telstate
                     key = telstate.join(target, "clean_components")
-                    telstate.add(key, data, immutable=True)
+                    telstate[key] = data
 
         except Exception as e:
             log.warn("Export of clean components from '%s' failed.\n%s",

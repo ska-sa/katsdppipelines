@@ -132,6 +132,8 @@ ENV PACKAGES \
     libncurses5 \
     libreadline7 \
     libcurl4 \
+    libcfitsio5 \
+    libfftw3-3 \
     libxmlrpc-core-c3 \
     libxmlrpc-c++8v5 \
     libxm4

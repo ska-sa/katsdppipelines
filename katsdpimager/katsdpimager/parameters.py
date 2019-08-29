@@ -7,7 +7,7 @@ Most formulae are taken from SKA-TEL-SDP-0000003.
 
 import math
 
-import astropy.units as units
+from astropy import units
 import numpy as np
 
 import katsdpimager.types
@@ -112,13 +112,12 @@ Cell size: {:.3f}
 Wavelength: {:.3f}
 Polarizations: {}
 Precision: {} bit
-""".format(
-            np.arcsin(self.pixel_size).to(units.arcsec),
-            self.pixels,
-            np.arcsin(self.pixel_size * self.pixels).to(units.deg),
-            self.cell_size, self.wavelength,
-            ','.join([polarization.STOKES_NAMES[i] for i in self.polarizations]),
-            32 if self.real_dtype == np.float32 else 64)
+""".format(np.arcsin(self.pixel_size).to(units.arcsec),
+           self.pixels,
+           np.arcsin(self.pixel_size * self.pixels).to(units.deg),
+           self.cell_size, self.wavelength,
+           ','.join([polarization.STOKES_NAMES[i] for i in self.polarizations]),
+           32 if self.real_dtype == np.float32 else 64)
 
 
 def w_kernel_width(image_parameters, w, eps_w, antialias_width=0):
@@ -177,7 +176,7 @@ class WeightParameters:
 
     Parameters
     ----------
-    weight_type : {:py:const:`weight.NATURAL`, :py:const:`weight.UNIFORM`, :py:const:`weight.ROBUST`}
+    weight_type : :class:`weight.WeightType`
         Image weighting scheme
     robustness : float, optional
         Robustness parameter for robust weighting
@@ -187,14 +186,10 @@ class WeightParameters:
         self.robustness = robustness
 
     def __str__(self):
-        if self.weight_type == weight.NATURAL:
-            ans = 'natural'
-        elif self.weight_type == weight.UNIFORM:
-            ans = 'uniform'
-        elif self.weight_type == weight.ROBUST:
+        if self.weight_type == weight.WeightType.ROBUST:
             ans = 'robust ({:.3f})'.format(self.robustness)
         else:
-            raise ValueError('Unknown weight type {}'.format(self.weight_type))
+            ans = self.weight_type.name.lower()
         return 'Image weights: ' + ans
 
 

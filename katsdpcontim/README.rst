@@ -417,6 +417,16 @@ The --uvblavg option is used to average the data down to 1024 channels from the 
     --uvblavg "avgFreq=1; chAvg=4"
 
 
+Running the Development Container
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The dev container has AIPS installed. If you would like to run AIPS with the TV
+make sure you add ``--env="DISPLAY" --volume="$HOME/.Xauthority:/root/.Xauthority:rw"``
+to your ``docker run -it`` command. This will ensure X forwarding and displays are
+set up correctly inside the container. Running AIPS with the option ``tv=local``
+should give you the AIPS TV in an xterm window.
+
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Bill Cotton's Continuum Imaging Pipeline Parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

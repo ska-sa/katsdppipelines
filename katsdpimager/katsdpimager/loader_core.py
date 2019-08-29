@@ -2,7 +2,7 @@
 
 """Base classes used by loader modules"""
 import numpy as np
-import astropy.units as units
+from astropy import units
 
 from . import parameters
 
@@ -157,6 +157,11 @@ class LoaderBase:
             may be exceeded if the natural unit of the storage format (e.g. row
             in a measurement set) exceeds this size.
         """
+        raise NotImplementedError('Abstract base class')
+
+    @property
+    def raw_data(self):
+        """Return a handle to the the underlying class-specific data set"""
         raise NotImplementedError('Abstract base class')
 
     def close(self):

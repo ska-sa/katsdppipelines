@@ -12,12 +12,11 @@ import itertools
 import math
 import urllib
 
-import katsdpimager.loader_core
 import katdal
 import numpy as np
-import astropy.units as units
+from astropy import units
 
-from . import polarization
+from . import polarization, loader_core
 
 
 _logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ def _unique(seq):
     return [key for key, group in itertools.groupby(data)]
 
 
-class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
+class LoaderKatdal(loader_core.LoaderBase):
     def _find_target(self, target):
         """Find and return the target index based on the argument.
 
@@ -111,9 +110,9 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
 
         self._file = katdal.open(filename, **open_args)
         if args.subarray < 0 or args.subarray >= len(self._file.subarrays):
-            raise ValueError('Subarray {} is out of range', args.subarray)
+            raise ValueError('Subarray {} is out of range'.format(args.subarray))
         if args.spw < 0 or args.spw >= len(self._file.spectral_windows):
-            raise ValueError('Spectral window {} is out of range', args.spw)
+            raise ValueError('Spectral window {} is out of range'.format(args.spw))
         target_idx = self._find_target(args.target)
         self._file.select(subarray=args.subarray, spw=args.spw,
                           targets=[target_idx], scans=['track'],
@@ -212,14 +211,12 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
         assert 0 <= start_channel < stop_channel <= n_file_chans
         n_chans = stop_channel - start_channel
         n_pols = len(self._polarizations)
-        n_ants = len(self._file.ants)
         if max_chunk_vis is None:
             load_times = n_file_times
         else:
             load_times = max(1, max_chunk_vis // (n_chans * n_file_cp))
         # timestamps is a property, so ensure it's only evaluated once
         timestamps = self._file.timestamps
-        antenna_uvw = [None] * n_ants
         baseline_idx = np.arange(len(self._baselines)).astype(np.int32)
         for start in range(0, n_file_times, load_times):
             end = min(n_file_times, start + load_times)
@@ -236,16 +233,11 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
             # Apply flags to weights
             weights *= np.logical_not(flags)
 
-            # Compute per-antenna UVW coordinates and parallactic angles. The
-            # tensor product yields arrays of shape 3xN, which we transpose to
-            # Nx3.
-            basis = self._target.uvw_basis(timestamp=timestamps[start:end], antenna=self._ref_ant)
-            for i, antenna in enumerate(self._file.ants):
-                enu = np.array(self._ref_ant.baseline_toward(antenna))
-                ant_uvw = np.tensordot(basis, enu, ([1], [0]))
-                antenna_uvw[i] = units.Quantity(
-                    ant_uvw.transpose(), unit=units.m, dtype=np.float32)
-            # parangle converts to degree before returning, so we have to
+            # Compute per-antenna UVW coordinates and parallactic angles.
+            antenna_uvw = units.Quantity(self._target.uvw(
+                self._file.ants, timestamp=timestamps[start:end], antenna=self._ref_ant))
+            antenna_uvw = antenna_uvw.T   # Switch from (uvw, time, ant) to (ant, time, uvw)
+            # parangle converts to degrees before returning, so we have to
             # convert back to radians.
             antenna_pa = units.Quantity(
                 self._file.parangle[start:end, :].transpose(),
@@ -273,7 +265,16 @@ class LoaderKatdal(katsdpimager.loader_core.LoaderBase):
                 progress=end,
                 total=n_file_times)
 
+    @property
+    def raw_data(self):
+        return self._file
+
     def close(self):
         # katdal does not provide a way to close an input file. The best we can
         # do is leave it to the garbage collector to sort out.
         self._file = None
+
+    @property
+    def raw_target(self):
+        """Target as a katpoint object"""
+        return self._target
