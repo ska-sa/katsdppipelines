@@ -41,7 +41,7 @@ pytest == 3.3.2
 python-dateutil
 python-lzf
 pytz
-PyYAML == 3.13
+pyyaml
 rdbtools
 redis
 requests
