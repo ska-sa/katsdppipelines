@@ -56,7 +56,6 @@ tornado
 trollius
 webencodings == 0.5.1
 urllib3
-git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
 git+ssh://git@github.com/ska-sa/katpoint#egg=katpoint
 git+ssh://git@github.com/ska-sa/katdal#egg=katdal
 git+ssh://git@github.com/ska-sa/katsdptelstate#egg=katsdptelstate
