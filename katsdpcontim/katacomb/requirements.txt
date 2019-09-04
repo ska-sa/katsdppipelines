@@ -45,8 +45,6 @@ pyyaml
 rdbtools
 redis
 requests
-ruamel.yaml == 0.15.35
-ruamel.ordereddict == 0.4.13
 scipy
 singledispatch
 six
