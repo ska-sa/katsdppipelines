@@ -54,7 +54,7 @@ tornado
 trollius
 webencodings == 0.5.1
 urllib3
-katdal @ git+https://git@github.com/ska-sa/katdal
-katpoint @ git+https://git@github.com/ska-sa/katpoint
-katsdpservices @ git+https://git@github.com/ska-sa/katsdpservices
-katsdptelstate @ git+https://git@github.com/ska-sa/katsdptelstate
+katdal @ git+https://github.com/ska-sa/katdal
+katpoint @ git+https://github.com/ska-sa/katpoint
+katsdpservices @ git+https://github.com/ska-sa/katsdpservices
+katsdptelstate @ git+https://github.com/ska-sa/katsdptelstate
