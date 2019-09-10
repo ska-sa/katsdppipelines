@@ -11,7 +11,8 @@ from katacomb.util import (log_exception,
                            parse_python_assigns,
                            get_and_merge_args,
                            setup_aips_disks,
-                           recursive_merge)
+                           recursive_merge,
+                           apply_user_mask)
 
 
 log = logging.getLogger('katacomb')
@@ -137,6 +138,12 @@ def create_parser():
                              "verbosity of Obit tasks. 0=None 5=Maximum. "
                              "Default: %(default)s")
 
+    parser.add_argument("-m", "--mask", default=None, type=str,
+                        help="Pickle file containing a static mask of channels "
+                             "to flag for all times. Must have the same number "
+                             "of channels as the input dataset. "
+                             "Default: No mask")
+
     return parser
 
 parser = create_parser()
@@ -144,6 +151,10 @@ args = parser.parse_args()
 configure_logging(args)
 
 katdata = katdal.open(args.katdata, applycal=args.applycal, **args.open_args)
+
+# Apply the supplied mask to the flags
+if args.mask:
+    apply_user_mask(katdata, args.mask)
 
 # Set up katdal selection based on arguments
 kat_select = {'pol': args.pols,
