@@ -37,4 +37,5 @@ from aips_export import (export_calibration_solutions,
                          export_clean_components,
                          export_images)
 
-from continuum_pipeline import ContinuumPipeline
+from continuum_pipeline import (ContinuumPipeline,
+                                ImagePipeline)

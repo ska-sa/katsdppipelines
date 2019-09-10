@@ -516,6 +516,7 @@ class Pipeline(object):
             with uv_factory(aips_path=self.uv_merge_path, mode="r") as uvf:
                 uvf.Zap()
 
+
 class ContinuumPipeline(Pipeline):
 
     def __init__(self, katdata, telstate, **kwargs):
@@ -547,3 +548,24 @@ class ContinuumPipeline(Pipeline):
                                 self.ka, self.telstate)
         export_images(self.clean_files, target_indices,
                       self.odisk, self.ka)
+
+
+class ImagePipeline(Pipeline):
+
+    def __init__(self, katdata, **kwargs):
+        """
+        Initialise the Continuum Pipeline for offline imaging.
+
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+        """
+
+        super(ImagePipeline, self).__init__(katdata, **kwargs)
+
+    def _execute(self):
+        result_tuple = self._export_and_merge_scans()
+        uv_sources, target_indices, self.uv_files, self.clean_files = result_tuple
+
+        self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
