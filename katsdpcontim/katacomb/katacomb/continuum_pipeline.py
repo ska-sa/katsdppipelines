@@ -26,12 +26,12 @@ UV_CLASS = "MFImag"
 IMG_CLASS = "IClean"
 
 
-class ContinuumPipeline(object):
+class Pipeline(object):
     """
     This class encapsulates state and behaviour required for
-    executing the Continuum Pipeline
+    executing Pipelines
     """
-    def __init__(self, katdata, telstate, **kwargs):
+    def __init__(self, katdata, **kwargs):
         """
         Initialise the Continuum Pipeline
 
@@ -39,8 +39,6 @@ class ContinuumPipeline(object):
         ----------
         katdata : :class:`katdal.Dataset`
             katdal Dataset object
-        telstate : :class:`katsdptelstate.TelescopeState`
-            Telescope state or Telescope state view
         katdal_select (optional) : dict
             Dictionary of katdal selection statements.
             Defaults to :code:`{}`.
@@ -67,40 +65,37 @@ class ContinuumPipeline(object):
         nvispio (optional) : integer
             Number of AIPS visibilities per IO operation.
             Defaults to 10240.
+
+        prtlv (optional) : integer
+            Chattiness of Obit tasks (between 1=Quiet and  5=Verbose)
         """
 
         self.ka = KatdalAdapter(katdata)
-        self.telstate = telstate
         self.nvispio = kwargs.pop("nvispio", 10240)
         self.disk = 1
         self.katdal_select = kwargs.pop("katdal_select", {})
         self.uvblavg_params = kwargs.pop("uvblavg_params", {})
         self.mfimage_params = kwargs.pop("mfimage_params", {})
         self.clobber = kwargs.pop("clobber", set(['scans', 'avgscans']))
-        # Use highest numbered FITS disk for FITS output.
-        self.odisk = len(kc.get_config()['fitsdirs'])
         self.__merge_scans = kwargs.get("__merge_scans", False)
+        self.prtlv = kwargs.get("prtlv", 1)
 
     def execute(self):
-        """ Execute the Continuum Pipeline """
+        """
+        Run the pipeline.
+        """
         with obit_context():
             try:
-                uv_files, clean_files = [], []
-                result_tuple = self._export_and_merge_scans()
-                uv_sources, target_indices, uv_files, clean_files = result_tuple
-                self._run_mfimage(uv_sources, uv_files, clean_files)
-
-                export_calibration_solutions(uv_files, self.ka,
-                                             self.mfimage_params, self.telstate)
-                export_clean_components(clean_files, target_indices,
-                                        self.ka, self.telstate)
-                export_images(clean_files, target_indices,
-                              self.odisk, self.ka)
+                self.uv_files, self.clean_files = [], []
+                self._execute()
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
                 raise
             finally:
-                self._cleanup(uv_files, clean_files)
+                self._cleanup()
+
+    def _execute(self):
+        pass
 
     def _blavg_scan(self, scan_path):
         """
@@ -119,6 +114,7 @@ class ContinuumPipeline(object):
         blavg_kwargs = scan_path.task_input_kwargs()
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
+        blavg_kwargs['prtLv'] = self.prtlv
 
         blavg_kwargs.update(self.uvblavg_params)
 
@@ -310,6 +306,7 @@ class ContinuumPipeline(object):
 
         return uv_sources, target_indices, uv_files, clean_files
 
+
     def _export_and_merge_scans(self):
         """
         1. Read scans from katdal
@@ -486,7 +483,7 @@ class ContinuumPipeline(object):
         mfimage_kwargs.update({
             'maxFBW': fractional_bandwidth(merge_desc)/20.0,
             'nThreads': multiprocessing.cpu_count(),
-            'prtLv': 1
+            'prtLv': self.prtlv
         })
 
         # Finally, override with default parameters
@@ -499,14 +496,14 @@ class ContinuumPipeline(object):
         with log_obit_err(log):
             mfimage.go()
 
-    def _cleanup(self, uv_files, clean_files):
+    def _cleanup(self):
         """
         Remove any remaining UV, Clean, and Merged UVF files,
         if requested
         """
 
         # Clobber any result files
-        for uv_file, clean_file in zip(uv_files, clean_files):
+        for uv_file, clean_file in zip(self.uv_files, self.clean_files):
             if "mfimage" in self.clobber:
                 with uv_factory(aips_path=uv_file, mode="r") as uvf:
                     uvf.Zap()
@@ -518,3 +515,35 @@ class ContinuumPipeline(object):
         if 'merge' in self.clobber:
             with uv_factory(aips_path=self.uv_merge_path, mode="r") as uvf:
                 uvf.Zap()
+
+class ContinuumPipeline(Pipeline):
+
+    def __init__(self, katdata, telstate, **kwargs):
+        """
+        Initialise the Continuum Pipeline for MeerKAT system processing.
+
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+        telstate : :class:`katsdptelstate.TelescopeState`
+            Telescope state or Telescope state view
+        """
+
+        super(ContinuumPipeline, self).__init__(katdata, **kwargs)
+        self.telstate = telstate
+        # Use highest numbered FITS disk for FITS output.
+        self.odisk = len(kc.get_config()['fitsdirs'])
+
+    def _execute(self):
+        result_tuple = self._export_and_merge_scans()
+        uv_sources, target_indices, self.uv_files, self.clean_files = result_tuple
+
+        self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
+
+        export_calibration_solutions(self.uv_files, self.ka,
+                                     self.mfimage_params, self.telstate)
+        export_clean_components(self.clean_files, target_indices,
+                                self.ka, self.telstate)
+        export_images(self.clean_files, target_indices,
+                      self.odisk, self.ka)
