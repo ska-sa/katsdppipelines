@@ -307,6 +307,30 @@ class Pipeline(object):
         return uv_sources, target_indices, uv_files, clean_files
 
 
+    def _select_and_infer_files(self):
+        """
+        Perform katdal selection and infer aips paths of:
+        (1) imaging target names and indices
+        (2) uv file for each target
+        (3) clean file  for each target
+        """
+
+        self.katdal_select['reset'] = 'TFB'
+
+        # Perform katdal selection
+        self.ka.select(**self.katdal_select)
+
+        # Fall over on empty selections
+        if not self.ka.size > 0:
+            raise ValueError("The katdal selection "
+                             "produced an empty dataset"
+                             "\n'%s'\n" % pretty(self.katdal_select))
+
+        result_tuple = self._source_info()
+
+        return result_tuple
+
+
     def _export_and_merge_scans(self):
         """
         1. Read scans from katdal
@@ -319,30 +343,11 @@ class Pipeline(object):
         # we have a baseline averaged file with which to condition it
         merge_uvf = None
 
-        uv_mp = self.ka.aips_path(aclass='merge')
+        uv_mp = self.ka.aips_path(aclass='merge', name=kc.get_config()['cb_id'])
         self.uv_merge_path = uv_mp.copy(seq=next_seq_nr(uv_mp))
-
-        self.katdal_select['reset'] = 'TFB'
-
-        # Perform katdal selection
-        # retrieving selected scan indices as python ints
-        # so that we can do per scan selection
-        self.ka.select(**self.katdal_select)
-
-        # Fall over on empty selections
-        if not self.ka.size > 0:
-            raise ValueError("The katdal selection "
-                             "produced an empty dataset"
-                             "\n'%s'\n" % pretty(self.katdal_select))
 
         global_desc = self.ka.uv_descriptor()
         global_table_cmds = self.ka.default_table_cmds()
-
-        # Given katdal selection, infer
-        # (1) imaging targets
-        # (2) uv file for each target
-        # (3) clean file  for each target
-        uv_sources, target_indices, uv_files, clean_files = self._source_info()
 
         # FORTRAN indexing
         merge_firstVis = 1
@@ -452,8 +457,6 @@ class Pipeline(object):
         # Close merge file
         merge_uvf.close()
 
-        return uv_sources, target_indices, uv_files, clean_files
-
     def _run_mfimage(self, uv_sources, uv_files, clean_files):
         """
         Run the MFImage task
@@ -537,12 +540,13 @@ class ContinuumPipeline(Pipeline):
         self.odisk = len(kc.get_config()['fitsdirs'])
 
     def _execute(self):
-        result_tuple = self._export_and_merge_scans()
+        result_tuple = self._select_and_infer_files()
         uv_sources, target_indices, self.uv_files, self.clean_files = result_tuple
 
+        self._export_and_merge_scans()
         self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
 
-        export_calibration_solutions(self.uv_files, self.ka,
+        export_calibration_solutions(uv_files, self.ka,
                                      self.mfimage_params, self.telstate)
         export_clean_components(self.clean_files, target_indices,
                                 self.ka, self.telstate)
@@ -563,9 +567,31 @@ class ImagePipeline(Pipeline):
         """
 
         super(ImagePipeline, self).__init__(katdata, **kwargs)
+        self.odisk = len(kc.get_config()['fitsdirs'])
+        self.reuse = kwargs.get('reuse', None)
 
     def _execute(self):
-        result_tuple = self._export_and_merge_scans()
+        result_tuple = self._select_and_infer_files()
         uv_sources, target_indices, self.uv_files, self.clean_files = result_tuple
+        # Update MFImage source selection
+        self.mfimage_params['Sources'] = uv_sources
+        # Find the highest numbered merge file if we are reusing
+        if self.reuse is None:
+            self._export_and_merge_scans()
+        else:
+            uv_mp = self.ka.aips_path(aclass='merge')
+            # Find the merge file with the highest seq #
+            hiseq = next_seq_nr(uv_mp) - 1
+            # hiseq will be zero if the aipsdisk has no 'merge' file
+            if hiseq == 0:
+                raise ValueError("AIPS disk at '%s' has no 'merge' file to reuse." %
+                                 (kc.get_config()['aipsdirs'][0][-1]))
+            else:
+                # Get the AIPS entry of the UV data to reuse
+                self.uv_merge_path = uv_mp.copy(seq=hiseq)
+                log.info("Re-using UV data in '%s' from AIPS disk: '%s'" %
+                         (self.uv_merge_path, kc.get_config()['aipsdirs'][0][-1]))
 
         self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
+        export_images(self.clean_files, target_indices,
+                          self.odisk, self.ka)

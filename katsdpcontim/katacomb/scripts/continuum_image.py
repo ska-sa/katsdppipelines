@@ -144,6 +144,13 @@ def create_parser():
                              "of channels as the input dataset. "
                              "Default: No mask")
 
+    parser.add_argument("-r", "--reuse", default=None, type=str,
+                        help="Location of AIPS disk from which to read UV "
+                             "data. This will skip reading the UV data from "
+                             "the archive and no aipsdisk will be created in "
+                             "--workdir. "
+                             "Default: Read the UV data from the archive.")
+
     return parser
 
 parser = create_parser()
@@ -179,9 +186,19 @@ dc = kc.get_config()
 # capture_block_id is used to generate AIPS disk filenames
 capture_block_id = katdata.obs_params['capture_block_id']
 
-# Set up aipsdisk configuration from args.workdir
-aipsdirs = [(None, os.path.join(args.workdir, capture_block_id + '_aipsdisk'))]
-log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+if args.reuse:
+    #Set up AIPS disk from specified directory
+    if os.path.exists(args.reuse):
+        aipsdirs = [(None, args.reuse)]
+        log.info('Re-using AIPS data area: %s' % (aipsdirs[0][1]))
+    else:
+        msg = "AIPS disk at '%s' does not exist." % (args.reuse)
+        log.exception(msg)
+        raise IOError(msg)
+else:
+    # Set up aipsdisk configuration from args.workdir
+    aipsdirs = [(None, os.path.join(args.workdir, capture_block_id + '_aipsdisk'))]
+    log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
@@ -201,7 +218,8 @@ pipeline = ImagePipeline(katdata,
                          mfimage_params=mfimage_args,
                          nvispio=args.nvispio,
                          clobber=args.clobber,
-                         prtlv=args.prtlv)
+                         prtlv=args.prtlv,
+                         reuse=args.reuse)
 
 # Execute it
 pipeline.execute()
