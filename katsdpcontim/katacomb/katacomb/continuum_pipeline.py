@@ -86,7 +86,7 @@ class Pipeline(object):
         """
         with obit_context():
             try:
-                self.uv_files, self.clean_files = [], []
+                self.uv_files, self.clean_files, self.uv_merge_path = [], [], []
                 self._execute()
             except Exception:
                 log.exception("Exception executing Continuum Pipeline")
@@ -508,15 +508,15 @@ class Pipeline(object):
         # Clobber any result files
         for uv_file, clean_file in zip(self.uv_files, self.clean_files):
             if "mfimage" in self.clobber:
-                with uv_factory(aips_path=uv_file, mode="r") as uvf:
+                with uv_factory(aips_path=uv_file, mode="w") as uvf:
                     uvf.Zap()
 
             if "clean" in self.clobber:
-                with uv_factory(aips_path=clean_file, mode="r") as cf:
+                with uv_factory(aips_path=clean_file, mode="w") as cf:
                     cf.Zap()
 
         if 'merge' in self.clobber:
-            with uv_factory(aips_path=self.uv_merge_path, mode="r") as uvf:
+            with uv_factory(aips_path=self.uv_merge_path, mode="w") as uvf:
                 uvf.Zap()
 
 
@@ -546,7 +546,7 @@ class ContinuumPipeline(Pipeline):
         self._export_and_merge_scans()
         self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
 
-        export_calibration_solutions(uv_files, self.ka,
+        export_calibration_solutions(self.uv_files, self.ka,
                                      self.mfimage_params, self.telstate)
         export_clean_components(self.clean_files, target_indices,
                                 self.ka, self.telstate)

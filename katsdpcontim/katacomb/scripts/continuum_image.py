@@ -49,7 +49,7 @@ def create_parser():
 
     parser.add_argument("-o", "--outputdir",
                         default='/scratch', type=str,
-                        help="Output directory. FITS image files named <target_name>.fits "
+                        help="Output directory. FITS image files named <cb_id>_<target_name>.fits "
                              "will be placed here for each target. Default: %(default)s")
 
     parser.add_argument("--nvispio", default=10240, type=int,

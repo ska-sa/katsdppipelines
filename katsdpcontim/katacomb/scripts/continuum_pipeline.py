@@ -36,10 +36,12 @@ log = logging.getLogger('katacomb')
 WRITE_TAG = '.writing'
 OUTDIR_SEPARATOR = '_'
 START_TIME = '%d'%(int(time.time()*1000))
+# Location of mfimage and uvblavg yaml configurations
+CONFIG = '/obitconf'
 
 def create_parser():
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
-    parser = argparse.ArgumentParser(formatter_class=formatter_class)
+    parser = argparse.ArgumentParser()
 
     parser.add_argument("katdata",
                         help="Katdal observation file")
@@ -54,38 +56,45 @@ def create_parser():
                         help='JWT to access the MeerKAT archive')
 
     parser.add_argument("-w", "--workdir",
-                        default=None, type=str,
+                        default='/scratch', type=str,
                         help="Location of scratch space. An AIPS disk "
-                             "will be created in this space.")
+                             "will be created in this space. "
+                             "Default: %(default)s")
 
     parser.add_argument("-o", "--outputdir",
                         default=None, type=str,
                         help="Location to store output FITS, PNG files "
-                             "and metadata dictionary. Default is "
-                             "'/var/kat/data'.")
+                             "and metadata dictionary. "
+                             "Default: '/var/kat/data'.")
 
-    parser.add_argument("--nvispio", default=10240, type=int)
+    parser.add_argument("--nvispio", default=10240, type=int,
+                        help="Number of visibilities per write when "
+                             "copying data from archive. "
+                             "Default: %(default)s")
 
     parser.add_argument("-cbid", "--capture-block-id",
                         default=None, type=str,
                         help="Capture Block ID. Unique identifier "
                              "for the observation on which the "
-                             "continuum pipeline is run.")
+                             "continuum pipeline is run. "
+                             "Default: Infer it from the katdal dataset.")
 
     parser.add_argument("-ts", "--telstate",
                         default='', type=str,
-                        help="Address of the telstate server")
+                        help="Address of the telstate server. "
+                             "Default: Use a local telstate server.")
 
     parser.add_argument("-tsid", "--telstate-id",
                         default=None, type=str,
                         help="Namespace for output telescope "
                              "state keys (within the '-cbid' namespace). "
-                             "Default is the value of --output-id")
+                             "Default: Value of --output-id")
 
     parser.add_argument("-oid", "--output-id",
                         default="continuum_image", type=str,
                         help="Label the product of the continuum pipeline. "
-                             "Used to generate FITS and PNG filenames.")
+                             "Used to generate FITS and PNG filenames. "
+                             "Default: %(default)s")
 
     parser.add_argument("-ks", "--select",
                         default="scans='track'; spw=0; corrprods='cross'",
@@ -93,7 +102,8 @@ def create_parser():
                         help="katdal select statement "
                              "Should only contain python "
                              "assignment statements to python "
-                             "literals, separated by semi-colons.")
+                             "literals, separated by semi-colons. "
+                             "Default: %(default)s")
 
     TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
 
@@ -116,7 +126,7 @@ def create_parser():
                              "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
 
     parser.add_argument("--clobber",
-                        default="scans, avgscans",
+                        default="scans, avgscans, merge, clean, mfimage",
                         type=lambda s: set(v.strip() for v in s.split(',')),
                         help="Class of AIPS/Obit output files to clobber. "
                              "'scans' => Individual scans. "
@@ -124,18 +134,13 @@ def create_parser():
                              "'merge' => Observation file containing merged, "
                              "averaged scans. "
                              "'clean' => Output CLEAN files. "
-                             "'mfimage' => Output MFImage files. ")
-
-    parser.add_argument("--config",
-                        default=os.path.sep + "obitconf",
-                        type=str,
-                        help="Directory containing default configuration "
-                             ".yaml files for mfimage and uvblavg. ")
+                             "'mfimage' => Output MFImage files. "
+                             "Default: %(default)s")
 
     parser.add_argument("--nif", default=8, type=int,
                         help="Number of AIPS 'IFs' to equally subdivide the band. "
                              "NOTE: Must divide the number of channels after any "
-                             "katdal selection.")
+                             "katdal selection. Default: %(default)s")
     return parser
 
 
@@ -153,13 +158,13 @@ if args.access_key is not None:
     open_kwargs['credentials'] = (args.access_key, args.secret_key)
 elif args.token is not None:
     open_kwargs['token'] = args.token
-katdata = katdal.open(args.katdata, applycal='all', **open_kwargs)
+katdata = katdal.open(args.katdata, applycal='l1', **open_kwargs)
 
 post_process_args(args, katdata)
 
 # Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(pjoin(args.config, 'uvblavg.yaml'), args.uvblavg)
-mfimage_args = get_and_merge_args(pjoin(args.config, 'mfimage.yaml'), args.mfimage)
+uvblavg_args = get_and_merge_args(pjoin(CONFIG, 'uvblavg_MKAT.yaml'), args.uvblavg)
+mfimage_args = get_and_merge_args(pjoin(CONFIG, 'mfimage_MKAT.yaml'), args.mfimage)
 
 # Get the default config.
 dc = kc.get_config()
@@ -206,7 +211,8 @@ pipeline = ContinuumPipeline(katdata, ts_view,
                              katdal_select=katdal_select,
                              uvblavg_params=uvblavg_args,
                              mfimage_params=mfimage_args,
-                             nvispio=args.nvispio)
+                             nvispio=args.nvispio,
+                             clobber=args.clobber)
 
 # Execute it
 pipeline.execute()
