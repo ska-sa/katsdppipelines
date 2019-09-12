@@ -306,7 +306,6 @@ class Pipeline(object):
 
         return uv_sources, target_indices, uv_files, clean_files
 
-
     def _select_and_infer_files(self):
         """
         Perform katdal selection and infer aips paths of:
@@ -329,7 +328,6 @@ class Pipeline(object):
         result_tuple = self._source_info()
 
         return result_tuple
-
 
     def _export_and_merge_scans(self):
         """
@@ -594,4 +592,4 @@ class ImagePipeline(Pipeline):
 
         self._run_mfimage(uv_sources, self.uv_files, self.clean_files)
         export_images(self.clean_files, target_indices,
-                          self.odisk, self.ka)
+                      self.odisk, self.ka)

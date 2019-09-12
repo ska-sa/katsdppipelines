@@ -17,12 +17,14 @@ from katacomb.util import (log_exception,
 
 log = logging.getLogger('katacomb')
 
+
 def configure_logging(args):
     log_handler = logging.StreamHandler()
     fmt = "[%(levelname)s] %(message)s"
     log_handler.setFormatter(logging.Formatter(fmt))
     log.addHandler(log_handler)
     log.setLevel(args.log_level.upper())
+
 
 def create_parser():
     parser = argparse.ArgumentParser()
@@ -73,7 +75,7 @@ def create_parser():
                              "Should only contain python "
                              "assignment statements to python "
                              "literals, separated by semi-colons. "
-                             "See " + TDF_URL +"/UVBlAvg.TDF for valid parameters. "
+                             "See " + TDF_URL + "/UVBlAvg.TDF for valid parameters. "
                              "Default: %(default)s")
 
     parser.add_argument("--uvblavg-config",
@@ -153,6 +155,7 @@ def create_parser():
 
     return parser
 
+
 parser = create_parser()
 args = parser.parse_args()
 configure_logging(args)
@@ -170,7 +173,7 @@ kat_select = {'pol': args.pols,
 if args.targets:
     kat_select['targets'] = args.targets
 if args.channels:
-    start_chan, end_chan = split(args.channels,',')
+    start_chan, end_chan = args.channels.split(',')
     kat_select['channel'] = slice(start_chan, end_chan)
 
 # Command line katdal selection overrides command line options
@@ -187,7 +190,7 @@ dc = kc.get_config()
 capture_block_id = katdata.obs_params['capture_block_id']
 
 if args.reuse:
-    #Set up AIPS disk from specified directory
+    # Set up AIPS disk from specified directory
     if os.path.exists(args.reuse):
         aipsdirs = [(None, args.reuse)]
         log.info('Re-using AIPS data area: %s' % (aipsdirs[0][1]))

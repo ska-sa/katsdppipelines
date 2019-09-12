@@ -185,6 +185,7 @@ class TestUVExport(unittest.TestCase):
                 pipeline = ContinuumPipeline(KA.katdal, TelescopeState(),
                                              katdal_select=select,
                                              __merge_scans=True)
+                pipeline._select_and_infer_files()
                 pipeline._export_and_merge_scans()
 
                 uv_file_path = pipeline.uv_merge_path

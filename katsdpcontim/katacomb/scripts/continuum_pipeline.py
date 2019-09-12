@@ -35,12 +35,12 @@ log = logging.getLogger('katacomb')
 # Tag to append to the output directory while the pipeline runs
 WRITE_TAG = '.writing'
 OUTDIR_SEPARATOR = '_'
-START_TIME = '%d'%(int(time.time()*1000))
+START_TIME = '%d' % (int(time.time()*1000))
 # Location of mfimage and uvblavg yaml configurations
 CONFIG = '/obitconf'
 
+
 def create_parser():
-    formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser = argparse.ArgumentParser()
 
     parser.add_argument("katdata",
@@ -62,10 +62,10 @@ def create_parser():
                              "Default: %(default)s")
 
     parser.add_argument("-o", "--outputdir",
-                        default=None, type=str,
+                        default='/var/kat/data', type=str,
                         help="Location to store output FITS, PNG files "
                              "and metadata dictionary. "
-                             "Default: '/var/kat/data'.")
+                             "Default: %(default)s")
 
     parser.add_argument("--nvispio", default=10240, type=int,
                         help="Number of visibilities per write when "
