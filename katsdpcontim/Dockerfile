@@ -118,7 +118,7 @@ RUN install-requirements.py -d ~/docker-base/base-requirements.txt -r /tmp/requi
 # Install katacomb
 COPY --chown=kat:kat katacomb $KATHOME/src/katacomb
 
-RUN pip install $KATHOME/src/katacomb
+RUN pip install --no-deps $KATHOME/src/katacomb && pip check
 
 #######################################################################
 
@@ -132,6 +132,8 @@ ENV PACKAGES \
     libncurses5 \
     libreadline7 \
     libcurl4 \
+    libcfitsio5 \
+    libfftw3-3 \
     libxmlrpc-core-c3 \
     libxmlrpc-c++8v5 \
     libxm4

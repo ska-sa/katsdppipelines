@@ -90,7 +90,8 @@ class ContinuumPipeline(object):
                 uv_sources, target_indices, uv_files, clean_files = result_tuple
                 self._run_mfimage(uv_sources, uv_files, clean_files)
 
-                export_calibration_solutions(uv_files, self.ka, self.telstate)
+                export_calibration_solutions(uv_files, self.ka,
+                                             self.mfimage_params, self.telstate)
                 export_clean_components(clean_files, target_indices,
                                         self.ka, self.telstate)
                 export_images(clean_files, target_indices,

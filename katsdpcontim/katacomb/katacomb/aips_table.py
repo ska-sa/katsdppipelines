@@ -201,7 +201,9 @@ def _default_row_base(row_def, row):
         default dictionary updated with
         the contents of `row`
     """
-    base_row = row_def.copy()
+    SPECIALS = ["Table name", "NumFields", "_status"]
+    base_row = {key: item if key in SPECIALS else item[-1]
+                for key, item in row_def.items()}
     base_row.update(row)
     return base_row
 

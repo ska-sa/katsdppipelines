@@ -5,20 +5,27 @@ import time
 
 import attr
 import six
+import numba
 import numpy as np
+import dask.array as da
 
 import UVDesc
 
 from katacomb import AIPSPath, normalise_target_name
 from katacomb.util import fmt_bytes
 
-from katdal.lazy_indexer import DaskLazyIndexer
+from katdal.lazy_indexer import DaskLazyIndexer, dask_getitem
 
 log = logging.getLogger('katacomb')
 
 ONE_DAY_IN_SECONDS = 24*60*60.0
 MAX_AIPS_PATH_LEN = 10
 MAX_AIPS_STRING_LEN = 16
+""" Map correlation characters to correlation id """
+CORR_ID_MAP = {('h', 'h'): 0,
+               ('v', 'v'): 1,
+               ('h', 'v'): 2,
+               ('v', 'h'): 3}
 
 
 def aips_timestamps(timestamps, midnight):
@@ -395,18 +402,21 @@ class KatdalAdapter(object):
             into AIPS visiblities.
             """
             if isinstance(self._katds.vis, DaskLazyIndexer):
-                vis, weights, flags = self._katds.vis.get([self._katds.vis,
-                                                           self._katds.weights,
-                                                           self._katds.flags],
-                                                          np.s_[index, :, :])
+                arrays = [self._katds.vis, self._katds.weights, self._katds.flags]
+                vis, weights, flags = [dask_getitem(array.dataset, np.s_[index, :, :])
+                                       for array in arrays]
             else:
-                vis = self._katds.vis[index]
-                weights = self._katds.weights[index]
-                flags = self._katds.flags[index]
-
+                vis = da.from_array(self._katds.vis[index])
+                weights = da.from_array(self._katds.weights[index])
+                flags = da.from_array(self._katds.flags[index])
             # Apply flags by negating weights
-            weights[np.where(flags)] = -32767.0
-            return np.stack([vis.real, vis.imag, weights], axis=3)
+            weights = da.where(flags, -32767.0, weights)
+            # Split complex vis dtype into real and imaginary parts
+            vis_dtype = vis.dtype.type(0).real.dtype
+            vis = vis.view(vis_dtype).reshape(vis.shape + (2,))
+            out_array = np.empty(weights.shape + (3,), dtype=vis_dtype)
+            da.store([vis, weights], [out_array[..., 0:2], out_array[..., 2]], lock=False)
+            return out_array
 
         def _time_xformer(index):
             """
@@ -625,14 +635,6 @@ class KatdalAdapter(object):
         """ Proxies :attr:`katdal.DataSet.obs_params` """
         return getattr(self._katds, 'obs_params', {})
 
-    """ Map correlation characters to correlation id """
-    CORR_ID_MAP = {
-        ('h', 'h'): 0,
-        ('v', 'v'): 1,
-        ('h', 'v'): 2,
-        ('v', 'h'): 3,
-    }
-
     def correlator_products(self):
         """
         Returns
@@ -690,7 +692,7 @@ class KatdalAdapter(object):
 
             # Derive the correlation id
             try:
-                cid = self.CORR_ID_MAP[(a1_type, a2_type)]
+                cid = CORR_ID_MAP[(a1_type, a2_type)]
             except KeyError:
                 raise ValueError("Invalid Correlator Product "
                                  "['%s, '%s']" % (a1_corr, a2_corr))
@@ -1084,7 +1086,7 @@ class KatdalAdapter(object):
         return desc
 
 
-def time_chunked_scans(kat_adapter, time_step=2):
+def time_chunked_scans(kat_adapter, time_step=4):
     """
     Generator returning vibility data each scan, chunked
     on the time dimensions in chunks of ``time_step``.
@@ -1100,9 +1102,9 @@ def time_chunked_scans(kat_adapter, time_step=2):
     kat_adapter : `KatdalAdapter`
         Katdal Adapter
     time_step : integer
-        Size of time chunks (Default 2).
-        2 timesteps x 32768 channels x 2016 baselines x 4 stokes x 8 bytes
-        works out to about ~3.9375 GB
+        Size of time chunks (Default 4).
+        4 timesteps x 1024 channels x 2016 baselines x 4 stokes x 12 bytes
+        works out to about 0.5 GB.
 
     Yields
     ------
@@ -1142,6 +1144,22 @@ def time_chunked_scans(kat_adapter, time_step=2):
     fits_desc = kat_adapter.fits_descriptor()
     inaxes = tuple(reversed(fits_desc['inaxes'][:fits_desc['naxis']]))
 
+    _, nchan, ncorrprods = kat_adapter.shape
+
+    out_vis_size = kat_adapter.uv_vis.dtype.itemsize
+    out_vis_shape = (time_step, nbl, nchan, nstokes, 3)
+    vis_size_estimate = np.product(out_vis_shape, dtype=np.int64)*out_vis_size
+
+    FOUR_GB = 4*1024**3
+
+    if vis_size_estimate > FOUR_GB:
+        log.warn("Visibility chunk '%s' is greater than '%s'. "
+                 "Check that sufficient memory is available"
+                 % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
+
+    # Get some memory to hold reorganised visibilities
+    out_vis = np.empty(out_vis_shape, dtype=kat_adapter.uv_vis.dtype)
+
     def _get_data(time_start, time_end):
         """
         Retrieve data for the given time index range.
@@ -1168,19 +1186,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
         vis : np.ndarray
             AIPS visibilities
         """
-        _, nchan, ncorrprods = kat_adapter.shape
         ntime = time_end - time_start
-
-        chunk_shape = (ntime, nchan, ncorrprods)
-        cplx_size = np.dtype('complex64').itemsize
-        vis_size_estimate = np.product(chunk_shape, dtype=np.int64)*cplx_size
-
-        FOUR_GB = 4*1024**3
-
-        if vis_size_estimate > FOUR_GB:
-            log.warn("Visibility chunk '%s' is greater than '%s'. "
-                     "Check that sufficient memory is available"
-                     % (fmt_bytes(vis_size_estimate), fmt_bytes(FOUR_GB)))
 
         # Retrieve scan data (ntime, nchan, nbl*nstokes)
         # nbl*nstokes is all mixed up at this point
@@ -1202,17 +1208,14 @@ def time_chunked_scans(kat_adapter, time_step=2):
         assert (ntime, ncorrprods) == aips_v.shape
         assert (ntime, ncorrprods) == aips_w.shape
 
-        # Reorganise correlation product dim so that
-        # correlations are grouped per baseline.
-        # Then reshape to separate the two dimensions
-        aips_vis = aips_vis[:, :, cp_argsort, :].reshape(
-            ntime, nchan, nbl, nstokes, 3)
+        # Reorganise correlation product dim of aips_vis so that
+        # correlations are grouped into nstokes per baseline and
+        # baselines are in increasing order.
+        aips_vis = _reorganise_product(aips_vis, cp_argsort.reshape(nbl, nstokes), out_vis[:ntime])
 
-        # (1) transpose so that we have (ntime, nbl, nchan, nstokes, 3)
-        # (2) reshape to include the full inaxes shape,
-        #     including singleton nif, ra and dec dimensions
-        aips_vis = (aips_vis.transpose(0, 2, 1, 3, 4)
-                    .reshape((ntime, nbl,) + inaxes))
+        # Reshape to include the full AIPS UV inaxes shape,
+        # including singleton ra and dec dimensions
+        aips_vis.reshape((ntime, nbl,) + inaxes)
 
         # Select UVW coordinate of each baseline
         aips_u = aips_u[:, bl_argsort]
@@ -1230,8 +1233,7 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
     # Iterate through scans
     for si, state, target in kat_adapter.scans():
-        # Work out the data shape
-        ntime, nchan, ncorrprods = kat_adapter.shape
+        ntime = kat_adapter.shape[0]
 
         # Create a generator returning data
         # associated with chunks of time data.
@@ -1240,3 +1242,48 @@ def time_chunked_scans(kat_adapter, time_step=2):
 
         # Yield scan variables and the generator
         yield si, state, target, data_gen
+
+@numba.jit(nopython=True, parallel=True)
+def _reorganise_product(vis, cp_argsort, out_vis):
+    """ Reorganise correlation product dim of vis so that
+        correlations are grouped as given in cp_argsort.
+        
+        Parameters
+        ----------
+        vis : np.ndarray
+            Input array of visibilities and weights.
+            Shape: (ntime, nchan, nproducts, 3)
+            where nproducts is the number of correlation products
+            (i.e. nbaselines*nstokes). The last axis holds
+            (real_vis, imag_vis, weight).
+        cp_argsort : np.ndarray
+            2D array of indices to the 3rd axis of vis that are
+            grouped into increasing AIPS baseline order and the 
+            Stokes order required of AIPS UV.
+            Shape: (nbaselines, nstokes)
+        out_vis : np.ndarray
+            Output array to store reorganised visibilities in
+            AIPS UV order.
+            Shape: (ntime, nbaselines, nchan, nstokes, 3)
+
+        Returns
+        -------
+        out_vis : np.ndarray
+    """
+    n_time = vis.shape[0]
+    n_chan = vis.shape[1]
+    n_bl = cp_argsort.shape[0]
+    n_stok = cp_argsort.shape[1]
+    for tm in range(n_time):
+        bstep = 128
+        bblocks = (n_bl + bstep - 1) // bstep
+        for bblock in numba.prange(bblocks):
+            bstart = bblock * bstep
+            bstop = min(n_bl, bstart + bstep)
+            for prod in range(bstart, bstop):
+                in_cp = cp_argsort[prod]
+                for stok in range(n_stok):
+                    in_stok = in_cp[stok]
+                    for chan in range(n_chan):
+                        out_vis[tm, prod, chan, stok] = vis[tm, chan, in_stok]
+    return out_vis

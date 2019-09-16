@@ -307,7 +307,8 @@ class MockDataSet(DataSet):
         self.end_time = self.start_time + dump_period*ndumps
         self.dump_period = dump_period
         self.dumps = np.arange(ndumps)
-        self._timestamps = np.arange(self.start_time.secs, self.end_time.secs,
+        self._timestamps = np.arange(self.start_time.secs + (dump_period / 2.),
+                                     self.end_time.secs,
                                      step=dump_period, dtype=np.float64)
 
     def _create_subarrays(self, subarray_defs):
@@ -418,6 +419,11 @@ class MockDataSet(DataSet):
         for ant in antenna:
             ant_catdata = CategoricalData([ant], [0, self._ndumps])
             self.sensor['Antennas/%s/antenna' % (ant.name,)] = ant_catdata
+
+        # Extract array reference from first antenna (first 5 fields of description)
+        array_ant_fields = ['array'] + antenna[0].description.split(',')[1:5]
+        array_ant = katpoint.Antenna(','.join(array_ant_fields))
+        self.sensor['Antennas/array/antenna'] = CategoricalData([array_ant], [0, self._ndumps])
 
     def _create_scans(self, ref_ant, dumps_def):
         """

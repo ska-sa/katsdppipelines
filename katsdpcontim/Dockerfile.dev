@@ -12,7 +12,9 @@ ENV PACKAGES \
     vim \
     git \
     cvs \
-    subversion
+    subversion \
+    rsync \
+    xterm
 
 # Update, upgrade and install packages
 RUN apt-get update && \
@@ -20,6 +22,12 @@ RUN apt-get update && \
     apt-get install -y $PACKAGES && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Install a working parseltongue
+RUN add-apt-repository -y ppa:kettenis-w/parseltongue
+RUN apt-get -y update
+RUN apt-get -y install parseltongue
+
 
 ENV AIPS_BASE_PATH /home/kat/AIPS
 ENV AIPS_DATA_PATH /home/kat/AIPS/DATA
@@ -34,7 +42,7 @@ RUN mkdir -p $AIPS_BASE_PATH
 RUN mkdir -p $AIPS_DATA_PATH
 WORKDIR $AIPS_BASE_PATH
 
-RUN curl ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC17/install.pl -O
+RUN curl ftp://ftp.aoc.nrao.edu/pub/software/aips/31DEC19/install.pl -O
 
 # Remove root user check:
 RUN sed -i -e '455,461d' install.pl
@@ -54,6 +62,8 @@ RUN touch /root/.bashrc && \
 # Add Xdefaults
 ADD Xdefaults /root/.Xdefaults
 
+RUN echo "xrdb -merge $HOME/.Xdefaults" >> /root/.bashrc
+
 # Add tightvncserver startup script
 ADD xstartup /root/.vnc/xstartup
 RUN chmod og-rwx,u+rwx /root/.vnc/xstartup
@@ -64,6 +74,9 @@ RUN echo 'obitsky' | vncpasswd -f > /root/.vnc/passwd && \
 
 # Saner xfce4 keyboard settings
 ADD xfce4-keyboard-shortcuts.xml /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+
+# Allow X Forwarding over ssh
+ADD ssh_config /etc/ssh/ssh_config
 
 # Ensure everything under /home/kat belongs to root
 RUN chown -R root:root /home/kat

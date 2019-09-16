@@ -7,7 +7,9 @@ from aips_parser import obit_config_from_aips
 
 from aips_path import AIPSPath
 
-from util import task_factory, normalise_target_name
+from util import (task_factory,
+                  normalise_target_name,
+                  task_defaults)
 
 from util.image_util import save_image
 

@@ -41,12 +41,10 @@ pytest == 3.3.2
 python-dateutil
 python-lzf
 pytz
-PyYAML == 3.13
+pyyaml
 rdbtools
 redis
 requests
-ruamel.yaml == 0.15.35
-ruamel.ordereddict == 0.4.13
 scipy
 singledispatch
 six
@@ -56,8 +54,7 @@ tornado
 trollius
 webencodings == 0.5.1
 urllib3
-git+ssh://git@github.com/ska-sa/katsdpauthrelease#egg=katsdpauth
-git+ssh://git@github.com/ska-sa/katpoint#egg=katpoint
-git+ssh://git@github.com/ska-sa/katdal#egg=katdal
-git+ssh://git@github.com/ska-sa/katsdptelstate#egg=katsdptelstate
-git+ssh://git@github.com/ska-sa/katsdpservices#egg=katsdpservices
+katdal @ git+https://github.com/ska-sa/katdal
+katpoint @ git+https://github.com/ska-sa/katpoint
+katsdpservices @ git+https://github.com/ska-sa/katsdpservices
+katsdptelstate @ git+https://github.com/ska-sa/katsdptelstate
