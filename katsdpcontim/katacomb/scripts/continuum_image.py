@@ -6,7 +6,7 @@ import os
 import katdal
 
 import katacomb.configuration as kc
-from katacomb import ImagePipeline
+from katacomb import pipeline_factory
 from katacomb.util import (log_exception,
                            parse_python_assigns,
                            get_and_merge_args,
@@ -194,6 +194,7 @@ if args.reuse:
     if os.path.exists(args.reuse):
         aipsdirs = [(None, args.reuse)]
         log.info('Re-using AIPS data area: %s' % (aipsdirs[0][1]))
+        reuse = True
     else:
         msg = "AIPS disk at '%s' does not exist." % (args.reuse)
         log.exception(msg)
@@ -202,6 +203,7 @@ else:
     # Set up aipsdisk configuration from args.workdir
     aipsdirs = [(None, os.path.join(args.workdir, capture_block_id + '_aipsdisk'))]
     log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+    reuse = False
 
 # Set up output configuration from args.outputdir
 fitsdirs = dc['fitsdirs']
@@ -215,14 +217,14 @@ kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs,
 
 setup_aips_disks()
 
-pipeline = ImagePipeline(katdata,
-                         katdal_select=kat_select,
-                         uvblavg_params=uvblavg_args,
-                         mfimage_params=mfimage_args,
-                         nvispio=args.nvispio,
-                         clobber=args.clobber,
-                         prtlv=args.prtlv,
-                         reuse=args.reuse)
+pipeline = pipeline_factory('offline', katdata,
+                            katdal_select=kat_select,
+                            uvblavg_params=uvblavg_args,
+                            mfimage_params=mfimage_args,
+                            nvispio=args.nvispio,
+                            clobber=args.clobber,
+                            prtlv=args.prtlv,
+                            reuse=reuse)
 
 # Execute it
 pipeline.execute()

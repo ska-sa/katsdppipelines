@@ -11,7 +11,7 @@ from scipy import constants
 import katpoint
 from katsdptelstate import TelescopeState
 
-from katacomb import ContinuumPipeline, obit_context
+from katacomb import pipeline_factory, obit_context
 from katacomb.aips_export import (fit_flux_model,
                                   obit_flux_model,
                                   _massage_gains,
@@ -135,7 +135,7 @@ class TestContinuumPipeline(unittest.TestCase):
         setup_aips_disks()
 
         # Create and run the pipeline
-        pipeline = ContinuumPipeline(ds, TelescopeState(),
+        pipeline = pipeline_factory('online', ds, TelescopeState(),
                                      katdal_select=select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
@@ -235,7 +235,7 @@ class TestContinuumPipeline(unittest.TestCase):
                               'FOV': 0.1, 'xCells': 5.,
                               'yCells': 5., 'doGPU': False}
 
-            pipeline = ContinuumPipeline(ds, ts, katdal_select=katdal_select,
+            pipeline = pipeline_factory('online', ds, ts, katdal_select=katdal_select,
                                          uvblavg_params=uvblavg_params,
                                          mfimage_params=mfimage_params)
             pipeline.execute()
@@ -278,7 +278,7 @@ class TestContinuumPipeline(unittest.TestCase):
         mfimage_params['Gain'] = 0.5
         mfimage_params['Robust'] = -5
 
-        pipeline = ContinuumPipeline(ds, ts, katdal_select=katdal_select,
+        pipeline = pipeline_factory('online', ds, ts, katdal_select=katdal_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -438,7 +438,7 @@ class TestContinuumPipeline(unittest.TestCase):
         mfimage_params['maxASCLoop'] = 1
 
         # Run the pipeline
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -477,7 +477,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Check with no Amp+Phase self-cal
         mfimage_params['maxASCLoop'] = 0
         telstate.clear()
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -487,7 +487,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Check with no self-cal
         mfimage_params['maxPSCLoop'] = 0
         telstate.clear()
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()

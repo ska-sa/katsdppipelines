@@ -19,7 +19,7 @@ OutlierFlux: 0.005          # Minimum estimated outlier flux density (Jy)
 OutlierSI: -0.7             # Spectral index to estimate flux density
 minFlux: 0.001              # Minimum Clean component (Jy)
 Niter: 40000                # Maximum # of I CLEAN comp.
-autoCen: 0.5                # Auto center min flux density
+autoCen: 1.e+25             # Auto center min flux density
 PBCor: False                # Apply Frequency PB Corr?
 antSize: 13.5               # Diameter of ant. for PBCor (m)
 maxPSCLoop: 2               # Max. number of phase selfcal loops

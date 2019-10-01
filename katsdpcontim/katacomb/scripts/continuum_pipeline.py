@@ -24,7 +24,7 @@ from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
 import katacomb.configuration as kc
-from katacomb import ContinuumPipeline
+from katacomb import pipeline_factory
 from katacomb.util import (parse_python_assigns,
                            get_and_merge_args,
                            log_exception,
@@ -125,18 +125,6 @@ def create_parser():
                              "literals, separated by semi-colons. "
                              "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
 
-    parser.add_argument("--clobber",
-                        default="scans, avgscans, merge, clean, mfimage",
-                        type=lambda s: set(v.strip() for v in s.split(',')),
-                        help="Class of AIPS/Obit output files to clobber. "
-                             "'scans' => Individual scans. "
-                             "'avgscans' => Averaged individual scans. "
-                             "'merge' => Observation file containing merged, "
-                             "averaged scans. "
-                             "'clean' => Output CLEAN files. "
-                             "'mfimage' => Output MFImage files. "
-                             "Default: %(default)s")
-
     parser.add_argument("--nif", default=8, type=int,
                         help="Number of AIPS 'IFs' to equally subdivide the band. "
                              "NOTE: Must divide the number of channels after any "
@@ -207,12 +195,11 @@ katdal_select = args.select
 katdal_select['nif'] = args.nif
 
 # Create Continuum Pipeline
-pipeline = ContinuumPipeline(katdata, ts_view,
+pipeline = pipeline_factory('online', katdata, ts_view,
                              katdal_select=katdal_select,
                              uvblavg_params=uvblavg_args,
                              mfimage_params=mfimage_args,
-                             nvispio=args.nvispio,
-                             clobber=args.clobber)
+                             nvispio=args.nvispio)
 
 # Execute it
 pipeline.execute()

@@ -14,7 +14,7 @@ from katacomb.mock_dataset import (MockDataSet,
                                    DEFAULT_TIMESTAMPS)
 
 from katacomb import (AIPSPath,
-                      ContinuumPipeline,
+                      pipeline_factory,
                       KatdalAdapter,
                       obit_context,
                       uv_factory,
@@ -36,7 +36,7 @@ class TestUVExport(unittest.TestCase):
     def test_continuum_export(self):
         """
         Test that export of UV data via the
-        :class:`katacomb.ContinuumPipeline` method works.
+        :class:`katacomb.pipeline_factory` method works.
         """
         self._test_export_implementation("continuum_export")
 
@@ -82,8 +82,8 @@ class TestUVExport(unittest.TestCase):
     def _test_export_implementation(self, export_type="uv_export", nif=1):
         """
         Implementation of export test. Tests export via
-        either the :func:`katabomb.uv_export` or
-        :class:`katacomb.ContinuumPipeline, depending on ``export_type``.
+        either the :func:`katacomb.uv_export` or
+        :func:`katacomb.pipeline_factory, depending on ``export_type``.
 
         When testing export via the Continuum Pipeline, baseline
         averaging is disabled.
@@ -180,11 +180,11 @@ class TestUVExport(unittest.TestCase):
                                 desc=KA.uv_descriptor()) as uvf:
 
                     uv_export(KA, uvf)
-            # Perform export of katdal selection visa ContinuumPipline
+            # Perform export of katdal selection via ContinuumPipline
             elif export_type == "continuum_export":
-                pipeline = ContinuumPipeline(KA.katdal, TelescopeState(),
-                                             katdal_select=select,
-                                             __merge_scans=True)
+                pipeline = pipeline_factory(export_type, KA.katdal,
+                                            katdal_select=select,
+                                            merge_scans=True)
                 pipeline._select_and_infer_files()
                 pipeline._export_and_merge_scans()
 
@@ -232,6 +232,8 @@ class TestUVExport(unittest.TestCase):
                 # Check that frequency, source and antenna rows
                 # are correctly exported
                 fq_rows = _strip_metadata(uvf.tables["AIPS FQ"].rows)
+                log.info(fq_rows)
+                log.info(KA.uv_spw_rows)
                 self.assertEqual(fq_rows, KA.uv_spw_rows)
 
                 ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)
