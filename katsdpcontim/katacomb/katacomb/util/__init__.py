@@ -16,6 +16,8 @@ import numpy as np
 import katacomb.configuration as kc
 from katacomb import obit_config_from_aips
 
+from katdal.flags import STATIC
+
 import ObitTask
 from OTObit import addParam
 import OSystem
@@ -491,8 +493,6 @@ def apply_user_mask(kat_ds, mask_file):
         should be an iterable of bools with the same shape
         of the channel axis of the flags in `kat_ds`.
     """
-
-    from katdal.flags import STATIC
 
     try:
         # Open the mask pickle

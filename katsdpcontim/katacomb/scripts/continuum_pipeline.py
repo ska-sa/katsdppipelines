@@ -56,13 +56,14 @@ def create_parser():
                         help='JWT to access the MeerKAT archive')
 
     parser.add_argument("-w", "--workdir",
-                        default='/scratch', type=str,
+                        default=pjoin(os.sep, 'scratch'), type=str,
                         help="Location of scratch space. An AIPS disk "
                              "will be created in this space. "
                              "Default: %(default)s")
 
     parser.add_argument("-o", "--outputdir",
-                        default='/var/kat/data', type=str,
+                        default=pjoin(os.sep, 'var', os.sep, 'kat', os.sep, 'data'),
+                        type=str,
                         help="Location to store output FITS, PNG files "
                              "and metadata dictionary. "
                              "Default: %(default)s")

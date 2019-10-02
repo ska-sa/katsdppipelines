@@ -45,12 +45,12 @@ def create_parser():
                              "Default: %(default)s (You probably want this.)")
 
     parser.add_argument("-w", "--workdir",
-                        default='/scratch', type=str,
+                        default=os.path.join(os.sep, 'scratch'), type=str,
                         help="Location of scratch space. An AIPS disk "
                              "will be created in this space. Default: %(default)s")
 
     parser.add_argument("-o", "--outputdir",
-                        default='/scratch', type=str,
+                        default=os.path.join(os.sep, 'scratch'), type=str,
                         help="Output directory. FITS image files named <cb_id>_<target_name>.fits "
                              "will be placed here for each target. Default: %(default)s")
 
@@ -79,7 +79,7 @@ def create_parser():
                              "Default: %(default)s")
 
     parser.add_argument("--uvblavg-config",
-                        default=os.path.sep + "obitconf" + os.path.sep + "uvblavg.yaml",
+                        default=os.path.join(os.sep, "obitconf", "uvblavg.yaml"),
                         type=str,
                         help="Configuration yaml file for UVBlAvg. Default: %(default)s")
 
@@ -93,7 +93,7 @@ def create_parser():
                              "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
 
     parser.add_argument("--mfimage-config",
-                        default=os.path.sep + "obitconf" + os.path.sep + "mfimage.yaml",
+                        default=os.path.join(os.sep, "obitconf", "mfimage.yaml"),
                         type=str,
                         help="Configuration yaml file for MFImage. Default: %(default)s")
 
