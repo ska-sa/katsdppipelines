@@ -232,8 +232,6 @@ class TestUVExport(unittest.TestCase):
                 # Check that frequency, source and antenna rows
                 # are correctly exported
                 fq_rows = _strip_metadata(uvf.tables["AIPS FQ"].rows)
-                log.info(fq_rows)
-                log.info(KA.uv_spw_rows)
                 self.assertEqual(fq_rows, KA.uv_spw_rows)
 
                 ant_rows = _strip_metadata(uvf.tables["AIPS AN"].rows)

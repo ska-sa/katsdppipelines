@@ -156,75 +156,80 @@ def create_parser():
     return parser
 
 
-parser = create_parser()
-args = parser.parse_args()
-configure_logging(args)
+def main():
+    parser = create_parser()
+    args = parser.parse_args()
+    configure_logging(args)
 
-katdata = katdal.open(args.katdata, applycal=args.applycal, **args.open_args)
+    katdata = katdal.open(args.katdata, applycal=args.applycal, **args.open_args)
 
-# Apply the supplied mask to the flags
-if args.mask:
-    apply_user_mask(katdata, args.mask)
+    # Apply the supplied mask to the flags
+    if args.mask:
+        apply_user_mask(katdata, args.mask)
 
-# Set up katdal selection based on arguments
-kat_select = {'pol': args.pols,
-              'nif': args.nif}
+    # Set up katdal selection based on arguments
+    kat_select = {'pol': args.pols,
+                  'nif': args.nif}
 
-if args.targets:
-    kat_select['targets'] = args.targets
-if args.channels:
-    start_chan, end_chan = args.channels.split(',')
-    kat_select['channel'] = slice(start_chan, end_chan)
+    if args.targets:
+        kat_select['targets'] = args.targets
+    if args.channels:
+        start_chan, end_chan = args.channels.split(',')
+        kat_select['channel'] = slice(start_chan, end_chan)
 
-# Command line katdal selection overrides command line options
-kat_select = recursive_merge(args.select, kat_select)
+    # Command line katdal selection overrides command line options
+    kat_select = recursive_merge(args.select, kat_select)
 
-# Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(args.uvblavg_config, args.uvblavg)
-mfimage_args = get_and_merge_args(args.mfimage_config, args.mfimage)
+    # Get defaults for uvblavg and mfimage and merge user supplied ones
+    uvblavg_args = get_and_merge_args(args.uvblavg_config, args.uvblavg)
+    mfimage_args = get_and_merge_args(args.mfimage_config, args.mfimage)
 
-# Get the default config.
-dc = kc.get_config()
+    # Get the default config.
+    dc = kc.get_config()
 
-# capture_block_id is used to generate AIPS disk filenames
-capture_block_id = katdata.obs_params['capture_block_id']
+    # capture_block_id is used to generate AIPS disk filenames
+    capture_block_id = katdata.obs_params['capture_block_id']
 
-if args.reuse:
-    # Set up AIPS disk from specified directory
-    if os.path.exists(args.reuse):
-        aipsdirs = [(None, args.reuse)]
-        log.info('Re-using AIPS data area: %s' % (aipsdirs[0][1]))
-        reuse = True
+    if args.reuse:
+        # Set up AIPS disk from specified directory
+        if os.path.exists(args.reuse):
+            aipsdirs = [(None, args.reuse)]
+            log.info('Re-using AIPS data area: %s' % (aipsdirs[0][1]))
+            reuse = True
+        else:
+            msg = "AIPS disk at '%s' does not exist." % (args.reuse)
+            log.exception(msg)
+            raise IOError(msg)
     else:
-        msg = "AIPS disk at '%s' does not exist." % (args.reuse)
-        log.exception(msg)
-        raise IOError(msg)
-else:
-    # Set up aipsdisk configuration from args.workdir
-    aipsdirs = [(None, os.path.join(args.workdir, capture_block_id + '_aipsdisk'))]
-    log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
-    reuse = False
+        # Set up aipsdisk configuration from args.workdir
+        aipsdirs = [(None, os.path.join(args.workdir, capture_block_id + '_aipsdisk'))]
+        log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+        reuse = False
 
-# Set up output configuration from args.outputdir
-fitsdirs = dc['fitsdirs']
+    # Set up output configuration from args.outputdir
+    fitsdirs = dc['fitsdirs']
 
-# Append outputdir to fitsdirs
-fitsdirs += [(None, args.outputdir)]
-log.info('Using output data area: %s' % (args.outputdir))
+    # Append outputdir to fitsdirs
+    fitsdirs += [(None, args.outputdir)]
+    log.info('Using output data area: %s' % (args.outputdir))
 
-kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs,
-              output_id='', cb_id=capture_block_id)
+    kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs,
+                  output_id='', cb_id=capture_block_id)
 
-setup_aips_disks()
+    setup_aips_disks()
 
-pipeline = pipeline_factory('offline', katdata,
-                            katdal_select=kat_select,
-                            uvblavg_params=uvblavg_args,
-                            mfimage_params=mfimage_args,
-                            nvispio=args.nvispio,
-                            clobber=args.clobber,
-                            prtlv=args.prtlv,
-                            reuse=reuse)
+    pipeline = pipeline_factory('offline', katdata,
+                                katdal_select=kat_select,
+                                uvblavg_params=uvblavg_args,
+                                mfimage_params=mfimage_args,
+                                nvispio=args.nvispio,
+                                clobber=args.clobber,
+                                prtlv=args.prtlv,
+                                reuse=reuse)
 
-# Execute it
-pipeline.execute()
+    # Execute it
+    pipeline.execute()
+
+
+if __name__ == "__main__":
+    main()
