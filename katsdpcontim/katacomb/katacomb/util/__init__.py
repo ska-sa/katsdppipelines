@@ -481,6 +481,8 @@ def apply_user_mask(kat_ds, mask_file):
     """
     Apply a channel mask defined in mask_file to the flags of a katdal
     dataset.
+    TODO(tmauch)
+    Replace once JIRA SPR176 is implemented
 
     Parameters
     ----------
