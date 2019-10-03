@@ -1,4 +1,6 @@
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-build:latest as build
+ARG KATSDPDOCKERBASE_REGISTRY=sdp-docker-registry.kat.ac.za:5000
+
+FROM $KATSDPDOCKERBASE_REGISTRY/docker-base-gpu-build:latest as build
 
 # Switch to root for package install
 USER root
@@ -122,7 +124,8 @@ RUN pip install --no-deps $KATHOME/src/katacomb && pip check
 
 #######################################################################
 
-FROM sdp-docker-registry.kat.ac.za:5000/docker-base-gpu-runtime:latest
+FROM $KATSDPDOCKERBASE_REGISTRY/docker-base-gpu-runtime:latest
+LABEL maintainer="sdpdev+katsdpcontim@ska.ac.za"
 
 # Switch to root for package install
 USER root
