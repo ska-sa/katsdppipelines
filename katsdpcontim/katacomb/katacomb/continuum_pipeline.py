@@ -236,9 +236,11 @@ class PipelineImplementation(Pipeline):
         # Clobber any result files requested
         for cleanup_file in set(self.cleanup_uv_files):
             with uv_factory(aips_path=cleanup_file, mode="w") as uvf:
+                log.info("Zapping '%s'", uvf.aips_path)
                 uvf.Zap()
         for cleanup_file in set(self.cleanup_img_files):
             with img_factory(aips_path=cleanup_file, mode="w") as imf:
+                log.info("Zapping '%s'", imf.aips_path)
                 imf.Zap()
 
 
@@ -814,21 +816,20 @@ class KatdalOfflinePipeline(KatdalPipelineImplementation):
         self.mfimage_params['Sources'] = uv_sources
         # Find the highest numbered merge file if we are reusing
         if self.reuse:
-            uv_mp = self.ka.aips_path(aclass='merge')
+            uv_mp = self.ka.aips_path(aclass='merge', name=kc.get_config()['cb_id'])
             # Find the merge file with the highest seq #
             hiseq = next_seq_nr(uv_mp) - 1
             # hiseq will be zero if the aipsdisk has no 'merge' file
             if hiseq == 0:
                 raise ValueError("AIPS disk at '%s' has no 'merge' file to reuse." %
-                                 (kc.get_config()['aipsdirs'][0][-1]))
+                                 (kc.get_config()['aipsdirs'][self.disk - 1][-1]))
             else:
                 # Get the AIPS entry of the UV data to reuse
                 self.uv_merge_path = uv_mp.copy(seq=hiseq)
                 log.info("Re-using UV data in '%s' from AIPS disk: '%s'" %
-                         (self.uv_merge_path, kc.get_config()['aipsdirs'][0][-1]))
+                         (self.uv_merge_path, kc.get_config()['aipsdirs'][self.disk - 1][-1]))
         else:
             self._export_and_merge_scans()
-
         if "merge" in self.clobber:
             self.cleanup_uv_files.append(self.uv_merge_path)
         self._run_mfimage(self.uv_merge_path, uv_sources)
