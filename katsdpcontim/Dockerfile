@@ -38,9 +38,11 @@ ENV PACKAGES \
 RUN apt-get update && \
     apt-get install -y $PACKAGES
 
+ARG KATSDPDOCKERBASE_MIRROR=http://sdp-services.kat.ac.za/mirror
+
 # Get CUDA samples- Obit needs some headers from there
 RUN CUDA_RUN_FILE=cuda_10.0.130_410.48_linux && \
-    wget --progress=dot:mega "http://sdp-services.kat.ac.za/mirror/developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/$CUDA_RUN_FILE" && \
+    mirror_wget --progress=dot:mega "https://developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/$CUDA_RUN_FILE" && \
     sh ./$CUDA_RUN_FILE --samples --silent && \
     mv /root/NVIDIA_CUDA-10.0_Samples /usr/local/cuda/samples
 
