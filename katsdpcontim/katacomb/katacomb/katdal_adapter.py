@@ -1243,11 +1243,12 @@ def time_chunked_scans(kat_adapter, time_step=4):
         # Yield scan variables and the generator
         yield si, state, target, data_gen
 
+
 @numba.jit(nopython=True, parallel=True)
 def _reorganise_product(vis, cp_argsort, out_vis):
     """ Reorganise correlation product dim of vis so that
         correlations are grouped as given in cp_argsort.
-        
+
         Parameters
         ----------
         vis : np.ndarray
@@ -1258,7 +1259,7 @@ def _reorganise_product(vis, cp_argsort, out_vis):
             (real_vis, imag_vis, weight).
         cp_argsort : np.ndarray
             2D array of indices to the 3rd axis of vis that are
-            grouped into increasing AIPS baseline order and the 
+            grouped into increasing AIPS baseline order and the
             Stokes order required of AIPS UV.
             Shape: (nbaselines, nstokes)
         out_vis : np.ndarray

@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 import logging
 import multiprocessing
@@ -5,8 +6,13 @@ from pretty import pretty
 
 import six
 
+import katdal
+from katdal import DataSet
+from katdal.datasources import DataSourceNotFound
+
 from katacomb import (KatdalAdapter, obit_context, AIPSPath,
                       task_factory,
+                      img_factory,
                       uv_factory,
                       uv_export,
                       uv_history_obs_description,
@@ -25,82 +31,131 @@ log = logging.getLogger('katacomb')
 UV_CLASS = "MFImag"
 IMG_CLASS = "IClean"
 
+# Dictionary of Pipeline Builders that `pipeline_factory`
+# can use to create Pipelines. Use `register_builder` to populate
+_pipeline_tags = {}
 
-class ContinuumPipeline(object):
+
+def pipeline_factory(tag, *args, **kwargs):
+    """
+    Parameters
+    ----------
+    tag : str
+        Name of pipeline to instantiate.
+
+    Returns
+    -------
+    pipeline : :class:`Pipeline`
+        A pipeline implementation
+    """
+
+    # Try and find registered builders
+    try:
+        builder = _pipeline_tags[tag]
+    except KeyError:
+        # Nothing registered
+        builder = tag
+    else:
+        # Found a builder class/function. Call it to instantiate something
+        pipeline = builder(*args, **kwargs)
+
+        # Did we get the right kind of thing?
+        if not isinstance(pipeline, Pipeline):
+            raise TypeError("'%s' did not return a valid Pipeline. "
+                            "Got a %s instead."
+                            % (builder, pipeline))
+
+        return pipeline
+
+    # I really don't know how to build the requested thing
+    raise ValueError("I don't know how to build a '%s' pipeline" % builder)
+
+
+def register_workmode(name):
+    """
+    Decorator function that registers a class or function
+    under ``name`` for use by the pipeline_factory
+    """
+    def decorator(builder):
+        if name in _pipeline_tags:
+            raise ValueError("'%s' already registered as a "
+                             "pipeline builder" % name)
+
+        _pipeline_tags[name] = builder
+
+        return builder
+
+    return decorator
+
+
+class Pipeline(object):
+    """
+    Defines an abstract Pipeline interface with single execute method
+    that a user calls.
+    """
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def execute(self):
+        raise NotImplementedError
+
+
+class PipelineImplementation(Pipeline):
     """
     This class encapsulates state and behaviour required for
-    executing the Continuum Pipeline
+    executing Pipelines
     """
-    def __init__(self, katdata, telstate, **kwargs):
+    def __init__(self):
         """
-        Initialise the Continuum Pipeline
+        Initialise a Continuum Pipeline implementation
 
-        Parameters
+        Attributes
         ----------
-        katdata : :class:`katdal.Dataset`
-            katdal Dataset object
-        telstate : :class:`katsdptelstate.TelescopeState`
-            Telescope state or Telescope state view
-        katdal_select (optional) : dict
-            Dictionary of katdal selection statements.
-            Defaults to :code:`{}`.
-        uvblavg_params (optional) : dict
+        uvblavg_params : dict
             Dictionary of UV baseline averaging task parameters
             Defaults to :code:`{}`.
-        mfimage_params (optional) : dict
+        mfimage_params : dict
             Dictionary of MFImage task parameters
             Defaults to :code:`{}`.
-        clobber (optional) : set or iterable
-            Set or iterable of output files to clobber.
-            Defaults to :code:`('scans', 'avgscans')`.
-            Possible values include:
-
-            1. `'scans'`, UV data files containing observational
-                data for individual scans.
-            2. `'avgscans'`, UV data files containing time-dependent
-                baseline data for individual scans.
-            3. `'merge'`, UV data file containing time-dependent
-                baseline data for all scans.
-            4. `'clean'` Per source, CLEAN images produced by MFImage.
-            5. `'mfimage'` Per source, UV data files produced by MFImage.
-
-        nvispio (optional) : integer
+        nvispio : integer
             Number of AIPS visibilities per IO operation.
             Defaults to 10240.
+        prtlv : integer
+            Chattiness of Obit tasks (between 1=Quiet and  5=Verbose)
+            Defaults to 1.
+        disk : integer
+            AIPS disk number to use
+        odisk : integer
+            FITS disk number to use for export
         """
 
-        self.ka = KatdalAdapter(katdata)
-        self.telstate = telstate
-        self.nvispio = kwargs.pop("nvispio", 10240)
+        self.nvispio = 10240
+        self.uvblavg_params = {}
+        self.mfimage_params = {}
+        self.prtlv = 1
         self.disk = 1
-        self.katdal_select = kwargs.pop("katdal_select", {})
-        self.uvblavg_params = kwargs.pop("uvblavg_params", {})
-        self.mfimage_params = kwargs.pop("mfimage_params", {})
-        self.clobber = kwargs.pop("clobber", set(['scans', 'avgscans']))
-        # Use highest numbered FITS disk for FITS output.
-        self.odisk = len(kc.get_config()['fitsdirs'])
-        self.__merge_scans = kwargs.get("__merge_scans", False)
+        self.odisk = 1
+
+        self.cleanup_uv_files = []
+        self.cleanup_img_files = []
+
+    @abstractmethod
+    def execute_implementation(self):
+        raise NotImplementedError
+
+    # Require implementers to provide a context manager
+    @abstractmethod
+    def __enter__(self):
+        raise NotImplementedError
+
+    # Require implementers to provide a context manager
+    @abstractmethod
+    def __exit__(self, evalue, etype, etraceback):
+        raise NotImplementedError
 
     def execute(self):
-        """ Execute the Continuum Pipeline """
-        with obit_context():
-            try:
-                uv_files, clean_files = [], []
-                result_tuple = self._export_and_merge_scans()
-                uv_sources, target_indices, uv_files, clean_files = result_tuple
-                self._run_mfimage(uv_sources, uv_files, clean_files)
-
-                export_calibration_solutions(uv_files, self.ka,
-                                             self.mfimage_params, self.telstate)
-                export_clean_components(clean_files, target_indices,
-                                        self.ka, self.telstate)
-                export_images(clean_files, target_indices,
-                              self.odisk, self.ka)
-            except Exception:
-                log.exception("Exception executing Continuum Pipeline")
-                raise
-            finally:
-                self._cleanup(uv_files, clean_files)
+        with obit_context(), self as ctx:
+            ctx.execute_implementation()
 
     def _blavg_scan(self, scan_path):
         """
@@ -119,6 +174,7 @@ class ContinuumPipeline(object):
         blavg_kwargs = scan_path.task_input_kwargs()
         blavg_path = scan_path.copy(aclass='uvav')
         blavg_kwargs.update(blavg_path.task_output_kwargs())
+        blavg_kwargs['prtLv'] = self.prtlv
 
         blavg_kwargs.update(self.uvblavg_params)
 
@@ -130,6 +186,104 @@ class ContinuumPipeline(object):
             blavg.go()
 
         return blavg_path
+
+    def _run_mfimage(self, uv_path, uv_sources):
+        """
+        Run the MFImage task
+        """
+
+        with uv_factory(aips_path=uv_path, mode="r") as uvf:
+            merge_desc = uvf.Desc.Dict
+
+        # Run MFImage task on merged file,
+        out_kwargs = uv_path.task_output_kwargs(name='',
+                                                aclass=IMG_CLASS,
+                                                seq=0)
+        out2_kwargs = uv_path.task_output2_kwargs(name='',
+                                                  aclass=UV_CLASS,
+                                                  seq=0)
+
+        mfimage_kwargs = {}
+        # Setup input file
+        mfimage_kwargs.update(uv_path.task_input_kwargs())
+        # Output file 1 (clean file)
+        mfimage_kwargs.update(out_kwargs)
+        # Output file 2 (uv file)
+        mfimage_kwargs.update(out2_kwargs)
+        mfimage_kwargs.update({
+            'maxFBW': fractional_bandwidth(merge_desc)/20.0,
+            'nThreads': multiprocessing.cpu_count(),
+            'prtLv': self.prtlv,
+            'Sources': uv_sources
+        })
+
+        # Finally, override with default parameters
+        mfimage_kwargs.update(self.mfimage_params)
+
+        log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
+
+        mfimage = task_factory("MFImage", **mfimage_kwargs)
+        # Send stdout from the task to the log
+        with log_obit_err(log):
+            mfimage.go()
+
+    def _cleanup(self):
+        """
+        Remove any remaining UV, Clean, and Merged UVF files,
+        if requested
+        """
+
+        # Clobber any result files requested
+        for cleanup_file in set(self.cleanup_uv_files):
+            with uv_factory(aips_path=cleanup_file, mode="w") as uvf:
+                log.info("Zapping '%s'", uvf.aips_path)
+                uvf.Zap()
+        for cleanup_file in set(self.cleanup_img_files):
+            with img_factory(aips_path=cleanup_file, mode="w") as imf:
+                log.info("Zapping '%s'", imf.aips_path)
+                imf.Zap()
+
+
+class KatdalPipelineImplementation(PipelineImplementation):
+    """
+    This class has methods for executing Pipelines via a katdal
+    interface to the data.
+
+    These methods infer AIPSdisk file names for katdal targets
+    and do the work of merging multiple target scans into a single
+    merged and baseline-averaged scan for imaging.
+    """
+
+    def __init__(self, katdata):
+        """
+        Initialise a Continuum Pipeline with access to data
+        using katdal.
+
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+
+        Attributes
+        ----------
+        katdal_select : dict
+            Dictionary of katdal selection statements.
+            Defaults to :code:`{}`.
+        clobber : set or iterable
+            Set or iterable of output files to clobber during
+            conversion of katdal data to AIPS UV.
+            Defaults to :code:`['scans', 'avgscans']`.
+            Possible values include:
+            1. `'scans'`, UV data files containing observational
+                data for individual scans.
+            2. `'avgscans'`, UV data files containing time-dependent
+                baseline data for individual scans.
+        """
+        super(KatdalPipelineImplementation, self).__init__()
+        self.ka = KatdalAdapter(katdata)
+        self.katdal_select = {}
+        self.clobber = ['scans', 'avgscans']
+        self.merge_scans = False
 
     def _sanity_check_merge_blavg_descriptors(self, merge_uvf, blavg_uvf):
         """
@@ -310,6 +464,29 @@ class ContinuumPipeline(object):
 
         return uv_sources, target_indices, uv_files, clean_files
 
+    def _select_and_infer_files(self):
+        """
+        Perform katdal selection and infer aips paths of:
+        (1) imaging target names and indices
+        (2) uv file for each target
+        (3) clean file  for each target
+        """
+
+        self.katdal_select['reset'] = 'TFB'
+
+        # Perform katdal selection
+        self.ka.select(**self.katdal_select)
+
+        # Fall over on empty selections
+        if not self.ka.size > 0:
+            raise ValueError("The katdal selection "
+                             "produced an empty dataset"
+                             "\n'%s'\n" % pretty(self.katdal_select))
+
+        result_tuple = self._source_info()
+
+        return result_tuple
+
     def _export_and_merge_scans(self):
         """
         1. Read scans from katdal
@@ -322,30 +499,11 @@ class ContinuumPipeline(object):
         # we have a baseline averaged file with which to condition it
         merge_uvf = None
 
-        uv_mp = self.ka.aips_path(aclass='merge')
+        uv_mp = self.ka.aips_path(aclass='merge', name=kc.get_config()['cb_id'])
         self.uv_merge_path = uv_mp.copy(seq=next_seq_nr(uv_mp))
-
-        self.katdal_select['reset'] = 'TFB'
-
-        # Perform katdal selection
-        # retrieving selected scan indices as python ints
-        # so that we can do per scan selection
-        self.ka.select(**self.katdal_select)
-
-        # Fall over on empty selections
-        if not self.ka.size > 0:
-            raise ValueError("The katdal selection "
-                             "produced an empty dataset"
-                             "\n'%s'\n" % pretty(self.katdal_select))
 
         global_desc = self.ka.uv_descriptor()
         global_table_cmds = self.ka.default_table_cmds()
-
-        # Given katdal selection, infer
-        # (1) imaging targets
-        # (2) uv file for each target
-        # (3) clean file  for each target
-        uv_sources, target_indices, uv_files, clean_files = self._source_info()
 
         # FORTRAN indexing
         merge_firstVis = 1
@@ -387,9 +545,9 @@ class ContinuumPipeline(object):
             scan_desc = scan_uvf.Desc.Dict
             scan_nvis = scan_desc['nvis']
 
-            # If we should be merging scans for testing purposes
+            # If we should be merging scans
             # just use the existing scan path and file
-            if self.__merge_scans:
+            if self.merge_scans:
                 blavg_path = scan_path
                 blavg_uvf = scan_uvf
             # Otherwise performing baseline averaging, deriving
@@ -439,7 +597,7 @@ class ContinuumPipeline(object):
             # scan file, which was handled above, so don't
             # delete again. Otherwise default to
             # normal clobber handling.
-            if not self.__merge_scans:
+            if not self.merge_scans:
                 if 'avgscans' in self.clobber:
                     log.info("Zapping '%s'", blavg_uvf.aips_path)
                     blavg_uvf.Zap()
@@ -455,66 +613,225 @@ class ContinuumPipeline(object):
         # Close merge file
         merge_uvf.close()
 
-        return uv_sources, target_indices, uv_files, clean_files
 
-    def _run_mfimage(self, uv_sources, uv_files, clean_files):
+@register_workmode('continuum_export')
+class KatdalExportPipeline(KatdalPipelineImplementation):
+
+    def __init__(self, katdata, uvblavg_params={}, katdal_select={},
+                 nvispio=10240, merge_scans=False):
         """
-        Run the MFImage task
-        """
+        Initialise a pipeline for UV export from katdal to AIPS UV
+        TODO: Write a script to actually use this.
+              At the moment it is just used in the unit tests.
 
-        with uv_factory(aips_path=self.uv_merge_path, mode="r") as uvf:
-            merge_desc = uvf.Desc.Dict
-
-        uv_seq = max(f.seq for f in uv_files)
-        clean_seq = max(f.seq for f in clean_files)
-
-        # Run MFImage task on merged file,
-        out_kwargs = self.uv_merge_path.task_output_kwargs(name='',
-                                                           aclass=IMG_CLASS,
-                                                           seq=clean_seq)
-        out2_kwargs = self.uv_merge_path.task_output2_kwargs(name='',
-                                                             aclass=UV_CLASS,
-                                                             seq=uv_seq)
-
-        mfimage_kwargs = {}
-        # Setup input file
-        mfimage_kwargs.update(self.uv_merge_path.task_input_kwargs())
-        # Output file 1 (clean file)
-        mfimage_kwargs.update(out_kwargs)
-        # Output file 2 (uv file)
-        mfimage_kwargs.update(out2_kwargs)
-        mfimage_kwargs.update({
-            'maxFBW': fractional_bandwidth(merge_desc)/20.0,
-            'nThreads': multiprocessing.cpu_count(),
-            'prtLv': 1
-        })
-
-        # Finally, override with default parameters
-        mfimage_kwargs.update(self.mfimage_params)
-
-        log.info("MFImage arguments %s" % pretty(mfimage_kwargs))
-
-        mfimage = task_factory("MFImage", **mfimage_kwargs)
-        # Send stdout from the task to the log
-        with log_obit_err(log):
-            mfimage.go()
-
-    def _cleanup(self, uv_files, clean_files):
-        """
-        Remove any remaining UV, Clean, and Merged UVF files,
-        if requested
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+        uvblavg_params : dict
+            Dictionary of UV baseline averaging task parameters
+        katdal_select : dict
+            Dictionary of katdal selection statements.
+        nvispio : integer
+            Number of AIPS visibilities per IO operation.
+        merge_scans : boolean
+            Don't do BL dependant averaging if True.
         """
 
-        # Clobber any result files
-        for uv_file, clean_file in zip(uv_files, clean_files):
-            if "mfimage" in self.clobber:
-                with uv_factory(aips_path=uv_file, mode="r") as uvf:
-                    uvf.Zap()
+        super(KatdalExportPipeline, self).__init__(katdata)
+        self.katdal_select = katdal_select
+        self.uvblavg_params = uvblavg_params
+        self.nvispio = nvispio
+        self.merge_scans = merge_scans
 
-            if "clean" in self.clobber:
-                with uv_factory(aips_path=clean_file, mode="r") as cf:
-                    cf.Zap()
+    def __enter__(self):
+        return self
 
-        if 'merge' in self.clobber:
-            with uv_factory(aips_path=self.uv_merge_path, mode="r") as uvf:
-                uvf.Zap()
+    def __exit__(self, etype, evalue, etraceback):
+        if etype:
+            log.exception('Exception executing continuum pipeline')
+        self._cleanup()
+
+    def execute_implementation(self):
+        self._select_and_infer_files()
+        self._export_and_merge_scans()
+
+
+@register_workmode('online')
+class OnlinePipeline(KatdalPipelineImplementation):
+
+    def __init__(self, katdata, telstate, uvblavg_params={}, mfimage_params={},
+                 katdal_select={}, nvispio=10240):
+        """
+        Initialise the Continuum Pipeline for MeerKAT system processing.
+
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+        telstate : :class:`katsdptelstate.TelescopeState`
+            Telescope state or Telescope state view
+        uvblavg_params : dict
+            Dictionary of UV baseline averaging task parameters
+        mfimage_params : dict
+            Dictionary of MFImage task parameters
+        katdal_select : dict
+            Dictionary of katdal selection statements.
+        nvispio : integer
+            Number of AIPS visibilities per IO operation.
+        """
+
+        super(OnlinePipeline, self).__init__(katdata)
+        self.telstate = telstate
+        self.uvblavg_params = uvblavg_params
+        self.mfimage_params = mfimage_params
+        self.katdal_select = katdal_select
+        self.nvispio = nvispio
+
+        # Use highest numbered FITS disk for FITS output.
+        self.odisk = len(kc.get_config()['fitsdirs'])
+        self.prtlv = 1
+        self.disk = 1
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, etraceback):
+        if etype:
+            log.exception('Exception executing continuum pipeline')
+        self._cleanup()
+
+    def execute_implementation(self):
+        result_tuple = self._select_and_infer_files()
+        uv_sources, target_indices, uv_files, clean_files = result_tuple
+
+        self._export_and_merge_scans()
+        self.cleanup_uv_files.append(self.uv_merge_path)
+
+        self._run_mfimage(self.uv_merge_path, uv_sources)
+        self.cleanup_uv_files += uv_files
+        self.cleanup_img_files += clean_files
+
+        export_calibration_solutions(uv_files, self.ka,
+                                     self.mfimage_params, self.telstate)
+        export_clean_components(clean_files, target_indices,
+                                self.ka, self.telstate)
+        export_images(clean_files, target_indices,
+                      self.odisk, self.ka)
+
+
+@register_workmode('offline')
+def build_offline_pipeline(data, **kwargs):
+    """
+    Decide based on the type of data how to
+    build an offline pipeline instance and do it.
+
+    Parameters
+    ----------
+    data : str or :class:`katdal.Dataset`
+        file location or katdal Dataset object
+        TODO: Allow for different types of data (eg UVFITS)
+              so that this function actually does something.
+
+    Returns
+    -------
+    :class:`Pipeline`
+        A pipeline instance
+    """
+    if isinstance(data, DataSet):
+        return KatdalOfflinePipeline(data, **kwargs)
+    if isinstance(data, str):
+        try:
+            ds = katdal.open(data)
+        except (IOError, DataSourceNotFound):
+            pass
+        else:
+            return KatdalOfflinePipeline(ds, **kwargs)
+    raise ValueError('Data type of %s not recognised for %s' % (type(data), data))
+
+
+class KatdalOfflinePipeline(KatdalPipelineImplementation):
+    def __init__(self, katdata, uvblavg_params={}, mfimage_params={},
+                 katdal_select={}, nvispio=10240, prtlv=2,
+                 clobber=set(['scans', 'avgscans']), reuse=False):
+        """
+        Initialise the Continuum Pipeline for offline imaging
+        using a katdal dataset.
+
+        Parameters
+        ----------
+        katdata : :class:`katdal.Dataset`
+            katdal Dataset object
+        uvblavg_params : dict
+            Dictionary of UV baseline averaging task parameters
+        mfimage_params : dict
+            Dictionary of MFImage task parameters
+        katdal_select : dict
+            Dictionary of katdal selection statements.
+        nvispio : integer
+            Number of AIPS visibilities per IO operation.
+        prtlv : integer
+            Chattiness of Obit tasks
+        clobber : set or iterable
+            Set or iterable of output files to clobber from the aipsdisk.
+            Possible values include:
+            1. `'scans'`, UV data files containing observational
+                data for individual scans.
+            2. `'avgscans'`, UV data files containing time-dependent
+                baseline data for individual scans.
+            3. `'merge'`, UV data file containing merged averaged scans.
+            4. `'clean'`, Output images from MFImage.
+            5. `'mfimage'`, Output UV data file from MFImage."
+        reuse : bool
+            Are we reusing a previous katdal export in the aipsdisk?
+        """
+
+        super(KatdalOfflinePipeline, self).__init__(katdata)
+        self.uvblavg_params = uvblavg_params
+        self.mfimage_params = mfimage_params
+        self.katdal_select = katdal_select
+        self.nvispio = nvispio
+        self.prtlv = prtlv
+        self.clobber = clobber
+        self.reuse = reuse
+
+        self.odisk = len(kc.get_config()['fitsdirs'])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, etraceback):
+        if etype:
+            log.exception('Exception executing continuum pipeline')
+        self._cleanup()
+
+    def execute_implementation(self):
+        result_tuple = self._select_and_infer_files()
+        uv_sources, target_indices, uv_files, clean_files = result_tuple
+        if "mfimage" in self.clobber:
+            self.cleanup_uv_files += uv_files
+        if "clean" in self.clobber:
+            self.cleanup_img_files += clean_files
+        # Update MFImage source selection
+        self.mfimage_params['Sources'] = uv_sources
+        # Find the highest numbered merge file if we are reusing
+        if self.reuse:
+            uv_mp = self.ka.aips_path(aclass='merge', name=kc.get_config()['cb_id'])
+            # Find the merge file with the highest seq #
+            hiseq = next_seq_nr(uv_mp) - 1
+            # hiseq will be zero if the aipsdisk has no 'merge' file
+            if hiseq == 0:
+                raise ValueError("AIPS disk at '%s' has no 'merge' file to reuse." %
+                                 (kc.get_config()['aipsdirs'][self.disk - 1][-1]))
+            else:
+                # Get the AIPS entry of the UV data to reuse
+                self.uv_merge_path = uv_mp.copy(seq=hiseq)
+                log.info("Re-using UV data in '%s' from AIPS disk: '%s'" %
+                         (self.uv_merge_path, kc.get_config()['aipsdirs'][self.disk - 1][-1]))
+        else:
+            self._export_and_merge_scans()
+        if "merge" in self.clobber:
+            self.cleanup_uv_files.append(self.uv_merge_path)
+        self._run_mfimage(self.uv_merge_path, uv_sources)
+        export_images(clean_files, target_indices,
+                      self.odisk, self.ka)

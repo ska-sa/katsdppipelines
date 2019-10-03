@@ -24,7 +24,7 @@ from katsdpservices import setup_logging
 from katsdptelstate import TelescopeState
 
 import katacomb.configuration as kc
-from katacomb import ContinuumPipeline
+from katacomb import pipeline_factory
 from katacomb.util import (parse_python_assigns,
                            get_and_merge_args,
                            log_exception,
@@ -35,11 +35,13 @@ log = logging.getLogger('katacomb')
 # Tag to append to the output directory while the pipeline runs
 WRITE_TAG = '.writing'
 OUTDIR_SEPARATOR = '_'
-START_TIME = '%d'%(int(time.time()*1000))
+START_TIME = '%d' % (int(time.time()*1000))
+# Location of mfimage and uvblavg yaml configurations
+CONFIG = '/obitconf'
+
 
 def create_parser():
-    formatter_class = argparse.ArgumentDefaultsHelpFormatter
-    parser = argparse.ArgumentParser(formatter_class=formatter_class)
+    parser = argparse.ArgumentParser()
 
     parser.add_argument("katdata",
                         help="Katdal observation file")
@@ -54,38 +56,46 @@ def create_parser():
                         help='JWT to access the MeerKAT archive')
 
     parser.add_argument("-w", "--workdir",
-                        default=None, type=str,
+                        default=pjoin(os.sep, 'scratch'), type=str,
                         help="Location of scratch space. An AIPS disk "
-                             "will be created in this space.")
+                             "will be created in this space. "
+                             "Default: %(default)s")
 
     parser.add_argument("-o", "--outputdir",
-                        default=None, type=str,
+                        default=pjoin(os.sep, 'var', os.sep, 'kat', os.sep, 'data'),
+                        type=str,
                         help="Location to store output FITS, PNG files "
-                             "and metadata dictionary. Default is "
-                             "'/var/kat/data'.")
+                             "and metadata dictionary. "
+                             "Default: %(default)s")
 
-    parser.add_argument("--nvispio", default=10240, type=int)
+    parser.add_argument("--nvispio", default=10240, type=int,
+                        help="Number of visibilities per write when "
+                             "copying data from archive. "
+                             "Default: %(default)s")
 
     parser.add_argument("-cbid", "--capture-block-id",
                         default=None, type=str,
                         help="Capture Block ID. Unique identifier "
                              "for the observation on which the "
-                             "continuum pipeline is run.")
+                             "continuum pipeline is run. "
+                             "Default: Infer it from the katdal dataset.")
 
     parser.add_argument("-ts", "--telstate",
                         default='', type=str,
-                        help="Address of the telstate server")
+                        help="Address of the telstate server. "
+                             "Default: Use a local telstate server.")
 
     parser.add_argument("-tsid", "--telstate-id",
                         default=None, type=str,
                         help="Namespace for output telescope "
                              "state keys (within the '-cbid' namespace). "
-                             "Default is the value of --output-id")
+                             "Default: Value of --output-id")
 
     parser.add_argument("-oid", "--output-id",
                         default="continuum_image", type=str,
                         help="Label the product of the continuum pipeline. "
-                             "Used to generate FITS and PNG filenames.")
+                             "Used to generate FITS and PNG filenames. "
+                             "Default: %(default)s")
 
     parser.add_argument("-ks", "--select",
                         default="scans='track'; spw=0; corrprods='cross'",
@@ -93,7 +103,8 @@ def create_parser():
                         help="katdal select statement "
                              "Should only contain python "
                              "assignment statements to python "
-                             "literals, separated by semi-colons.")
+                             "literals, separated by semi-colons. "
+                             "Default: %(default)s")
 
     TDF_URL = "https://github.com/bill-cotton/Obit/blob/master/ObitSystem/Obit/TDF"
 
@@ -115,101 +126,89 @@ def create_parser():
                              "literals, separated by semi-colons. "
                              "See %s/MFImage.TDF for valid parameters. " % TDF_URL)
 
-    parser.add_argument("--clobber",
-                        default="scans, avgscans",
-                        type=lambda s: set(v.strip() for v in s.split(',')),
-                        help="Class of AIPS/Obit output files to clobber. "
-                             "'scans' => Individual scans. "
-                             "'avgscans' => Averaged individual scans. "
-                             "'merge' => Observation file containing merged, "
-                             "averaged scans. "
-                             "'clean' => Output CLEAN files. "
-                             "'mfimage' => Output MFImage files. ")
-
-    parser.add_argument("--config",
-                        default=os.path.sep + "obitconf",
-                        type=str,
-                        help="Directory containing default configuration "
-                             ".yaml files for mfimage and uvblavg. ")
-
     parser.add_argument("--nif", default=8, type=int,
                         help="Number of AIPS 'IFs' to equally subdivide the band. "
                              "NOTE: Must divide the number of channels after any "
-                             "katdal selection.")
+                             "katdal selection. Default: %(default)s")
     return parser
 
 
-setup_logging()
-parser = create_parser()
-args = parser.parse_args()
+def main():
+    setup_logging()
+    parser = create_parser()
+    args = parser.parse_args()
 
-# Open the observation
-if (args.access_key is not None) != (args.secret_key is not None):
-    parser.error('--access-key and --secret-key must be used together')
-if args.access_key is not None and args.token is not None:
-    parser.error('--access-key/--secret-key cannot be used with --token')
-open_kwargs = {}
-if args.access_key is not None:
-    open_kwargs['credentials'] = (args.access_key, args.secret_key)
-elif args.token is not None:
-    open_kwargs['token'] = args.token
-katdata = katdal.open(args.katdata, applycal='all', **open_kwargs)
+    # Open the observation
+    if (args.access_key is not None) != (args.secret_key is not None):
+        parser.error('--access-key and --secret-key must be used together')
+    if args.access_key is not None and args.token is not None:
+        parser.error('--access-key/--secret-key cannot be used with --token')
+    open_kwargs = {}
+    if args.access_key is not None:
+        open_kwargs['credentials'] = (args.access_key, args.secret_key)
+    elif args.token is not None:
+        open_kwargs['token'] = args.token
+    katdata = katdal.open(args.katdata, applycal='l1', **open_kwargs)
 
-post_process_args(args, katdata)
+    post_process_args(args, katdata)
 
-# Get defaults for uvblavg and mfimage and merge user supplied ones
-uvblavg_args = get_and_merge_args(pjoin(args.config, 'uvblavg.yaml'), args.uvblavg)
-mfimage_args = get_and_merge_args(pjoin(args.config, 'mfimage.yaml'), args.mfimage)
+    # Get defaults for uvblavg and mfimage and merge user supplied ones
+    uvblavg_args = get_and_merge_args(pjoin(CONFIG, 'uvblavg_MKAT.yaml'), args.uvblavg)
+    mfimage_args = get_and_merge_args(pjoin(CONFIG, 'mfimage_MKAT.yaml'), args.mfimage)
 
-# Get the default config.
-dc = kc.get_config()
-# Set up aipsdisk configuration from args.workdir
-if args.workdir is not None:
-    aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
-else:
-    aipsdirs = dc['aipsdirs']
-log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
+    # Get the default config.
+    dc = kc.get_config()
+    # Set up aipsdisk configuration from args.workdir
+    if args.workdir is not None:
+        aipsdirs = [(None, pjoin(args.workdir, args.capture_block_id + '_aipsdisk'))]
+    else:
+        aipsdirs = dc['aipsdirs']
+    log.info('Using AIPS data area: %s' % (aipsdirs[0][1]))
 
-# Set up output configuration from args.outputdir
-fitsdirs = dc['fitsdirs']
+    # Set up output configuration from args.outputdir
+    fitsdirs = dc['fitsdirs']
 
-outputname = args.capture_block_id + OUTDIR_SEPARATOR + args.telstate_id + \
-             OUTDIR_SEPARATOR + START_TIME
-outputdir = pjoin(args.outputdir, outputname)
-# Set writing tag for duration of the pipeline
-work_outputdir = outputdir + WRITE_TAG
-# Append outputdir to fitsdirs
-# NOTE: Pipeline is set up to always place its output in the
-# highest numbered fits disk so we ensure that is the case
-# here.
-fitsdirs += [(None, work_outputdir)]
-log.info('Using output data area: %s' % (outputdir))
+    outputname = args.capture_block_id + OUTDIR_SEPARATOR + args.telstate_id + \
+        OUTDIR_SEPARATOR + START_TIME
+    outputdir = pjoin(args.outputdir, outputname)
+    # Set writing tag for duration of the pipeline
+    work_outputdir = outputdir + WRITE_TAG
+    # Append outputdir to fitsdirs
+    # NOTE: Pipeline is set up to always place its output in the
+    # highest numbered fits disk so we ensure that is the case
+    # here.
+    fitsdirs += [(None, work_outputdir)]
+    log.info('Using output data area: %s' % (outputdir))
 
-kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
+    kc.set_config(aipsdirs=aipsdirs, fitsdirs=fitsdirs)
 
-setup_aips_disks()
+    setup_aips_disks()
 
-# Add output_id and capture_block_id to configuration
-kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_block_id)
+    # Add output_id and capture_block_id to configuration
+    kc.set_config(cfg=kc.get_config(), output_id=args.output_id, cb_id=args.capture_block_id)
 
-# Set up telstate link then create
-# a view based the capture block ID and output ID
-telstate = TelescopeState(args.telstate)
-view = telstate.join(args.capture_block_id, args.telstate_id)
-ts_view = telstate.view(view)
+    # Set up telstate link then create
+    # a view based the capture block ID and output ID
+    telstate = TelescopeState(args.telstate)
+    view = telstate.join(args.capture_block_id, args.telstate_id)
+    ts_view = telstate.view(view)
 
-katdal_select = args.select
-katdal_select['nif'] = args.nif
+    katdal_select = args.select
+    katdal_select['nif'] = args.nif
 
-# Create Continuum Pipeline
-pipeline = ContinuumPipeline(katdata, ts_view,
-                             katdal_select=katdal_select,
-                             uvblavg_params=uvblavg_args,
-                             mfimage_params=mfimage_args,
-                             nvispio=args.nvispio)
+    # Create Continuum Pipeline
+    pipeline = pipeline_factory('online', katdata, ts_view,
+                                katdal_select=katdal_select,
+                                uvblavg_params=uvblavg_args,
+                                mfimage_params=mfimage_args,
+                                nvispio=args.nvispio)
 
-# Execute it
-pipeline.execute()
+    # Execute it
+    pipeline.execute()
 
-# Remove the writing tag from the output directory
-os.rename(work_outputdir, outputdir)
+    # Remove the writing tag from the output directory
+    os.rename(work_outputdir, outputdir)
+
+
+if __name__ == "__main__":
+    main()

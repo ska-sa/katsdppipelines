@@ -11,7 +11,7 @@ from scipy import constants
 import katpoint
 from katsdptelstate import TelescopeState
 
-from katacomb import ContinuumPipeline, obit_context
+from katacomb import pipeline_factory, obit_context
 from katacomb.aips_export import (fit_flux_model,
                                   obit_flux_model,
                                   _massage_gains,
@@ -28,6 +28,8 @@ from katacomb.util import (parse_python_assigns,
                            setup_aips_disks)
 from katacomb.uv_facade import uv_factory
 import katacomb.configuration as kc
+
+CLOBBER = set(['scans', 'avgscans', 'merge', 'clean', 'mfimage'])
 
 
 def vis(dataset, sources):
@@ -61,11 +63,109 @@ def flags(dataset):
     return np.zeros(dataset.shape, dtype=np.bool)
 
 
-class TestContinuumPipeline(unittest.TestCase):
+class TestOfflinePipeline(unittest.TestCase):
 
-    def test_continuum_pipeline(self):
+    def test_offline_pipeline(self):
         """
-        Tests that a run of the Continuum Pipeline executes.
+        Tests that a run of the offline continuum pipeline executes.
+        """
+
+        nchan = 16
+
+        spws = [{
+            'centre_freq': .856e9 + .856e9 / 2.,
+            'num_chans': nchan,
+            'channel_width': .856e9 / nchan,
+            'sideband': 1,
+            'band': 'L',
+        }]
+
+        target_name = 'Beckmesser'
+
+        # Construct a target
+        target = katpoint.Target("%s, radec, 100.0, -35.0" % target_name)
+
+        # Set up a track
+        scans = [('track', 3, target), ('track', 3, target)]
+
+        # Create Mock dataset and wrap it in a KatdalAdapter
+        ds = MockDataSet(timestamps=DEFAULT_TIMESTAMPS,
+                         subarrays=DEFAULT_SUBARRAYS,
+                         spws=spws,
+                         dumps=scans)
+
+        # Setup the katdal selection, convert it to a string
+        # accepted by our command line parser function, which
+        # converts it back to a dict.
+        select = {'corrprods': 'cross',
+                  'pol': 'HH,VV'}
+
+        # Baseline averaging defaults
+        uvblavg_params = parse_python_assigns("FOV=1.0; avgFreq=0; "
+                                              "chAvg=1; maxInt=2.0")
+
+        # Run with imaging defaults
+        mfimage_params = {'doGPU': False, 'maxFBW': 0.25}
+
+        # Dummy CB_ID and Product ID and temp fits and aips disks
+        fd = kc.get_config()['fitsdirs']
+        fd += [(None, os.path.join(os.sep, 'tmp', 'FITS'))]
+        kc.set_config(output_id='OID', cb_id='CBID', fitsdirs=fd)
+
+        setup_aips_disks()
+
+        # Create and run the pipeline
+        pipeline = pipeline_factory('offline', ds,
+                                     katdal_select=select,
+                                     uvblavg_params=uvblavg_params,
+                                     mfimage_params=mfimage_params,
+                                     clobber=CLOBBER.difference({'merge'}))
+
+        pipeline.execute()
+
+        # Check that output FITS files exist and have the right names
+        # Now check for files
+        cfg = kc.get_config()
+        cb_id = cfg['cb_id']
+        out_id = cfg['output_id']
+        fits_area = cfg['fitsdirs'][-1][1]
+
+        out_strings = [cb_id, out_id, target_name, IMG_CLASS]
+        filename = '_'.join(filter(None, out_strings)) + '.fits'
+        filepath = os.path.join(fits_area, filename)
+        assert os.path.isfile(filepath)
+
+        # Remove the tmp/FITS dir
+        shutil.rmtree(fits_area)
+
+        ds = MockDataSet(timestamps=DEFAULT_TIMESTAMPS,
+                         subarrays=DEFAULT_SUBARRAYS,
+                         spws=spws,
+                         dumps=scans)
+
+        setup_aips_disks()
+
+        # Create and run the pipeline (Reusing the previous data)
+        pipeline = pipeline_factory('offline', ds,
+                                    katdal_select=select,
+                                    uvblavg_params=uvblavg_params,
+                                    mfimage_params=mfimage_params,
+                                    reuse=True,
+                                    clobber=CLOBBER)
+
+        pipeline.execute()
+
+        assert os.path.isfile(filepath)
+
+        # Remove FITS temporary area
+        shutil.rmtree(fits_area)
+
+
+class TestOnlinePipeline(unittest.TestCase):
+
+    def test_online_pipeline(self):
+        """
+        Tests that a run of the online continuum pipeline executes.
         """
 
         nchan = 16
@@ -135,7 +235,7 @@ class TestContinuumPipeline(unittest.TestCase):
         setup_aips_disks()
 
         # Create and run the pipeline
-        pipeline = ContinuumPipeline(ds, TelescopeState(),
+        pipeline = pipeline_factory('online', ds, TelescopeState(),
                                      katdal_select=select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
@@ -215,7 +315,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Set up a scratch space in /tmp
         fd = kc.get_config()['fitsdirs']
         fd += [(None, '/tmp/FITS')]
-        kc.set_config(fitsdirs=fd)
+        kc.set_config(cb_id='CBID', fitsdirs=fd)
 
         setup_aips_disks()
 
@@ -235,7 +335,7 @@ class TestContinuumPipeline(unittest.TestCase):
                               'FOV': 0.1, 'xCells': 5.,
                               'yCells': 5., 'doGPU': False}
 
-            pipeline = ContinuumPipeline(ds, ts, katdal_select=katdal_select,
+            pipeline = pipeline_factory('online', ds, ts, katdal_select=katdal_select,
                                          uvblavg_params=uvblavg_params,
                                          mfimage_params=mfimage_params)
             pipeline.execute()
@@ -278,7 +378,7 @@ class TestContinuumPipeline(unittest.TestCase):
         mfimage_params['Gain'] = 0.5
         mfimage_params['Robust'] = -5
 
-        pipeline = ContinuumPipeline(ds, ts, katdal_select=katdal_select,
+        pipeline = pipeline_factory('online', ds, ts, katdal_select=katdal_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -418,7 +518,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Set up a scratch space in /tmp
         fd = kc.get_config()['fitsdirs']
         fd += [(None, '/tmp/FITS')]
-        kc.set_config(fitsdirs=fd)
+        kc.set_config(cb_id='CBID', fitsdirs=fd)
         setup_aips_disks()
 
         scan = [('track', 4, cat.targets[0])]
@@ -438,7 +538,7 @@ class TestContinuumPipeline(unittest.TestCase):
         mfimage_params['maxASCLoop'] = 1
 
         # Run the pipeline
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -477,7 +577,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Check with no Amp+Phase self-cal
         mfimage_params['maxASCLoop'] = 0
         telstate.clear()
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()
@@ -487,7 +587,7 @@ class TestContinuumPipeline(unittest.TestCase):
         # Check with no self-cal
         mfimage_params['maxPSCLoop'] = 0
         telstate.clear()
-        pipeline = ContinuumPipeline(ds, telstate, katdal_select=ka_select,
+        pipeline = pipeline_factory('online', ds, telstate, katdal_select=ka_select,
                                      uvblavg_params=uvblavg_params,
                                      mfimage_params=mfimage_params)
         pipeline.execute()

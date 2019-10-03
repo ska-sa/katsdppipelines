@@ -24,7 +24,7 @@ PBCor: False                # Apply Frequency PB Corr?
 antSize: 13.5               # Diameter of ant. for PBCor (m)
 maxPSCLoop: 2               # Max. number of phase selfcal loops
 minFluxPSC: 0.0002          # Min. peak phase self cal (Jy)
-solPInt: 1.0                # phase SC Solution interval (min)
+solPInt: 0.5                # phase SC Solution interval (min)
 solPType: 'L1'              # phase SC Soln. Type: '  ', 'L1'
 solPMode: 'P'               # phase SC Soln. Mode:'A&P', 'P', 'P!A','DELA'
 maxASCLoop: 0               # Max. number of amp&ph selfcal loops

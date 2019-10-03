@@ -3,15 +3,20 @@ import contextlib
 import functools
 import logging
 import os
+import pickle
 import re
 import sys
 
 from pretty import pretty
 import yaml
 import six
+import dask.array as da
+import numpy as np
 
 import katacomb.configuration as kc
 from katacomb import obit_config_from_aips
+
+from katdal.flags import STATIC
 
 import ObitTask
 from OTObit import addParam
@@ -470,3 +475,37 @@ def normalise_target_name(name, used=[], max_length=None):
         i += 1
         test_name = generate_name(name, i, max_length)
     return test_name
+
+
+def apply_user_mask(kat_ds, mask_file):
+    """
+    Apply a channel mask defined in mask_file to the flags of a katdal
+    dataset.
+    TODO(tmauch)
+    Replace once JIRA SPR176 is implemented
+
+    Parameters
+    ----------
+    kat_ds : :class:`katdal.Dataset`
+        katdal Dataset object
+
+    mask_file : str
+        filename of pickle containing a boolean iterable
+        of the channel mask to apply. The channel mask
+        should be an iterable of bools with the same shape
+        of the channel axis of the flags in `kat_ds`.
+    """
+
+    try:
+        # Open the mask pickle
+        mask = pickle.load(open(mask_file))
+        # Apply the mask to 'static' flag bit
+        mask = np.array(mask, dtype=np.uint8) * STATIC
+        mask = mask[np.newaxis, :, np.newaxis]
+        kat_ds._corrected.flags = da.bitwise_or(kat_ds._corrected.flags, mask)
+        # Ensure mask is applied by resetting selection
+        kat_ds.select()
+        log.info("Applying channel mask from: '%s'" % (mask_file))
+    except Exception:
+        log.exception('Unable to apply supplied mask file from: %s' % (mask_file))
+        raise
