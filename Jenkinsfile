@@ -15,4 +15,4 @@ katsdp.standardBuild(subdir: 'katsdpcontim',
                      cuda: true,
                      label: 'cpu-avx2',
                      docker_timeout: [time: 90, unit: 'MINUTES'])
-katsdp.mail('tmauch@ska.ac.za kmcalpine@ska.ac.za')
+katsdp.mail('sdpdev+katsdpcal@ska.ac.za sdpdev+katsdpcontim@ska.ac.za')
