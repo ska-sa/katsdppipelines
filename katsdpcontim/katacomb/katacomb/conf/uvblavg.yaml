@@ -1,6 +1,0 @@
-# Default options for UVBlAvg
-FOV: 1.0         # Field of view (deg)
-maxInt: 1.0      # Maximum integration (min)
-maxFact: 1.01    # Maximum time smearing factor
-avgFreq: 1       # Frequency averaging control
-chAvg: 4         # Number of chan. to average.
