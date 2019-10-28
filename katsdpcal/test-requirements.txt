@@ -1,3 +1,0 @@
-asynctest
-coverage
-nose
