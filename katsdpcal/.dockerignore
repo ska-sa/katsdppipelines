@@ -1,7 +1,0 @@
-.git
-build
-dist
-temp
-cover
-doc/_build
-*.egg-info
